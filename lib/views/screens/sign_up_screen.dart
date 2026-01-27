@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
-import '../../services/api_service.dart';
+import '../../controllers/auth_controller.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
 import '../widgets/custom_text_field.dart';
@@ -21,11 +22,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _apiService = ApiService();
+  final AuthController _authController = Get.find<AuthController>();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -38,18 +38,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    debugPrint('=== Sign Up Started ===');
-    
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      debugPrint('❌ Form validation failed');
-      return;
-    }
-    debugPrint('✅ Form validation passed');
-
-    // Check terms agreement
+    if (!_formKey.currentState!.validate()) return;
     if (!_agreeToTerms) {
-      debugPrint('❌ Terms & Conditions not agreed');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please agree to the Terms & Conditions'),
@@ -58,109 +48,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
       return;
     }
-    debugPrint('✅ Terms & Conditions agreed');
 
-    // Prepare request data
-    final requestData = {
-      'phone': _phoneController.text.trim(),
-      'name': _nameController.text.trim(),
-      'email': _emailController.text.trim(),
-      'password': _passwordController.text,
-      'confirmPassword': _confirmPasswordController.text,
-    };
-    
-    debugPrint('📤 Registration Request Data:');
-    debugPrint('   Phone: ${requestData['phone']}');
-    debugPrint('   Name: ${requestData['name']}');
-    debugPrint('   Email: ${requestData['email']}');
-    debugPrint('   Password: ${requestData['password']?.length} characters');
-    debugPrint('   Confirm Password: ${requestData['confirmPassword']?.length} characters');
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      debugPrint('🔄 Calling API: /api/v1/auth/register');
-      
-      final response = await _apiService.register(
-        phone: requestData['phone']!,
-        name: requestData['name']!,
-        email: requestData['email']!,
-        password: requestData['password']!,
-        confirmPassword: requestData['confirmPassword']!,
-      );
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      debugPrint('📥 API Response Received:');
-      debugPrint('   Success: ${response.success}');
-      debugPrint('   Message: ${response.message}');
-      debugPrint('   Data: ${response.data}');
-      debugPrint('   Error: ${response.error}');
-
-      if (response.success) {
-        debugPrint('✅ Registration successful!');
-        
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Registration successful!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Navigate to login screen
-        if (context.mounted) {
-          debugPrint('🔄 Navigating to login screen...');
-          context.go('/login');
-        }
-      } else {
-        debugPrint('❌ Registration failed');
-        debugPrint('   Error Message: ${response.message}');
-        debugPrint('   Error Details: ${response.error}');
-        
-        // Show error message with better formatting
-        final errorMessage = response.message ?? 'Registration failed. Please try again.';
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errorMessage,
-              style: const TextStyle(fontSize: 14),
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'OK',
-              textColor: Colors.white,
-              onPressed: () {},
-            ),
-          ),
-        );
-      }
-    } catch (e, stackTrace) {
-      setState(() {
-        _isLoading = false;
-      });
-      
-      debugPrint('❌ Exception occurred during registration:');
-      debugPrint('   Error: $e');
-      debugPrint('   Stack Trace: $stackTrace');
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-    
-    debugPrint('=== Sign Up Completed ===');
+    await _authController.register(
+      context,
+      phone: _phoneController.text.trim(),
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+      confirmPassword: _confirmPasswordController.text,
+    );
   }
 
   @override
@@ -372,11 +268,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 32),
 
                   // Sign Up Button
-                  PrimaryButton(
-                    text: 'Sign up',
-                    onPressed: _isLoading ? null : _handleSignUp,
-                    isLoading: _isLoading,
-                    borderRadius: 30,
+                  Obx(
+                    () => PrimaryButton(
+                      text: 'Sign up',
+                      onPressed: _authController.isLoading.value
+                          ? null
+                          : _handleSignUp,
+                      isLoading: _authController.isLoading.value,
+                      borderRadius: 30,
+                    ),
                   ),
 
                   const SizedBox(height: 24),

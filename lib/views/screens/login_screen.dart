@@ -1,8 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
-import '../../services/api_service.dart';
+import '../../controllers/auth_controller.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
 import '../widgets/custom_text_field.dart';
@@ -19,10 +20,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _apiService = ApiService();
+  final AuthController _authController = Get.find<AuthController>();
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -32,104 +32,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    debugPrint('=== Login Started ===');
-    
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      debugPrint('❌ Form validation failed');
-      return;
-    }
-    debugPrint('✅ Form validation passed');
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    
-    debugPrint('📤 Login Request Data:');
-    debugPrint('   Email: $email');
-    debugPrint('   Password: ${password.length} characters');
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      debugPrint('🔄 Calling API: /api/v1/auth/login');
-      
-      final response = await _apiService.login(
-        email: email,
-        password: password,
-      );
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      debugPrint('📥 API Response Received:');
-      debugPrint('   Success: ${response.success}');
-      debugPrint('   Message: ${response.message}');
-      debugPrint('   Data: ${response.data}');
-      debugPrint('   Error: ${response.error}');
-
-      if (response.success) {
-        debugPrint('✅ Login successful!');
-        debugPrint('   Access Token: ${response.data?.accessToken != null ? "Saved" : "Missing"}');
-        debugPrint('   Refresh Token: ${response.data?.refreshToken != null ? "Saved" : "Missing"}');
-        debugPrint('   User ID: ${response.data?.userId}');
-        debugPrint('   Role: ${response.data?.role}');
-        
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Login successful!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Navigate to home screen
-        if (context.mounted) {
-          debugPrint('🔄 Navigating to home screen...');
-          context.go('/home');
-        }
-      } else {
-        debugPrint('❌ Login failed');
-        debugPrint('   Error Message: ${response.message}');
-        debugPrint('   Error Details: ${response.error}');
-        
-        // Show error message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Login failed. Please check your credentials.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'OK',
-              textColor: Colors.white,
-              onPressed: () {},
-            ),
-          ),
-        );
-      }
-    } catch (e, stackTrace) {
-      setState(() {
-        _isLoading = false;
-      });
-      
-      debugPrint('❌ Exception occurred during login:');
-      debugPrint('   Error: $e');
-      debugPrint('   Stack Trace: $stackTrace');
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
-    
-    debugPrint('=== Login Completed ===');
+    if (!_formKey.currentState!.validate()) return;
+    await _authController.login(
+      context,
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
   }
 
   @override
@@ -295,11 +203,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
 
                   // Sign in Button
-                  PrimaryButton(
-                    text: 'Sign in',
-                    onPressed: _isLoading ? null : _handleLogin,
-                    isLoading: _isLoading,
-                    borderRadius: 30,
+                  Obx(
+                    () => PrimaryButton(
+                      text: 'Sign in',
+                      onPressed:
+                          _authController.isLoading.value ? null : _handleLogin,
+                      isLoading: _authController.isLoading.value,
+                      borderRadius: 30,
+                    ),
                   ),
 
                   const SizedBox(height: 24),

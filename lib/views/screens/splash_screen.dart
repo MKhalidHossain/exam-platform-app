@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../utils/app_colors.dart';
-import '../../services/storage_service.dart';
+import 'package:get/get.dart';
+import '../../controllers/splash_controller.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,39 +11,12 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final _storageService = StorageService();
+  final SplashController _controller = Get.find<SplashController>();
 
   @override
   void initState() {
     super.initState();
-    _checkAuthAndNavigate();
-  }
-
-  Future<void> _checkAuthAndNavigate() async {
-    // Wait for 2 seconds
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (!mounted) return;
-    
-    // Check if user has token and is logged in
-    final token = await _storageService.getToken();
-    final isLoggedIn = await _storageService.isLoggedIn();
-    
-    debugPrint('🔍 Splash Screen - Auth Check:');
-    debugPrint('   Token: ${token != null ? "Exists" : "Not found"}');
-    debugPrint('   Is Logged In: $isLoggedIn');
-    
-    if (mounted) {
-      if (token != null && token.isNotEmpty && isLoggedIn) {
-        // User is authenticated, go to home screen
-        debugPrint('✅ User authenticated - Navigating to home screen');
-        context.go('/home');
-      } else {
-        // User is not authenticated, go to login screen
-        debugPrint('❌ User not authenticated - Navigating to login screen');
-        context.go('/onboarding');
-      }
-    }
+    _controller.start(context);
   }
 
   @override
