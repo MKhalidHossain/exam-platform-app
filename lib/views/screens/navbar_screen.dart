@@ -305,6 +305,10 @@ class _ProfileTab extends StatelessWidget {
   const _ProfileTab();
 
   @override
+class _HistoryTab extends StatelessWidget {
+  const _HistoryTab();
+
+  @override
   Widget build(BuildContext context) {
     return const SafeArea(
       child: Center(
@@ -1103,4 +1107,22 @@ class _TopicBreakdown {
   final int correct;
   final int incorrect;
   final int accuracy;
+}
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SafeArea(
+      child: Center(
+        child: Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
 }
