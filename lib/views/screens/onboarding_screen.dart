@@ -84,20 +84,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                      onPressed: () {
-                        if (_currentPage > 0) {
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        } else {
-                          // Navigate to login instead of going back
-                          context.go('/login');
-                        }
-                      },
-                    ),
+                    const SizedBox(width: 48),
                     TextButton(
                       onPressed: _onSkip,
                       child: const Text(

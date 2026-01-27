@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
-import '../../services/api_service.dart';
+import '../../controllers/auth_controller.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
 import '../widgets/otp_input_field.dart';
@@ -23,13 +24,12 @@ class VerifyOtpScreen extends StatefulWidget {
 }
 
 class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
-  final _apiService = ApiService();
+  final AuthController _authController = Get.find<AuthController>();
   final _otpController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  bool _isLoading = false;
   String _otp = '';
 
   @override
@@ -41,12 +41,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   }
 
   Future<void> _handleVerifyOtp() async {
-    debugPrint('=== Verify OTP Started ===');
-    debugPrint('   Email: ${widget.email}');
-    debugPrint('   IsForPasswordReset: ${widget.isForPasswordReset}');
-    
     if (widget.email == null || widget.email!.isEmpty) {
-      debugPrint('❌ Email is missing');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Email is required'),
@@ -57,7 +52,6 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     }
 
     if (_otp.isEmpty || _otp.length != 6) {
-      debugPrint('❌ Invalid OTP');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid 6-digit OTP'),
@@ -100,89 +94,22 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       }
     }
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      if (widget.isForPasswordReset) {
-        debugPrint('🔄 Calling API: /api/v1/auth/reset-password');
-        debugPrint('📤 Request Data:');
-        debugPrint('   Email: ${widget.email}');
-        debugPrint('   OTP: $_otp');
-        debugPrint('   Password: ${_passwordController.text.length} characters');
-
-        final response = await _apiService.verifyOtp(
-          email: widget.email!,
-          otp: _otp,
-          password: _passwordController.text,
-        );
-
-        setState(() {
-          _isLoading = false;
-        });
-
-        debugPrint('📥 API Response Received:');
-        debugPrint('   Success: ${response.success}');
-        debugPrint('   Message: ${response.message}');
-        debugPrint('   Data: ${response.data}');
-        debugPrint('   Error: ${response.error}');
-
-        if (response.success) {
-          debugPrint('✅ Password reset successfully!');
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Password reset successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          
-          // Navigate to login screen
-          if (context.mounted) {
-            debugPrint('🔄 Navigating to login screen...');
-            context.go('/login');
-          }
-        } else {
-          debugPrint('❌ Password reset failed');
-          debugPrint('   Error Message: ${response.message}');
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to reset password. Please try again.'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      } else {
-        // Handle regular OTP verification (for email verification)
-        debugPrint('⚠️ Regular OTP verification not implemented yet');
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e, stackTrace) {
-      setState(() {
-        _isLoading = false;
-      });
-      
-      debugPrint('❌ Exception occurred during OTP verification:');
-      debugPrint('   Error: $e');
-      debugPrint('   Stack Trace: $stackTrace');
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
+    if (widget.isForPasswordReset) {
+      await _authController.resetPasswordWithOtp(
+        context,
+        email: widget.email!,
+        otp: _otp,
+        password: _passwordController.text,
+      );
+    } else {
+      // keep UI only; other OTP flows can be added later
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTP verification flow is not implemented yet'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-    
-    debugPrint('=== Verify OTP Completed ===');
   }
 
   @override
@@ -364,12 +291,16 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 const SizedBox(height: 40),
 
                 // Verify Now Button
-                PrimaryButton(
-                  text: widget.isForPasswordReset ? 'Reset Password' : 'Verify Now',
-                  onPressed: _isLoading ? null : _handleVerifyOtp,
-                  isLoading: _isLoading,
-                  useGradient: true,
-                  borderRadius: 30,
+                Obx(
+                  () => PrimaryButton(
+                    text: widget.isForPasswordReset ? 'Reset Password' : 'Verify Now',
+                    onPressed: _authController.isLoading.value
+                        ? null
+                        : _handleVerifyOtp,
+                    isLoading: _authController.isLoading.value,
+                    useGradient: true,
+                    borderRadius: 30,
+                  ),
                 ),
 
                 const SizedBox(height: 40),
