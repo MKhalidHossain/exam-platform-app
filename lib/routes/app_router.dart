@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../views/screens/splash_screen.dart';
 import '../views/screens/login_screen.dart';
-import '../views/screens/home_screen.dart';
+import '../views/screens/navbar_screen.dart';
 import '../views/screens/onboarding_screen.dart';
 import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';
@@ -85,7 +85,7 @@ GoRouter getRouter() {
       GoRoute(
         path: '/home',
         name: 'home',
-        builder: (context, state) => const HomeScreen(),
+        builder: (context, state) => const NavbarScreen(),
       ),
      
     ],
