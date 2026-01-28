@@ -19,6 +19,8 @@ import '../views/screens/faq_screen.dart';
 import '../views/screens/subscribe_screen.dart';
 import '../views/screens/contact_us_screen.dart';
 import '../views/screens/professional_plan_screen.dart';
+import '../views/screens/performance_screen.dart';
+import '../views/screens/history_models.dart';
 import '../views/screens/exam_loading_screen.dart';
 import '../views/screens/mcq_screen.dart';
 import '../views/screens/exam_review_screen.dart';
@@ -142,6 +144,25 @@ GoRouter getRouter() {
         builder: (context, state) => const ProfessionalPlanScreen(),
       ),
       GoRoute(
+        path: '/performance',
+        name: 'performance',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is PerformanceArgs) {
+            return PerformanceScreen(
+              entry: extra.entry,
+              history: extra.history,
+            );
+          }
+          return const PerformanceScreen(
+            entry: HistoryEntry(
+              examName: 'API 570 - Piping Inspector',
+              date: '1/10/2020, 10:45:37 AM',
+              scorePercent: 40.0,
+              scoreDetail: '4/10',
+            ),
+            history: [],
+          );
         path: '/quiz-settings',
         name: 'quiz-settings',
         builder: (context, state) {

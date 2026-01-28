@@ -1,18 +1,340 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import 'history_models.dart';
+import 'performance_screen.dart';
 
-class HistoryDetailView extends StatelessWidget {
+class HistoryDetailView extends StatefulWidget {
   const HistoryDetailView({
     super.key,
     required this.entry,
     required this.topics,
     required this.onBack,
+    required this.historyEntries,
   });
 
   final HistoryEntry entry;
   final List<TopicBreakdown> topics;
+  final List<HistoryEntry> historyEntries;
   final VoidCallback onBack;
+
+  @override
+  State<HistoryDetailView> createState() => _HistoryDetailViewState();
+}
+
+class _HistoryDetailViewState extends State<HistoryDetailView> {
+  bool _dialogShown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_dialogShown && widget.entry.scorePercent >= 100) {
+      _dialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTestimonialDialog(context);
+      });
+    }
+  }
+
+  Future<void> _showTestimonialDialog(BuildContext context) async {
+    final nameController = TextEditingController(text: 'Butlar Mane');
+    final testimonialController = TextEditingController();
+    int selectedStars = 3;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: const Color(0xFF8B909B),
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Great Job!',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF202B3C),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "You're amazing! Would you be willing to share a few\n"
+                      "words about your experience to help others on their\n"
+                      'certification journey?',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFF6C7685),
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Rate 1 to 5 stars',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF202B3C),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: List.generate(5, (index) {
+                        final isSelected = index < selectedStars;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: Icon(
+                              Icons.star,
+                              size: 28,
+                              color: isSelected
+                                  ? const Color(0xFFFFB233)
+                                  : const Color(0xFFB8BDC8),
+                            ),
+                            onPressed: () =>
+                                setState(() => selectedStars = index + 1),
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Your Testimonial',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF202B3C),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: testimonialController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText:
+                            'e.g., This platform was a game-changer for my\nexam preparation.',
+                        hintStyle: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF9AA3B2),
+                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFD5DAE6)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFD5DAE6)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Your Name',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF202B3C),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF2F5BD5)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF2F5BD5)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF1E4AA8),
+                              side: const BorderSide(color: Color(0xFF1E4AA8)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            child: const Text(
+                              'No, Thanks',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(dialogContext).pop();
+                              _showThankYouDialog(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E4AA8),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            child: const Text(
+                              'Submit Testimonial',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Disclaimer tapped.')),
+                          );
+                        },
+                        child: const Text.rich(
+                          TextSpan(
+                            text: 'Not affiliated with or endorsed by API. ',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF6C7685),
+                            ),
+                            children: [
+                              TextSpan(
+                                text: 'See full\n',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF1E6CF3),
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'disclaimer.',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF1E6CF3),
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    nameController.dispose();
+    testimonialController.dispose();
+  }
+
+  Future<void> _showThankYouDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: const Color(0xFF8B909B),
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 86,
+                  height: 86,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDFF5E2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF33C44F),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check, color: Colors.white, size: 28),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Thank you! 🎉',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF202B3C),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'your feedback is invaluable and helps others make\n'
+                  'confident decisions. We appreciate you!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF6C7685),
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF143E88),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 26),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text(
+                    'Back to Exam',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,13 +360,13 @@ class HistoryDetailView extends StatelessWidget {
               Row(
                 children: [
                   IconButton(
-                    onPressed: onBack,
+                    onPressed: widget.onBack,
                     icon: const Icon(Icons.arrow_back_ios_new, size: 18),
                     color: const Color(0xFF27407C),
                   ),
                   Expanded(
                     child: Text(
-                      entry.examName,
+                      widget.entry.examName,
                       style: TextStyle(
                         fontSize: titleSize,
                         fontWeight: FontWeight.w700,
@@ -57,7 +379,7 @@ class HistoryDetailView extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.only(left: 6 * scale),
                 child: Text(
-                  "Here's how you did on the '${entry.examName}'\nexam.",
+                  "Here's how you did on the '${widget.entry.examName}'\nexam.",
                   style: TextStyle(
                     fontSize: captionSize,
                     color: const Color(0xFF6C7685),
@@ -77,7 +399,7 @@ class HistoryDetailView extends StatelessWidget {
                     ),
                     SizedBox(height: 4 * scale),
                     Text(
-                      '${entry.scorePercent.toStringAsFixed(1)}%',
+                      '${widget.entry.scorePercent.toStringAsFixed(1)}%',
                       style: TextStyle(
                         fontSize: scoreSize,
                         fontWeight: FontWeight.w700,
@@ -116,8 +438,12 @@ class HistoryDetailView extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Performance pressed.')),
+                        context.push(
+                          '/performance',
+                          extra: PerformanceArgs(
+                            entry: widget.entry,
+                            history: widget.historyEntries,
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -212,7 +538,7 @@ class HistoryDetailView extends StatelessWidget {
                       ],
                     ),
                     SizedBox(height: 6 * scale),
-                    ...topics.map(
+                    ...widget.topics.map(
                       (topic) => Padding(
                         padding: EdgeInsets.symmetric(vertical: 6 * scale),
                         child: Row(
