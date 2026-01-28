@@ -46,17 +46,16 @@ class _NavbarScreenState extends State<NavbarScreen> {
               ),
             ),
           ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-          child: _BottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 12 + bottomInset,
+            child: _BottomNavBar(
+              currentIndex: _currentIndex,
+              onTap: (index) => setState(() => _currentIndex = index),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
