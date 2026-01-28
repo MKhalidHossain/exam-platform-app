@@ -1,18 +1,18 @@
-// This file is kept for compatibility but all API calls have been removed
-// Only design/UI code remains in the app
-
+import 'dart:io';
 import '../models/user_model.dart';
 import '../models/api_response.dart';
 import '../models/users_response.dart';
+import 'api_service.dart';
+import '../utils/api_endpoints.dart';
 
 class UserService {
-  /// Get current user profile (design only - no API call)
+  final ApiService _apiService = ApiService();
+
+  /// Get current user profile
   Future<ApiResponse<UserModel>> getProfile() async {
-    // Mock response for design only
-    await Future.delayed(const Duration(milliseconds: 500));
-    return ApiResponse<UserModel>(
-      success: false,
-      message: 'Design mode - no API calls',
+    return await _apiService.get<UserModel>(
+      ApiEndpoints.getProfile,
+      fromJson: (json) => UserModel.fromJson(json),
     );
   }
 
@@ -40,46 +40,38 @@ class UserService {
     );
   }
 
-  /// Update user profile (design only - no API call)
+  /// Update profile with firstName, lastName, and avatar
   Future<ApiResponse<UserModel>> updateProfile({
-    String? name,
-    String? phone,
-    String? bio,
-    String? gender,
-    String? dob,
-    String? height,
-    String? sexualOrientation,
-    String? personalityType,
-    String? religion,
-    dynamic lookingFor,
-    dynamic interests,
-    String? location,
-    String? language,
-    String? country,
-    bool? notifications,
-    dynamic addresses,
+    String? firstName,
+    String? lastName,
+    File? avatarFile,
   }) async {
-    // Mock response for design only
-    await Future.delayed(const Duration(milliseconds: 500));
-    return ApiResponse<UserModel>(
-      success: false,
-      message: 'Design mode - no API calls',
-    );
-  }
+    // Prepare fields
+    final fields = <String, String>{};
+    if (firstName != null && firstName.isNotEmpty) {
+      fields['firstName'] = firstName;
+    }
+    if (lastName != null && lastName.isNotEmpty) {
+      fields['lastName'] = lastName;
+    }
 
-  /// Update profile with avatar file upload (design only - no API call)
-  Future<ApiResponse<UserModel>> updateProfileWithFile({
-    String? name,
-    String? phone,
-    String? bio,
-    String? avatarPath,
-  }) async {
-    // Mock response for design only
-    await Future.delayed(const Duration(milliseconds: 500));
-    return ApiResponse<UserModel>(
-      success: false,
-      message: 'Design mode - no API calls',
-    );
+    // Use multipart request if file is provided, otherwise use regular PUT
+    if (avatarFile != null) {
+      return await _apiService.putMultipart<UserModel>(
+        ApiEndpoints.updateProfile,
+        fields: fields.isNotEmpty ? fields : null,
+        file: avatarFile,
+        fileField: 'avatar',
+        fromJson: (json) => UserModel.fromJson(json),
+      );
+    } else {
+      // Regular PUT request without file
+      return await _apiService.put<UserModel>(
+        ApiEndpoints.updateProfile,
+        body: fields.isNotEmpty ? fields : null,
+        fromJson: (json) => UserModel.fromJson(json),
+      );
+    }
   }
 
   /// Change user password (design only - no API call)

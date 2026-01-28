@@ -10,6 +10,14 @@ import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';
 import '../views/screens/verify_otp_screen.dart';
 import '../views/screens/reset_password_screen.dart';
+import '../views/screens/edit_profile_screen.dart';
+import '../views/screens/change_password_screen.dart';
+import '../views/screens/privacy_policy_screen.dart';
+import '../views/screens/terms_of_service_screen.dart';
+import '../views/screens/faq_screen.dart';
+import '../views/screens/subscribe_screen.dart';
+import '../views/screens/contact_us_screen.dart';
+import '../views/screens/professional_plan_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -90,30 +98,45 @@ GoRouter getRouter() {
         builder: (context, state) => const NavbarScreen(),
       ),
       GoRoute(
-        path: '/quiz-settings',
-        name: 'quiz-settings',
-        builder: (context, state) {
-          final extra = state.extra;
-          String title = 'API 570 - Piping Inspector';
-          if (extra is Map) {
-            title = extra['courseTitle']?.toString() ?? title;
-          }
-          return QuizSettingsScreen(courseTitle: title);
-        },
+        path: '/edit-profile',
+        name: 'edit-profile',
+        builder: (context, state) => const EditProfileScreen(),
       ),
       GoRoute(
-        path: '/exam-session',
-        name: 'exam-session',
-        builder: (context, state) {
-          final extra = state.extra;
-          String title = 'API 570 - Piping Inspector';
-          if (extra is Map) {
-            title = extra['courseTitle']?.toString() ?? title;
-          }
-          return ExamSessionScreen(courseTitle: title);
-        },
+        path: '/change-password',
+        name: 'change-password',
+        builder: (context, state) => const ChangePasswordScreen(),
       ),
-     
+      GoRoute(
+        path: '/privacy-policy',
+        name: 'privacy-policy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/terms-of-service',
+        name: 'terms-of-service',
+        builder: (context, state) => const TermsOfServiceScreen(),
+      ),
+      GoRoute(
+        path: '/faq',
+        name: 'faq',
+        builder: (context, state) => const FaqScreen(),
+      ),
+      GoRoute(
+        path: '/subscribe',
+        name: 'subscribe',
+        builder: (context, state) => const SubscribeScreen(),
+      ),
+      GoRoute(
+        path: '/contact-us',
+        name: 'contact-us',
+        builder: (context, state) => const ContactUsScreen(),
+      ),
+      GoRoute(
+        path: '/professional-plan',
+        name: 'professional-plan',
+        builder: (context, state) => const ProfessionalPlanScreen(),
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
