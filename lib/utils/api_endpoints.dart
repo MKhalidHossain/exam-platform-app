@@ -21,4 +21,7 @@ class ApiEndpoints {
   static String getUserDetails(String id) => '$user/$id';
   static String updateUserStatus(String id) => '$user/$id/status';
   static String deleteUser(String id) => '$user/$id';
+
+  // Exam Endpoints
+  static const String exams = '/exam';
 }
