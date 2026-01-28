@@ -84,13 +84,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const SizedBox(width: 48),
+                    // Back button
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () {
+                        if (_currentPage > 0) {
+                          _pageController.previousPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        } else {
+                          context.pop();
+                        }
+                      },
+                      color: const Color(0xFF111827),
+                    ),
+                    // Skip button
                     TextButton(
                       onPressed: _onSkip,
                       child: const Text(
                         'Skip',
                         style: TextStyle(
-                          color: AppColors.textPrimary,
+                          color: Color(0xFF111827),
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -121,26 +136,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
 
-              // Action Buttons (Login and Registration on last page)
+              // Action Buttons
               if (_currentPage == _pages.length - 1)
+                // Last page - "Let's Get Started!" button and Sign in link
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
                   child: Column(
                     children: [
-                      // Login Button
-                      PrimaryButton(
-                        text: 'Login',
-                        onPressed: () => context.go('/login'),
-                        useGradient: true,
-                        borderRadius: 30,
+                      // Let's Get Started Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: () => context.go('/login'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2D4F88),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            "Let's Get Started!",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      // Registration Button
-                      PrimaryButton(
-                        text: 'Registration',
-                        onPressed: () => context.go('/sign-up'),
-                        useGradient: true,
-                        borderRadius: 30,
+                      // Sign in link
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Already a user? ',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF616161),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => context.go('/login'),
+                            child: const Text(
+                              'Sign in',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF2D4F88),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -203,7 +252,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              color: Color(0xFF111827),
               height: 1.3,
             ),
           ),
@@ -216,7 +265,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 14,
-              color: AppColors.onboardingBlue,
+              color: Color(0xFF616161),
               height: 1.5,
             ),
           ),

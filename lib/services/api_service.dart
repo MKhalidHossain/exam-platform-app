@@ -163,6 +163,68 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<T>> putMultipart<T>(
+    String endpoint, {
+    Map<String, String>? fields,
+    File? file,
+    String fileField = 'avatar',
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
+      final token = await _storageService.getToken();
+      
+      final request = http.MultipartRequest('PUT', uri);
+      
+      // Add headers
+      request.headers['Accept'] = 'application/json';
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      
+      // Add fields
+      if (fields != null) {
+        request.fields.addAll(fields);
+      }
+      
+      // Add file if provided
+      if (file != null && await file.exists()) {
+        final fileStream = http.ByteStream(file.openRead());
+        final fileLength = await file.length();
+        final fileName = file.path.split('/').last;
+        
+        final multipartFile = http.MultipartFile(
+          fileField,
+          fileStream,
+          fileLength,
+          filename: fileName,
+        );
+        request.files.add(multipartFile);
+      }
+      
+      debugPrint('📡 HTTP PUT Multipart Request:');
+      debugPrint('   URL: $uri');
+      debugPrint('   Fields: $fields');
+      debugPrint('   File: ${file?.path}');
+      
+      final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      debugPrint('📡 HTTP PUT Multipart Response:');
+      debugPrint('   Status Code: ${response.statusCode}');
+      debugPrint('   Response Body: ${response.body}');
+      
+      return _handleResponse<T>(response, fromJson);
+    } catch (e) {
+      debugPrint('❌ HTTP PUT Multipart Error:');
+      debugPrint('   Error: $e');
+      return ApiResponse<T>(
+        success: false,
+        message: 'Network error: ${e.toString()}',
+      );
+    }
+  }
+
   Future<ApiResponse<T>> delete<T>(
     String endpoint, {
     T Function(dynamic)? fromJson,

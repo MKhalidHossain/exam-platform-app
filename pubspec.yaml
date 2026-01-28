@@ -46,6 +46,15 @@ dependencies:
   
   # Shared Preferences
   shared_preferences: ^2.2.2
+  
+  # Image Picker
+  image_picker: ^1.0.7
+  
+  # URL Launcher
+  url_launcher: ^6.3.2
+  
+  # Path Provider (for cache clearing)
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:

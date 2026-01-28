@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../utils/app_constants.dart';
 
 class StorageService {
@@ -99,5 +102,47 @@ class StorageService {
   Future<void> clearAll() async {
     final prefs = await _prefs;
     await prefs.clear();
+  }
+
+  // Clear cache directories
+  Future<void> clearCache() async {
+    try {
+      // Clear Flutter image cache
+      imageCache.clear();
+      imageCache.clearLiveImages();
+
+      // Clear temporary directory
+      final tempDir = await getTemporaryDirectory();
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+
+      // Clear cache directory
+      final cacheDir = await getApplicationCacheDirectory();
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+      }
+
+      // Clear image cache (if using image_picker)
+      try {
+        final imageCacheDir = Directory('${tempDir.path}/image_picker');
+        if (await imageCacheDir.exists()) {
+          await imageCacheDir.delete(recursive: true);
+        }
+      } catch (e) {
+        // Ignore if image cache doesn't exist
+      }
+    } catch (e) {
+      // Handle errors silently - cache clearing is not critical
+      // Errors are ignored to ensure logout process completes
+    }
+  }
+
+  // Complete logout - clears all data and cache
+  Future<void> logout() async {
+    // Clear all storage data
+    await clearAll();
+    // Clear all cache
+    await clearCache();
   }
 }

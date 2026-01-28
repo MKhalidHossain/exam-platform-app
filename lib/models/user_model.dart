@@ -4,6 +4,8 @@ class UserModel {
   final String email;
   final String? phone;
   final String? avatar;
+  final String? firstName;
+  final String? lastName;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -13,6 +15,8 @@ class UserModel {
     required this.email,
     this.phone,
     this.avatar,
+    this.firstName,
+    this.lastName,
     this.createdAt,
     this.updatedAt,
   });
@@ -55,12 +59,26 @@ class UserModel {
       return '';
     }
     
+    // Extract avatar URL - handle both string and object formats
+    String? extractAvatar() {
+      if (json['avatar'] == null) return null;
+      if (json['avatar'] is String) {
+        return json['avatar'] as String;
+      }
+      if (json['avatar'] is Map) {
+        return json['avatar']['url'] as String?;
+      }
+      return null;
+    }
+    
     return UserModel(
       id: extractId(),
       name: getStringValue(json['name']),
       email: getStringValue(json['email']),
       phone: json['phone'] != null ? getStringValue(json['phone']) : null,
-      avatar: json['avatar'] != null ? getStringValue(json['avatar']) : null,
+      avatar: extractAvatar(),
+      firstName: json['firstName'] != null ? getStringValue(json['firstName']) : null,
+      lastName: json['lastName'] != null ? getStringValue(json['lastName']) : null,
       createdAt: parseDateTime(json['createdAt']),
       updatedAt: parseDateTime(json['updatedAt']),
     );
@@ -73,6 +91,8 @@ class UserModel {
       'email': email,
       'phone': phone,
       'avatar': avatar,
+      'firstName': firstName,
+      'lastName': lastName,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
@@ -84,6 +104,8 @@ class UserModel {
     String? email,
     String? phone,
     String? avatar,
+    String? firstName,
+    String? lastName,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -93,6 +115,8 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       avatar: avatar ?? this.avatar,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
