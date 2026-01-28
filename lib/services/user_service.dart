@@ -74,17 +74,19 @@ class UserService {
     }
   }
 
-  /// Change user password (design only - no API call)
+  /// Change user password
   Future<ApiResponse<void>> changePassword({
-    required String currentPassword,
+    required String oldPassword,
     required String newPassword,
-    required String confirmPassword,
   }) async {
-    // Mock response for design only
-    await Future.delayed(const Duration(milliseconds: 500));
-    return ApiResponse<void>(
-      success: false,
-      message: 'Design mode - no API calls',
+    final body = {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    };
+
+    return await _apiService.post<void>(
+      ApiEndpoints.changePassword,
+      body: body,
     );
   }
 
