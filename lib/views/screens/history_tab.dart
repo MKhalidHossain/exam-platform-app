@@ -156,6 +156,7 @@ class _HistoryTabState extends State<HistoryTab> {
           : HistoryDetailView(
               entry: _selectedEntry!,
               topics: _topics,
+              historyEntries: _history,
               onBack: () => setState(() => _selectedEntry = null),
             ),
     );

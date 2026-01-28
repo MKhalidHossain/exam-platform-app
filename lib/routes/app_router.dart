@@ -18,6 +18,8 @@ import '../views/screens/faq_screen.dart';
 import '../views/screens/subscribe_screen.dart';
 import '../views/screens/contact_us_screen.dart';
 import '../views/screens/professional_plan_screen.dart';
+import '../views/screens/performance_screen.dart';
+import '../views/screens/history_models.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -136,6 +138,28 @@ GoRouter getRouter() {
         path: '/professional-plan',
         name: 'professional-plan',
         builder: (context, state) => const ProfessionalPlanScreen(),
+      ),
+      GoRoute(
+        path: '/performance',
+        name: 'performance',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is PerformanceArgs) {
+            return PerformanceScreen(
+              entry: extra.entry,
+              history: extra.history,
+            );
+          }
+          return const PerformanceScreen(
+            entry: HistoryEntry(
+              examName: 'API 570 - Piping Inspector',
+              date: '1/10/2020, 10:45:37 AM',
+              scorePercent: 40.0,
+              scoreDetail: '4/10',
+            ),
+            history: [],
+          );
+        },
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
