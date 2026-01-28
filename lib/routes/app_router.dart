@@ -137,6 +137,30 @@ GoRouter getRouter() {
         name: 'professional-plan',
         builder: (context, state) => const ProfessionalPlanScreen(),
       ),
+      GoRoute(
+        path: '/quiz-settings',
+        name: 'quiz-settings',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return QuizSettingsScreen(courseTitle: title);
+        },
+      ),
+      GoRoute(
+        path: '/exam-session',
+        name: 'exam-session',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return ExamSessionScreen(courseTitle: title);
+        },
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
