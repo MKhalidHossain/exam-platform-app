@@ -58,8 +58,20 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         isActive: _currentPlan == PlanTier.starter,
                         onUpgrade: _currentPlan == PlanTier.starter
                             ? () {
-                                // Navigate to Professional plan screen
-                                context.push('/professional-plan');
+                                // Handle upgrade to professional
+                                _handleUpgrade(PlanTier.professional);
+                              }
+                            : null,
+                      ),
+                      const SizedBox(height: 24),
+                      // Professional Plan Card
+                      _buildPlanCard(
+                        planTier: PlanTier.professional,
+                        isActive: _currentPlan == PlanTier.professional,
+                        onUpgrade: _currentPlan == PlanTier.starter
+                            ? () {
+                                // Handle upgrade to professional
+                                _handleUpgrade(PlanTier.professional);
                               }
                             : null,
                       ),
@@ -75,6 +87,17 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     );
   }
 
+  void _handleUpgrade(PlanTier planTier) {
+    // Handle upgrade logic here
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Upgrading to ${planTier == PlanTier.professional ? 'Professional' : 'Starter'} plan...'),
+        backgroundColor: Colors.green,
+      ),
+    );
+    // TODO: Implement actual upgrade API call
+  }
+
   Widget _buildPlanCard({
     required PlanTier planTier,
     required bool isActive,
@@ -87,6 +110,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: isActive
+            ? Border.all(
+                color: const Color(0xFF2D4F88),
+                width: 2,
+              )
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -105,7 +134,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2D4F88),
+                  color: isStarter
+                      ? const Color(0xFF2D4F88)
+                      : const Color(0xFFF59E0B),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -119,13 +150,41 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      isStarter ? 'Starter Plan' : 'Professional Plan',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF111827),
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            isStarter ? 'Starter Plan' : 'Professional Plan',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF111827),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (!isStarter) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'Popular',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (isActive) ...[
                       const SizedBox(height: 4),
@@ -153,8 +212,30 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               ),
             ],
           ),
-          if (!isStarter) ...[
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
+          if (isStarter) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text(
+                  'Free',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '/forever',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -194,30 +275,97 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           const SizedBox(height: 16),
           ..._buildFeaturesList(isStarter),
           const SizedBox(height: 24),
-          if (onUpgrade != null)
+          // Free Plan Button
+          if (isStarter)
             SizedBox(
               width: double.infinity,
               height: 56,
-              child: ElevatedButton(
-                onPressed: onUpgrade,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2D4F88),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  isStarter
-                      ? 'Upgrade to professional'
-                      : 'Upgrade',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              child: isActive
+                  ? OutlinedButton(
+                      onPressed: null,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.grey[100],
+                        foregroundColor: Colors.grey[600],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        side: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'Your Current Plan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  : ElevatedButton(
+                      onPressed: onUpgrade,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                        foregroundColor: Colors.grey[700],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Free Plan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+            )
+          // Professional Paid Plan Button
+          else
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: isActive
+                  ? OutlinedButton(
+                      onPressed: null,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.grey[100],
+                        foregroundColor: Colors.grey[600],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        side: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'Your Current Plan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  : ElevatedButton(
+                      onPressed: onUpgrade,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D4F88),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Subscribe - \$180.00',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
             ),
         ],
       ),

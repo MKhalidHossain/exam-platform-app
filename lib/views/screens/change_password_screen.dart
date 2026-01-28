@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
+import '../../services/user_service.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -15,6 +16,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+  final UserService _userService = UserService();
   bool _isLoading = false;
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
@@ -66,11 +68,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     });
 
     try {
-      // Here you would call the API to change password
-      await Future.delayed(const Duration(seconds: 1));
+      final response = await _userService.changePassword(
+        oldPassword: _currentPasswordController.text.trim(),
+        newPassword: _newPasswordController.text.trim(),
+      );
 
       if (mounted) {
-        _showSuccessDialog();
+        if (response.success) {
+          _showSuccessDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.message ?? 'Failed to change password'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
