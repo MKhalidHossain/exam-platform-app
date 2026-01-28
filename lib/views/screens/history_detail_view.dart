@@ -1,0 +1,450 @@
+import 'package:flutter/material.dart';
+
+import 'history_models.dart';
+
+class HistoryDetailView extends StatelessWidget {
+  const HistoryDetailView({
+    super.key,
+    required this.entry,
+    required this.topics,
+    required this.onBack,
+  });
+
+  final HistoryEntry entry;
+  final List<TopicBreakdown> topics;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double scale = (constraints.maxWidth / 375).clamp(0.85, 1.15);
+        final double hPad = 12 * scale;
+        final double titleSize = 15 * scale;
+        final double captionSize = 10.5 * scale;
+        final double scoreSize = 22 * scale;
+        final double buttonSize = 12 * scale;
+        final double sectionTitle = 14 * scale;
+        final double headerSize = 9.5 * scale;
+        final double rowSize = 10 * scale;
+        final double cardTitle = 11 * scale;
+        final double cardBody = 10 * scale;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                    color: const Color(0xFF27407C),
+                  ),
+                  Expanded(
+                    child: Text(
+                      entry.examName,
+                      style: TextStyle(
+                        fontSize: titleSize,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF27407C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: EdgeInsets.only(left: 6 * scale),
+                child: Text(
+                  "Here's how you did on the '${entry.examName}'\nexam.",
+                  style: TextStyle(
+                    fontSize: captionSize,
+                    color: const Color(0xFF6C7685),
+                  ),
+                ),
+              ),
+              SizedBox(height: 12 * scale),
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Your Score.',
+                      style: TextStyle(
+                        fontSize: captionSize,
+                        color: const Color(0xFF6C7685),
+                      ),
+                    ),
+                    SizedBox(height: 4 * scale),
+                    Text(
+                      '${entry.scorePercent.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: scoreSize,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1E6CF3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 12 * scale),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Try Again pressed.')),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF20324A),
+                        backgroundColor: const Color(0xFFE1E4EA),
+                        side: const BorderSide(color: Color(0xFFBCC6D6)),
+                        padding: EdgeInsets.symmetric(vertical: 12 * scale),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      child: Text(
+                        'Try Again',
+                        style: TextStyle(fontSize: buttonSize),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12 * scale),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Performance pressed.')),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E4AA8),
+                        padding: EdgeInsets.symmetric(vertical: 12 * scale),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      child: Text(
+                        'Performance',
+                        style: TextStyle(fontSize: buttonSize),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10 * scale),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Exam regenerated.')),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1E4AA8),
+                  side: const BorderSide(color: Color(0xFF9FB4E9)),
+                  padding: EdgeInsets.symmetric(
+                    vertical: 12 * scale,
+                    horizontal: 16 * scale,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: Text(
+                  'Regenerate Exam (120 New Questions)',
+                  style: TextStyle(fontSize: buttonSize),
+                ),
+              ),
+              SizedBox(height: 16 * scale),
+              Center(
+                child: Text(
+                  'Topic Breakdown',
+                  style: TextStyle(
+                    fontSize: sectionTitle,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              SizedBox(height: 8 * scale),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8 * scale,
+                  vertical: 8 * scale,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE0E5F1)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        _TopicHeaderCell(
+                          label: 'Category',
+                          flex: 4,
+                          fontSize: headerSize,
+                          height: 24 * scale,
+                        ),
+                        _TopicHeaderCell(
+                          label: 'Correct',
+                          flex: 2,
+                          fontSize: headerSize,
+                          height: 24 * scale,
+                        ),
+                        _TopicHeaderCell(
+                          label: 'Incorrect',
+                          flex: 2,
+                          fontSize: headerSize,
+                          height: 24 * scale,
+                        ),
+                        _TopicHeaderCell(
+                          label: 'Acc',
+                          flex: 1,
+                          fontSize: headerSize,
+                          height: 24 * scale,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 6 * scale),
+                    ...topics.map(
+                      (topic) => Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6 * scale),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 4,
+                              child: Text(
+                                topic.category,
+                                style: TextStyle(fontSize: rowSize),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '${topic.correct}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: rowSize),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '${topic.incorrect}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: rowSize),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Text(
+                                '${topic.accuracy}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: rowSize),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 6 * scale),
+                    Container(
+                      height: 8 * scale,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE6E8EC),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 36 * scale,
+                          margin: EdgeInsets.all(1.5 * scale),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7A7F88),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16 * scale),
+              Center(
+                child: Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 10 * scale),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE0E5F1)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Review Your Answers',
+                      style: TextStyle(
+                        fontSize: 13 * scale,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 10 * scale),
+              ...List.generate(
+                10,
+                (index) => _ReviewCard(
+                  questionNumber: index + 1,
+                  question: 'When I think about my childhood, I\nfeel?',
+                  userAnswer: '0.0025 inches/years',
+                  isCorrect: index == 3 || index == 4 || index == 5,
+                  correctAnswer: '0.010 inches/year',
+                  scale: scale,
+                  titleSize: cardTitle,
+                  bodySize: cardBody,
+                ),
+              ),
+              SizedBox(height: 12 * scale),
+              Center(
+                child: GestureDetector(
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Disclaimer tapped.')),
+                    );
+                  },
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Not affiliated with or endorsed by API. ',
+                      style: TextStyle(
+                        fontSize: 10 * scale,
+                        color: const Color(0xFF6C7685),
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'See full\n',
+                          style: TextStyle(
+                            fontSize: 10 * scale,
+                            color: Color(0xFF1E6CF3),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'disclaimer.',
+                          style: TextStyle(
+                            fontSize: 10 * scale,
+                            color: Color(0xFF1E6CF3),
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              SizedBox(height: 12 * scale),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TopicHeaderCell extends StatelessWidget {
+  const _TopicHeaderCell({
+    required this.label,
+    required this.flex,
+    required this.fontSize,
+    required this.height,
+  });
+
+  final String label;
+  final int flex;
+  final double fontSize;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        height: height,
+        alignment: Alignment.center,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFE0E5F1)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReviewCard extends StatelessWidget {
+  const _ReviewCard({
+    required this.questionNumber,
+    required this.question,
+    required this.userAnswer,
+    required this.correctAnswer,
+    required this.isCorrect,
+    required this.scale,
+    required this.titleSize,
+    required this.bodySize,
+  });
+
+  final int questionNumber;
+  final String question;
+  final String userAnswer;
+  final String correctAnswer;
+  final bool isCorrect;
+  final double scale;
+  final double titleSize;
+  final double bodySize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 10 * scale),
+      padding: EdgeInsets.all(10 * scale),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD5DAE6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Q$questionNumber. $question',
+            style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w600),
+          ),
+          SizedBox(height: 6 * scale),
+          if (!isCorrect)
+            Text(
+              'Your answer : $userAnswer (Incorrect)',
+              style: TextStyle(fontSize: bodySize, color: Colors.red),
+            ),
+          SizedBox(height: 4 * scale),
+          Text(
+            'Correct answer : $correctAnswer',
+            style: TextStyle(fontSize: bodySize, color: Colors.green),
+          ),
+        ],
+      ),
+    );
+  }
+}
