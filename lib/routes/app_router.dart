@@ -21,6 +21,9 @@ import '../views/screens/contact_us_screen.dart';
 import '../views/screens/professional_plan_screen.dart';
 import '../views/screens/performance_screen.dart';
 import '../views/screens/history_models.dart';
+import '../views/screens/exam_loading_screen.dart';
+import '../views/screens/mcq_screen.dart';
+import '../views/screens/exam_review_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -181,6 +184,66 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
           }
           return ExamSessionScreen(courseTitle: title);
+        },
+      ),
+      GoRoute(
+        path: '/exam-loading',
+        name: 'exam-loading',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return ExamLoadingScreen(courseTitle: title);
+        },
+      ),
+      GoRoute(
+        path: '/mcq',
+        name: 'mcq',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return McqScreen(courseTitle: title);
+        },
+      ),
+      GoRoute(
+        path: '/exam-review',
+        name: 'exam-review',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          List<dynamic> questions = const [];
+          Map<int, int> selected = const {};
+          Set<int> flagged = const {};
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+            questions = (extra['questions'] as List<dynamic>?) ?? const [];
+            final rawSelected = extra['selected'];
+            if (rawSelected is Map) {
+              selected = rawSelected.map(
+                (key, value) => MapEntry(
+                  int.tryParse(key.toString()) ?? 0,
+                  int.tryParse(value.toString()) ?? 0,
+                ),
+              );
+            }
+            final rawFlagged = extra['flagged'];
+            if (rawFlagged is Set) {
+              flagged = rawFlagged.map((e) => int.tryParse(e.toString()) ?? 0).toSet();
+            } else if (rawFlagged is List) {
+              flagged = rawFlagged.map((e) => int.tryParse(e.toString()) ?? 0).toSet();
+            }
+          }
+          return ExamReviewScreen(
+            courseTitle: title,
+            questions: questions,
+            selected: selected,
+            flagged: flagged,
+          );
         },
       ),
     ],

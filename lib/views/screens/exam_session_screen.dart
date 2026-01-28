@@ -77,8 +77,9 @@ class ExamSessionScreen extends StatelessWidget {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.of(dialogContext).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Quiz started.')),
+                          context.push(
+                            '/exam-loading',
+                            extra: {'courseTitle': courseTitle},
                           );
                         },
                         style: ElevatedButton.styleFrom(
