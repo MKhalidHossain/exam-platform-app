@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
+import '../../controllers/home_controller.dart';
 
 enum PlanTier { starter, professional }
 
@@ -9,7 +12,7 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     this.planTier = PlanTier.starter,
-    this.unlockedCourseIds = const {'api510'},
+    this.unlockedCourseIds = const {},
   });
 
   @override
@@ -31,10 +34,14 @@ class HomeDashboard extends StatelessWidget {
     required this.unlockedCourseIds,
   });
 
-  bool _isUnlocked(Course course) => unlockedCourseIds.contains(course.id);
+  bool _isUnlocked(CourseItem course) => unlockedCourseIds.contains(course.id);
 
   @override
   Widget build(BuildContext context) {
+    final HomeController controller = Get.isRegistered<HomeController>()
+        ? Get.find<HomeController>()
+        : Get.put(HomeController());
+
     final String planLabel =
         planTier == PlanTier.professional ? 'Professional User' : 'Starter User';
 
@@ -67,16 +74,58 @@ class HomeDashboard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          ..._courses.map((course) {
-            final isUnlocked = _isUnlocked(course);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: CourseCard(
-                course: course,
-                isUnlocked: isUnlocked,
-                showPriceUnlock: planTier == PlanTier.professional,
-                onTap: () {},
-              ),
+          Obx(() {
+            final bool isLoading = controller.isLoading.value;
+            final List<CourseItem> items = controller.exams.isNotEmpty
+                ? controller.exams
+                    .map(
+                      (exam) => CourseItem(
+                        id: exam.id ?? exam.name ?? '',
+                        title: exam.name ?? 'Certification Exam',
+                        subtitle: 'Master your certification exam',
+                        imageUrl: exam.image?.url,
+                        imageAsset: 'assets/images/onboarding1.png',
+                      ),
+                    )
+                    .toList()
+                : _courses;
+
+            if (isLoading && controller.exams.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
+            return Column(
+              children: items.map((course) {
+                final isUnlocked = _isUnlocked(course);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: CourseCard(
+                    course: course,
+                    isUnlocked: isUnlocked,
+                    showPriceUnlock: planTier == PlanTier.professional,
+                    onTap: () {
+                      if (planTier == PlanTier.starter && !isUnlocked) {
+                        context.push(
+                          '/quiz-settings',
+                          extra: {'courseTitle': course.title},
+                        );
+                        return;
+                      }
+                      if (isUnlocked) {
+                        context.push(
+                          '/quiz-settings',
+                          extra: {'courseTitle': course.title},
+                        );
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
             );
           }),
           const SizedBox(height: 12),
@@ -203,7 +252,7 @@ class _AnnouncementBanner extends StatelessWidget {
 }
 
 class CourseCard extends StatelessWidget {
-  final Course course;
+  final CourseItem course;
   final bool isUnlocked;
   final bool showPriceUnlock;
   final VoidCallback onTap;
@@ -232,12 +281,27 @@ class CourseCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                course.imageAsset,
-                width: 56,
-                height: 56,
-                fit: BoxFit.cover,
-              ),
+              child: course.imageUrl != null && course.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      course.imageUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Image.asset(
+                          course.imageAsset,
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                        );
+                      },
+                    )
+                  : Image.asset(
+                      course.imageAsset,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -401,64 +465,66 @@ class _DisclaimerSection extends StatelessWidget {
   }
 }
 
-class Course {
+class CourseItem {
   final String id;
   final String title;
   final String subtitle;
   final String imageAsset;
+  final String? imageUrl;
 
-  const Course({
+  const CourseItem({
     required this.id,
     required this.title,
     required this.subtitle,
     required this.imageAsset,
+    this.imageUrl,
   });
 }
 
-const List<Course> _courses = [
-  Course(
+const List<CourseItem> _courses = [
+  CourseItem(
     id: 'api510',
     title: 'API 510 - Pressure vessel Inspector',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding1.png',
   ),
-  Course(
+  CourseItem(
     id: 'api570',
     title: 'API 570 - Piping Inspector',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding2.png',
   ),
-  Course(
+  CourseItem(
     id: 'api653',
     title: 'API 653 - Aboveground Storage Tanks Inspector',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding3.png',
   ),
-  Course(
+  CourseItem(
     id: 'api1169',
     title: 'API 1169 - Pipeline Construction Inspector',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding4.png',
   ),
-  Course(
+  CourseItem(
     id: 'api936',
     title: 'API 936 - Refractory Personnel',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding1.png',
   ),
-  Course(
+  CourseItem(
     id: 'sife',
     title: 'SIFE - Source Inspector Fixed Equipment',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding2.png',
   ),
-  Course(
+  CourseItem(
     id: 'sire',
     title: 'SIRE - Source Inspector Rotating Equipment',
     subtitle: 'Master your certification exam',
     imageAsset: 'assets/images/onboarding3.png',
   ),
-  Course(
+  CourseItem(
     id: 'siee',
     title: 'SIEE - Source Inspector Electrical Equipment',
     subtitle: 'Master your certification exam',

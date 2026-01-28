@@ -9,7 +9,7 @@ class NavbarScreen extends StatefulWidget {
   const NavbarScreen({
     super.key,
     this.planTier = PlanTier.starter,
-    this.unlockedCourseIds = const {'api510'},
+    this.unlockedCourseIds = const {},
   });
 
   @override
@@ -21,14 +21,29 @@ class _NavbarScreenState extends State<NavbarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Stack(
         children: [
-          HomeScreen(
-            planTier: widget.planTier,
-            unlockedCourseIds: widget.unlockedCourseIds,
+          Positioned.fill(
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.zero,
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: [
+                    HomeScreen(
+                      planTier: widget.planTier,
+                      unlockedCourseIds: widget.unlockedCourseIds,
+                    ),
+                    const _HistoryTab(),
+                    const _ProfileTab(),
+                  ],
+                ),
+              ),
+            ),
           ),
           const _HistoryTab(),
           ProfileScreen(planTier: widget.planTier),
@@ -42,7 +57,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
             currentIndex: _currentIndex,
             onTap: (index) => setState(() => _currentIndex = index),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -144,8 +159,166 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _HistoryTab extends StatelessWidget {
+class _HistoryTab extends StatefulWidget {
   const _HistoryTab();
+
+  @override
+  State<_HistoryTab> createState() => _HistoryTabState();
+}
+
+class _HistoryTabState extends State<_HistoryTab> {
+  final List<_HistoryEntry> _history = const [
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/10/2020, 10:45:37 AM',
+      scorePercent: 40.0,
+      scoreDetail: '4/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/9/2026, 4:00:18 PM',
+      scorePercent: 30.0,
+      scoreDetail: '3/10',
+    ),
+    _HistoryEntry(
+      examName: 'API 570 - Piping Inspector',
+      date: '1/9/2026, 2:46:37 PM',
+      scorePercent: 20.0,
+      scoreDetail: '2/10',
+    ),
+  ];
+
+  final List<_TopicBreakdown> _topics = const [
+    _TopicBreakdown(
+      category: 'Preheating and Heat\nTreatment',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Corrosion Rates and\nInspection Intervals',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Weld Joint Quality\nFactors',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Internal Pressure /\nMinimum Thickness of\nPipe',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Pressure Testing',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Thermal Expansion',
+      correct: 0,
+      incorrect: 0,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Blanks',
+      correct: 1,
+      incorrect: 1,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Impact Testing',
+      correct: 1,
+      incorrect: 1,
+      accuracy: 1,
+    ),
+    _TopicBreakdown(
+      category: 'Flanges',
+      correct: 1,
+      incorrect: 1,
+      accuracy: 1,
+    ),
+  ];
+
+  _HistoryEntry? _selectedEntry;
+  String _selectedFilter = 'All Exams';
+
+  @override
+  Widget build(BuildContext context) {
+    final List<_HistoryEntry> filtered = _selectedFilter == 'All Exams'
+        ? _history
+        : _history
+            .where((entry) => entry.examName == _selectedFilter)
+            .toList();
+
+    return SafeArea(
+      child: _selectedEntry == null
+          ? _HistoryListView(
+              entries: filtered,
+              filterValue: _selectedFilter,
+              onFilterChanged: (value) =>
+                  setState(() => _selectedFilter = value),
+              onSelect: (entry) =>
+                  setState(() => _selectedEntry = entry),
+            )
+          : _HistoryDetailView(
+              entry: _selectedEntry!,
+              topics: _topics,
+              onBack: () => setState(() => _selectedEntry = null),
+            ),
+    );
+  }
+}
+
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab();
 
   @override
   Widget build(BuildContext context) {
