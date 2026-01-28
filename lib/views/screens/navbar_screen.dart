@@ -24,6 +24,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
     final double bottomInset = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: const Color(0xFFF2F5FF),
       body: Stack(
         children: [
@@ -39,14 +40,12 @@ class _NavbarScreenState extends State<NavbarScreen> {
                       unlockedCourseIds: widget.unlockedCourseIds,
                     ),
                     const _HistoryTab(),
-                    const _ProfileTab(),
+                    ProfileScreen(planTier: widget.planTier),
                   ],
                 ),
               ),
             ),
           ),
-          const _HistoryTab(),
-          ProfileScreen(planTier: widget.planTier),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -57,7 +56,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
             currentIndex: _currentIndex,
             onTap: (index) => setState(() => _currentIndex = index),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -336,3 +335,267 @@ class _ProfileTab extends StatelessWidget {
   }
 }
 
+class _HistoryEntry {
+  final String examName;
+  final String date;
+  final double scorePercent;
+  final String scoreDetail;
+
+  const _HistoryEntry({
+    required this.examName,
+    required this.date,
+    required this.scorePercent,
+    required this.scoreDetail,
+  });
+}
+
+class _TopicBreakdown {
+  final String category;
+  final int correct;
+  final int incorrect;
+  final double accuracy;
+
+  const _TopicBreakdown({
+    required this.category,
+    required this.correct,
+    required this.incorrect,
+    required this.accuracy,
+  });
+}
+
+class _HistoryListView extends StatelessWidget {
+  final List<_HistoryEntry> entries;
+  final String filterValue;
+  final ValueChanged<String> onFilterChanged;
+  final ValueChanged<_HistoryEntry> onSelect;
+
+  const _HistoryListView({
+    required this.entries,
+    required this.filterValue,
+    required this.onFilterChanged,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final List<String> filters = <String>{
+      'All Exams',
+      ...entries.map((entry) => entry.examName),
+    }.toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      children: [
+        const Text(
+          'History',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF111827),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F2F3E6B),
+                blurRadius: 10,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: filterValue,
+              isExpanded: true,
+              items: filters
+                  .map(
+                    (value) => DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  onFilterChanged(value);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (entries.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                'No history yet.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ),
+          )
+        else
+          ...entries.map(
+            (entry) => Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              child: ListTile(
+                onTap: () => onSelect(entry),
+                title: Text(
+                  entry.examName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                subtitle: Text(
+                  entry.date,
+                  style: const TextStyle(color: Color(0xFF6B7280)),
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${entry.scorePercent.toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2D4F88),
+                      ),
+                    ),
+                    Text(
+                      entry.scoreDetail,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _HistoryDetailView extends StatelessWidget {
+  final _HistoryEntry entry;
+  final List<_TopicBreakdown> topics;
+  final VoidCallback onBack;
+
+  const _HistoryDetailView({
+    required this.entry,
+    required this.topics,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Back'),
+          ),
+        ),
+        Text(
+          entry.examName,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF111827),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          entry.date,
+          style: const TextStyle(color: Color(0xFF6B7280)),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Score',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+              Text(
+                '${entry.scorePercent.toStringAsFixed(0)}% (${entry.scoreDetail})',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2D4F88),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Topic Breakdown',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF111827),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...topics.map(
+          (topic) => Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFFE5E7EB)),
+            ),
+            child: ListTile(
+              title: Text(
+                topic.category,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                'Correct: ${topic.correct}  Incorrect: ${topic.incorrect}',
+                style: const TextStyle(color: Color(0xFF6B7280)),
+              ),
+              trailing: Text(
+                '${(topic.accuracy * 100).round()}%',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2D4F88),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
