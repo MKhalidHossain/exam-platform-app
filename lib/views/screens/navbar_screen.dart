@@ -8,7 +8,7 @@ class NavbarScreen extends StatefulWidget {
   const NavbarScreen({
     super.key,
     this.planTier = PlanTier.starter,
-    this.unlockedCourseIds = const {'api510'},
+    this.unlockedCourseIds = const {},
   });
 
   @override
@@ -20,28 +20,40 @@ class _NavbarScreenState extends State<NavbarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Stack(
         children: [
-          HomeScreen(
-            planTier: widget.planTier,
-            unlockedCourseIds: widget.unlockedCourseIds,
+          Positioned.fill(
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.zero,
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: [
+                    HomeScreen(
+                      planTier: widget.planTier,
+                      unlockedCourseIds: widget.unlockedCourseIds,
+                    ),
+                    const _HistoryTab(),
+                    const _ProfileTab(),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const _HistoryTab(),
-          const _ProfileTab(),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 12 + bottomInset,
+            child: _BottomNavBar(
+              currentIndex: _currentIndex,
+              onTap: (index) => setState(() => _currentIndex = index),
+            ),
+          ),
         ],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-          child: _BottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
-          ),
-        ),
       ),
     );
   }
@@ -309,7 +321,7 @@ class _ProfileTab extends StatelessWidget {
     return const SafeArea(
       child: Center(
         child: Text(
-          'Profile',
+          'History',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
