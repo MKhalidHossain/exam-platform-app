@@ -1,10 +1,11 @@
+import 'package:ej_flutter/views/screens/exam_session_screen.dart';
+import 'package:ej_flutter/views/screens/quiz_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../views/screens/splash_screen.dart';
 import '../views/screens/login_screen.dart';
 import '../views/screens/navbar_screen.dart';
-import '../views/screens/quiz_settings_screen.dart';
-import '../views/screens/exam_session_screen.dart';
+
 import '../views/screens/onboarding_screen.dart';
 import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';
@@ -157,8 +158,32 @@ GoRouter getRouter() {
               scorePercent: 40.0,
               scoreDetail: '4/10',
             ),
-            history: [],
+            history: const [],
           );
+        },
+      ),
+      GoRoute(
+        path: '/quiz-settings',
+        name: 'quiz-settings',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return QuizSettingsScreen(courseTitle: title);
+        },
+      ),
+      GoRoute(
+        path: '/exam-session',
+        name: 'exam-session',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+          }
+          return ExamSessionScreen(courseTitle: title);
         },
       ),
     ],
