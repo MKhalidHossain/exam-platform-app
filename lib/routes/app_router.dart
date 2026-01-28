@@ -163,6 +163,9 @@ GoRouter getRouter() {
             ),
             history: [],
           );
+        },
+      ),
+      GoRoute(
         path: '/quiz-settings',
         name: 'quiz-settings',
         builder: (context, state) {
