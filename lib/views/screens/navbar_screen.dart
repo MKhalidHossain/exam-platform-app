@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'history_tab.dart';
+import 'profile_screen.dart';
 
 class NavbarScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -39,7 +40,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
                       unlockedCourseIds: widget.unlockedCourseIds,
                     ),
                     const HistoryTab(),
-                    const _ProfileTab(),
+                    ProfileScreen(planTier: widget.planTier),
                   ],
                 ),
               ),
@@ -103,7 +104,7 @@ class _BottomNavBar extends StatelessWidget {
           _NavItem(
             index: 2,
             currentIndex: currentIndex,
-            icon: Icons.person_outline,
+            icon: currentIndex == 2 ? Icons.person : Icons.person_outline,
             label: 'Profile',
             onTap: onTap,
           ),
@@ -156,21 +157,3 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _ProfileTab extends StatelessWidget {
-  const _ProfileTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SafeArea(
-      child: Center(
-        child: Text(
-          'History',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
