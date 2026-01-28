@@ -3,8 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../views/screens/splash_screen.dart';
 import '../views/screens/login_screen.dart';
 import '../views/screens/navbar_screen.dart';
-import '../views/screens/quiz_settings_screen.dart';
-import '../views/screens/exam_session_screen.dart';
+
 import '../views/screens/onboarding_screen.dart';
 import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';

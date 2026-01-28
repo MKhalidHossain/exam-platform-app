@@ -1,3 +1,28 @@
+class ExamModel {
+  final String id;
+  final String name;
+  final String? imageUrl;
+
+  const ExamModel({
+    required this.id,
+    required this.name,
+    this.imageUrl,
+  });
+
+  factory ExamModel.fromJson(Map<String, dynamic> json) {
+    final image = json['image'];
+    String? url;
+    if (image is Map) {
+      url = image['url'] as String?;
+    }
+    return ExamModel(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      imageUrl: url,
+    );
+  }
+}
+
 class ExamImage {
   final String? publicId;
   final String? url;
