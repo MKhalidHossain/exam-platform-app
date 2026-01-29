@@ -191,9 +191,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 12),
                       _SettingItem(
                         icon: Icons.dashboard_outlined,
-                        title: 'Performance Dashboard',
-                        subtitle: 'Manage your Performance Dashboard',
+                        title: 'Performance',
+                        subtitle: 'Manage your Performance',
                         onTap: () {
+                          context.push('/performance');
                           // Navigate to performance dashboard
                         },
                       ),

@@ -274,7 +274,7 @@ class PerformanceScreen extends StatelessWidget {
                               ),
                             ],
                           );
-                        }).toList(),
+                        }),
                       ],
                     ),
                   ),

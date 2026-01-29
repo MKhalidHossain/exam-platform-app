@@ -170,7 +170,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                   ),
                   Switch(
                     value: _timedMode,
-                    activeColor: const Color(0xFF2F6DE0),
+                    activeThumbColor: const Color(0xFF2F6DE0),
                     onChanged: (value) => setState(() => _timedMode = value),
                   ),
                 ],

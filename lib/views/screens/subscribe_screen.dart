@@ -13,7 +13,7 @@ class SubscribeScreen extends StatefulWidget {
 }
 
 class _SubscribeScreenState extends State<SubscribeScreen> {
-  PlanTier _currentPlan = PlanTier.starter; // This should come from user data
+  final PlanTier _currentPlan = PlanTier.starter; // This should come from user data
   final ExamService _examService = ExamService();
 
   @override
