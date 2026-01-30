@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/gradient_background.dart';
+import '../../controllers/user_controller.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 
@@ -154,6 +156,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (mounted) {
         if (response.success && response.data != null) {
+          // Refresh UserController so Profile and Home screens show updated name and image
+          if (Get.isRegistered<UserController>()) {
+            await Get.find<UserController>().refreshProfile();
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(response.message ?? 'Profile updated successfully'),
