@@ -8,10 +8,7 @@ import 'home_screen.dart';
 class ProfileScreen extends StatefulWidget {
   final PlanTier planTier;
 
-  const ProfileScreen({
-    super.key,
-    this.planTier = PlanTier.starter,
-  });
+  const ProfileScreen({super.key, this.planTier = PlanTier.starter});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -269,7 +266,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
                                   child: const Text('Cancel'),
                                 ),
                                 TextButton(
@@ -341,10 +339,7 @@ class _SettingItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.grey[200]!,
-            width: 1,
-          ),
+          border: Border.all(color: Colors.grey[200]!, width: 1),
         ),
         child: Row(
           children: [
@@ -379,19 +374,13 @@ class _SettingItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
           ],
         ),
       ),
