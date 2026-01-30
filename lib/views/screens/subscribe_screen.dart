@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import '../widgets/gradient_background.dart';
 import 'home_screen.dart';
 import '../../services/exam_service.dart';
+import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
 
 class SubscribeScreen extends StatefulWidget {
@@ -15,6 +17,8 @@ class SubscribeScreen extends StatefulWidget {
 class _SubscribeScreenState extends State<SubscribeScreen> {
   final PlanTier _currentPlan = PlanTier.starter; // This should come from user data
   final ExamService _examService = ExamService();
+  final ApiService _apiService = ApiService();
+  bool _isPaymentLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -71,12 +75,25 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       _buildPlanCard(
                         planTier: PlanTier.professional,
                         isActive: _currentPlan == PlanTier.professional,
-                        onUpgrade: _currentPlan == PlanTier.starter
+                        onUpgrade: (_currentPlan == PlanTier.starter && !_isPaymentLoading)
                             ? () {
                                 _openUnlockExamDialog();
                               }
                             : null,
                       ),
+                      if (_isPaymentLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 16),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 12),
+                                Text('Processing payment...'),
+                              ],
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -113,15 +130,94 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     if (!mounted) return;
     if (selectedIds == null || selectedIds.isEmpty) return;
 
-    // Here you have selected exam _id list (only one exam)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(selectedIds.length == 1
-            ? 'Selected exam: ${selectedIds.first}'
-            : 'Selected exams: ${selectedIds.join(", ")}'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    final examId = selectedIds.first;
+    await _payWithStripe(examId);
+  }
+
+  /// Stripe-only flow: create intent → PaymentSheet → confirm backend
+  Future<void> _payWithStripe(String examId) async {
+    setState(() => _isPaymentLoading = true);
+
+    try {
+      // 1. Create Payment Intent on backend
+      final createRes = await _apiService.createExamStripePaymentIntent(examId);
+      if (!mounted) return;
+      if (!createRes.success || createRes.data == null) {
+        setState(() => _isPaymentLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(createRes.message ?? 'Failed to create payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final clientSecret = createRes.data!['clientSecret'] as String?;
+      final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
+      if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
+        setState(() => _isPaymentLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid payment response'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // 2. Init and present Stripe Payment Sheet
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'EJ Exam Access',
+          returnURL: 'flutterstripe://redirect',
+        ),
+      );
+      if (!mounted) return;
+
+      await Stripe.instance.presentPaymentSheet();
+      if (!mounted) return;
+
+      // 3. User completed payment in sheet → confirm on backend
+      final confirmRes = await _apiService.confirmExamStripePayment(examId, paymentIntentId);
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+
+      if (confirmRes.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(confirmRes.message ?? 'Exam unlocked successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(confirmRes.message ?? 'Failed to confirm payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.error.message ?? 'Stripe error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildPlanCard({
