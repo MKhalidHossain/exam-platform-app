@@ -21,7 +21,6 @@ class _NavbarScreenState extends State<NavbarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final double bottomInset = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       extendBody: true,
@@ -316,24 +315,7 @@ class _HistoryTabState extends State<_HistoryTab> {
   }
 }
 
-class _ProfileTab extends StatelessWidget {
-  const _ProfileTab();
 
-  @override
-  Widget build(BuildContext context) {
-    return const SafeArea(
-      child: Center(
-        child: Text(
-          'History',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _HistoryEntry {
   final String examName;

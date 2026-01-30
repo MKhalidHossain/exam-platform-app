@@ -225,6 +225,55 @@ class ApiService {
     }
   }
 
+  Future<ApiResponse<T>> postMultipart<T>(
+    String endpoint, {
+    Map<String, String>? fields,
+    File? file,
+    String fileField = 'attachment',
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
+      final token = await _storageService.getToken();
+
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Accept'] = 'application/json';
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      if (fields != null) {
+        request.fields.addAll(fields);
+      }
+
+      if (file != null && await file.exists()) {
+        final fileStream = http.ByteStream(file.openRead());
+        final fileLength = await file.length();
+        final fileName = file.path.split('/').last;
+
+        final multipartFile = http.MultipartFile(
+          fileField,
+          fileStream,
+          fileLength,
+          filename: fileName,
+        );
+        request.files.add(multipartFile);
+      }
+
+      final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      return _handleResponse<T>(response, fromJson);
+    } catch (e) {
+      debugPrint('❌ HTTP POST Multipart Error: $e');
+      return ApiResponse<T>(
+        success: false,
+        message: 'Network error: ${e.toString()}',
+      );
+    }
+  }
+
   Future<ApiResponse<T>> delete<T>(
     String endpoint, {
     T Function(dynamic)? fromJson,
@@ -509,5 +558,31 @@ class ApiService {
     }
 
     return response;
+  }
+
+  /// Create support ticket (Help & Support). POST {{base_url}}/api/v1/support
+  /// Requires auth. Optional attachment field name is "attachment".
+  Future<ApiResponse<Map<String, dynamic>>> createSupportTicket({
+    required String email,
+    required String subject,
+    required String description,
+    String? phone,
+    File? attachment,
+  }) async {
+    final fields = <String, String>{
+      'email': email.trim(),
+      'subject': subject.trim(),
+      'description': description.trim(),
+    };
+    if (phone != null && phone.trim().isNotEmpty) {
+      fields['phone'] = phone.trim();
+    }
+    return postMultipart<Map<String, dynamic>>(
+      ApiEndpoints.support,
+      fields: fields,
+      file: attachment,
+      fileField: 'attachment',
+      fromJson: (json) => json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
   }
 }

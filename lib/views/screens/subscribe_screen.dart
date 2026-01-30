@@ -36,7 +36,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                     ),
                     const Expanded(
                       child: Text(
-                        'Subscribe',
+                        'Unlock your exam access',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 20,
@@ -106,17 +106,19 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       barrierDismissible: false,
       builder: (context) => _UnlockExamDialog(
         examService: _examService,
-        maxSelect: 2,
+        maxSelect: 1,
       ),
     );
 
     if (!mounted) return;
     if (selectedIds == null || selectedIds.isEmpty) return;
 
-    // Here you have selected exam _id list
+    // Here you have selected exam _id list (only one exam)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Selected exams: ${selectedIds.join(", ")}'),
+        content: Text(selectedIds.length == 1
+            ? 'Selected exam: ${selectedIds.first}'
+            : 'Selected exams: ${selectedIds.join(", ")}'),
         backgroundColor: Colors.green,
       ),
     );
@@ -557,7 +559,7 @@ class _UnlockExamDialogState extends State<_UnlockExamDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Welcome to the Professional plan! Please select ${widget.maxSelect} Exams to unlock.',
+                  'Welcome to the Professional plan! Please select ${widget.maxSelect} exam${widget.maxSelect == 1 ? '' : 's'} to unlock.',
                   style: const TextStyle(fontSize: 14, height: 1.3),
                 ),
                 const SizedBox(height: 14),
@@ -622,7 +624,7 @@ class _UnlockExamDialogState extends State<_UnlockExamDialog> {
                 Align(
                   alignment: Alignment.center,
                   child: Text(
-                    '${_selectedIds.length}/${widget.maxSelect} selected',
+                    '${_selectedIds.length}/${widget.maxSelect} exam${widget.maxSelect == 1 ? '' : 's'} selected',
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ),
