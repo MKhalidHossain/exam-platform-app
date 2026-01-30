@@ -24,4 +24,7 @@ class ApiEndpoints {
 
   // Exam Endpoints
   static const String exams = '/exam';
+
+  // Support Endpoints
+  static const String support = '/support';
 }

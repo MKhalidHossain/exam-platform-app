@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../../services/api_service.dart';
 
 class ContactUsScreen extends StatefulWidget {
   const ContactUsScreen({super.key});
@@ -17,6 +18,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  final ApiService _apiService = ApiService();
   File? _selectedImage;
   bool _isLoading = false;
 
@@ -112,17 +114,26 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     });
 
     try {
-      // Here you would submit the form via API
-      await Future.delayed(const Duration(seconds: 1));
+      final response = await _apiService.createSupportTicket(
+        email: _emailController.text.trim(),
+        subject: _subjectController.text.trim(),
+        description: _descriptionController.text.trim(),
+        phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        attachment: _selectedImage,
+      );
 
-      if (mounted) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (response.success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your message has been sent successfully'),
+          SnackBar(
+            content: Text(response.message ?? 'Your message has been sent successfully'),
             backgroundColor: Colors.green,
           ),
         );
-        // Clear form
         _emailController.clear();
         _phoneController.clear();
         _subjectController.clear();
@@ -130,21 +141,25 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         setState(() {
           _selectedImage = null;
         });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message ?? 'Failed to send message'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error sending message: $e'),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
       }
     }
   }
