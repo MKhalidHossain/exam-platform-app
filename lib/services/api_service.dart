@@ -565,7 +565,10 @@ class ApiService {
     String examId,
   ) async {
     return post<Map<String, dynamic>>(
-      ApiEndpoints.examStripeCreate(examId),
+      ApiEndpoints.professionalPlanStripeCreate(),
+      body: {
+        'examId': examId,
+      },
       fromJson: (json) =>
           json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
     );
@@ -577,8 +580,10 @@ class ApiService {
     String paymentIntentId,
   ) async {
     return post<Map<String, dynamic>>(
-      ApiEndpoints.examStripeConfirm(examId),
-      body: {'paymentIntentId': paymentIntentId},
+      ApiEndpoints.professionalPlanStripeConfirm(),
+      body: {
+        'examId': examId,
+        'paymentIntentId': paymentIntentId},
       fromJson: (json) =>
           json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
     );
