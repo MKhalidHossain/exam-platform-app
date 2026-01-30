@@ -30,8 +30,9 @@ class ApiEndpoints {
 
   // Payment Endpoints (payments base is /payments)
   static const String payments = '/payments';
-  // static String examStripeCreate(String examId) => '$payments/exam/$examId/stripe/create';
-
+  static const String professionalPlan = '$payments/plan/professional';
+  static String examStripeCreate(String examId) => '$payments/exam/$examId/stripe/create';
+  static String examStripeConfirm(String examId) => '$payments/exam/$examId/stripe/confirm';
   static String professionalPlanStripeCreate() => '$payments/plan/professional/stripe/create';
   static String professionalPlanStripeConfirm() => '$payments/plan/professional/stripe/confirm';
 }
