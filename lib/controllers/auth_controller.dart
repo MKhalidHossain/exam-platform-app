@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../services/api_service.dart';
+import '../controllers/user_controller.dart';
 
 class AuthController extends GetxController {
   final ApiService _apiService = ApiService();
@@ -20,6 +21,11 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
+        final UserController userController = Get.isRegistered<UserController>()
+            ? Get.find<UserController>()
+            : Get.put(UserController());
+        await userController.clearState();
+        await userController.refreshProfile();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(response.message ?? 'Login successful!'),
@@ -196,4 +202,3 @@ class AuthController extends GetxController {
     }
   }
 }
-
