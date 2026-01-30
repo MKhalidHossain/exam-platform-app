@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
-import 'home_screen.dart';
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
 import '../../services/exam_service.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
@@ -15,95 +17,109 @@ class SubscribeScreen extends StatefulWidget {
 }
 
 class _SubscribeScreenState extends State<SubscribeScreen> {
-  final PlanTier _currentPlan = PlanTier.starter; // This should come from user data
   final ExamService _examService = ExamService();
   final ApiService _apiService = ApiService();
+  late final UserController _userController;
   bool _isPaymentLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        useImage: true,
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App Bar
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => context.pop(),
-                      color: const Color(0xFF2D4F88),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Unlock your exam access',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D4F88),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 48), // Balance the back button
-                  ],
-                ),
-              ),
-              // Content
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Column(
+    return Obx(() {
+      final currentPlan = _userController.planTier.value;
+
+      return Scaffold(
+        body: GradientBackground(
+          useImage: true,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // App Bar
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
                     children: [
-                      // Starter Plan Card
-                      _buildPlanCard(
-                        planTier: PlanTier.starter,
-                        isActive: _currentPlan == PlanTier.starter,
-                        onUpgrade: _currentPlan == PlanTier.starter
-                            ? () {
-                                // Handle upgrade to professional
-                                _handleUpgrade(PlanTier.professional);
-                              }
-                            : null,
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => context.pop(),
+                        color: const Color(0xFF2D4F88),
                       ),
-                      const SizedBox(height: 24),
-                      // Professional Plan Card
-                      _buildPlanCard(
-                        planTier: PlanTier.professional,
-                        isActive: _currentPlan == PlanTier.professional,
-                        onUpgrade: (_currentPlan == PlanTier.starter && !_isPaymentLoading)
-                            ? () {
-                                _openUnlockExamDialog();
-                              }
-                            : null,
-                      ),
-                      if (_isPaymentLoading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 16),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 12),
-                                Text('Processing payment...'),
-                              ],
-                            ),
+                      const Expanded(
+                        child: Text(
+                          'Unlock your exam access',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D4F88),
                           ),
                         ),
-                      const SizedBox(height: 32),
+                      ),
+                      const SizedBox(width: 48), // Balance the back button
                     ],
                   ),
                 ),
-              ),
-            ],
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    child: Column(
+                      children: [
+                        // Starter Plan Card
+                        _buildPlanCard(
+                          planTier: PlanTier.starter,
+                          isActive: currentPlan == PlanTier.starter,
+                          onUpgrade: currentPlan == PlanTier.starter
+                              ? () {
+                                  // Handle upgrade to professional
+                                  _handleUpgrade(PlanTier.professional);
+                                }
+                              : null,
+                        ),
+                        const SizedBox(height: 24),
+                        // Professional Plan Card
+                        _buildPlanCard(
+                          planTier: PlanTier.professional,
+                          isActive: currentPlan == PlanTier.professional,
+                          onUpgrade:
+                              (currentPlan == PlanTier.starter && !_isPaymentLoading)
+                                  ? () {
+                                      _openUnlockExamDialog();
+                                    }
+                                  : null,
+                        ),
+                        if (_isPaymentLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 16),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 12),
+                                  Text('Processing payment...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   void _handleUpgrade(PlanTier planTier) {
@@ -185,6 +201,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
+        await _userController.applyProfessionalUpgrade(examId: examId);
+        await _userController.refreshProfile();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(confirmRes.message ?? 'Exam unlocked successfully'),

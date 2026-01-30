@@ -539,14 +539,17 @@ class ApiService {
       
       // Store role if available
       if (response.data!.role != null) {
-        await _storageService.saveString('user_role', response.data!.role!);
+        await _storageService.saveString(
+          AppConstants.userRoleKey,
+          response.data!.role!,
+        );
         debugPrint('   ✅ Role saved: ${response.data!.role}');
       }
       
       // Store user data as JSON string
       if (response.data!.user != null) {
         final userJson = jsonEncode(response.data!.user!.toJson());
-        await _storageService.saveString('user_data', userJson);
+        await _storageService.saveString(AppConstants.userDataKey, userJson);
         debugPrint('   ✅ User data saved');
       }
       

@@ -6,6 +6,14 @@ class UserModel {
   final String? avatar;
   final String? firstName;
   final String? lastName;
+  final bool? notifications;
+  final String? language;
+  final String? country;
+  final String? status;
+  final String? role;
+  final int? fine;
+  final String? referralCode;
+  final String? subscriptionTier;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -17,6 +25,14 @@ class UserModel {
     this.avatar,
     this.firstName,
     this.lastName,
+    this.notifications,
+    this.language,
+    this.country,
+    this.status,
+    this.role,
+    this.fine,
+    this.referralCode,
+    this.subscriptionTier,
     this.createdAt,
     this.updatedAt,
   });
@@ -46,6 +62,13 @@ class UserModel {
         return null;
       }
       return null;
+    }
+
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
     }
     
     // Extract ID from various possible fields
@@ -79,6 +102,17 @@ class UserModel {
       avatar: extractAvatar(),
       firstName: json['firstName'] != null ? getStringValue(json['firstName']) : null,
       lastName: json['lastName'] != null ? getStringValue(json['lastName']) : null,
+      notifications: json['notifications'] is bool ? json['notifications'] as bool : null,
+      language: json['language'] != null ? getStringValue(json['language']) : null,
+      country: json['country'] != null ? getStringValue(json['country']) : null,
+      status: json['status'] != null ? getStringValue(json['status']) : null,
+      role: json['role'] != null ? getStringValue(json['role']) : null,
+      fine: parseInt(json['fine']),
+      referralCode:
+          json['referralCode'] != null ? getStringValue(json['referralCode']) : null,
+      subscriptionTier: json['subscriptionTier'] != null
+          ? getStringValue(json['subscriptionTier'])
+          : null,
       createdAt: parseDateTime(json['createdAt']),
       updatedAt: parseDateTime(json['updatedAt']),
     );
@@ -93,6 +127,14 @@ class UserModel {
       'avatar': avatar,
       'firstName': firstName,
       'lastName': lastName,
+      'notifications': notifications,
+      'language': language,
+      'country': country,
+      'status': status,
+      'role': role,
+      'fine': fine,
+      'referralCode': referralCode,
+      'subscriptionTier': subscriptionTier,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
@@ -106,6 +148,14 @@ class UserModel {
     String? avatar,
     String? firstName,
     String? lastName,
+    bool? notifications,
+    String? language,
+    String? country,
+    String? status,
+    String? role,
+    int? fine,
+    String? referralCode,
+    String? subscriptionTier,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -117,6 +167,14 @@ class UserModel {
       avatar: avatar ?? this.avatar,
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
+      notifications: notifications ?? this.notifications,
+      language: language ?? this.language,
+      country: country ?? this.country,
+      status: status ?? this.status,
+      role: role ?? this.role,
+      fine: fine ?? this.fine,
+      referralCode: referralCode ?? this.referralCode,
+      subscriptionTier: subscriptionTier ?? this.subscriptionTier,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
