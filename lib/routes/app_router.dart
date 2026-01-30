@@ -161,7 +161,7 @@ GoRouter getRouter() {
               scorePercent: 40.0,
               scoreDetail: '4/10',
             ),
-            history: [],
+            history: const [],
           );
         },
       ),
