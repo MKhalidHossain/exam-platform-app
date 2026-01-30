@@ -8,6 +8,7 @@ import '../../models/plan_tier.dart';
 import '../../services/exam_service.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
+import '../../models/professional_plan_model.dart';
 
 class SubscribeScreen extends StatefulWidget {
   const SubscribeScreen({super.key});
@@ -21,6 +22,34 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   final ApiService _apiService = ApiService();
   late final UserController _userController;
   bool _isPaymentLoading = false;
+
+  ProfessionalPlanModel? _professionalPlan;
+  bool _planLoading = true;
+  String? _planError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfessionalPlan();
+  }
+
+  Future<void> _loadProfessionalPlan() async {
+    setState(() {
+      _planLoading = true;
+      _planError = null;
+    });
+    final res = await _apiService.getProfessionalPlan();
+    if (!mounted) return;
+    setState(() {
+      _planLoading = false;
+      if (res.success && res.data != null) {
+        _professionalPlan = res.data;
+        _planError = null;
+      } else {
+        _planError = res.message ?? 'Failed to load plan';
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -241,9 +270,11 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   Widget _buildPlanCard({
     required PlanTier planTier,
     required bool isActive,
+    ProfessionalPlanModel? professionalPlan,
     VoidCallback? onUpgrade,
   }) {
     final bool isStarter = planTier == PlanTier.starter;
+    final plan = professionalPlan;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -305,7 +336,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            isStarter ? 'Starter Plan' : 'Professional Plan',
+                            isStarter ? 'Starter Plan' : (plan?.name ?? 'Professional Plan'),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -390,9 +421,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text(
-                  '\$180.00',
-                  style: TextStyle(
+                Text(
+                  plan?.priceFormatted ?? '\$180.00',
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF111827),
@@ -400,7 +431,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '/3 months',
+                  '/${plan?.interval.label ?? '3 months'}',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -415,16 +446,18 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             color: Colors.grey[200],
           ),
           const SizedBox(height: 20),
-          const Text(
-            'What\'s Included in Your Plan',
-            style: TextStyle(
+          Text(
+            isStarter
+                ? 'What\'s Included in Your Plan'
+                : (plan?.description ?? 'What\'s Included in Your Plan'),
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Color(0xFF111827),
             ),
           ),
           const SizedBox(height: 16),
-          ..._buildFeaturesList(isStarter),
+          ..._buildFeaturesList(isStarter, professionalPlan: plan),
           const SizedBox(height: 24),
           // Free Plan Button
           if (isStarter)
@@ -509,9 +542,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Subscribe - \$180.00',
-                        style: TextStyle(
+                      child: Text(
+                        plan != null ? 'Subscribe - ${plan.priceFormatted}' : 'Subscribe - \$180.00',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -523,7 +556,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     );
   }
 
-  List<Widget> _buildFeaturesList(bool isStarter) {
+  List<Widget> _buildFeaturesList(bool isStarter, {ProfessionalPlanModel? professionalPlan}) {
     if (isStarter) {
       return [
         _buildFeatureItem('15 free practice questions per month'),
@@ -531,18 +564,22 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         _buildFeatureItem('Up to 2 practice questions per certification'),
         _buildFeatureItem('Upgrade anytime for full access'),
       ];
-    } else {
-      return [
-        _buildFeatureItem('Access to selected resources'),
-        _buildFeatureItem('Full-length mock exams'),
-        _buildFeatureItem('Timed & Full Simulation Modes'),
-        _buildFeatureItem('Interactive study mode'),
-        _buildFeatureItem(
-            'Progress tracking, Performance Dashboard & exam history'),
-        _buildFeatureItem('Detailed explanations with code references'),
-        _buildFeatureItem('All Smart Study Tools'),
-      ];
     }
+    if (professionalPlan != null && professionalPlan.features.isNotEmpty) {
+      return professionalPlan.features
+          .map((f) => _buildFeatureItem(f))
+          .toList();
+    }
+    return [
+      _buildFeatureItem('Access to selected resources'),
+      _buildFeatureItem('Full-length mock exams'),
+      _buildFeatureItem('Timed & Full Simulation Modes'),
+      _buildFeatureItem('Interactive study mode'),
+      _buildFeatureItem(
+          'Progress tracking, Performance Dashboard & exam history'),
+      _buildFeatureItem('Detailed explanations with code references'),
+      _buildFeatureItem('All Smart Study Tools'),
+    ];
   }
 
   Widget _buildFeatureItem(String text) {

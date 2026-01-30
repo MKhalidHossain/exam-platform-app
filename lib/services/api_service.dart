@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/api_response.dart';
 import '../models/auth_response.dart';
 import '../models/otp_response.dart';
+import '../models/professional_plan_model.dart';
 import '../utils/app_constants.dart';
 import '../utils/api_endpoints.dart';
 import 'storage_service.dart';
@@ -563,15 +564,29 @@ class ApiService {
     return response;
   }
 
+  /// GET professional plan. {{base_url}}/api/v1/payments/plan/professional
+  Future<ApiResponse<ProfessionalPlanModel>> getProfessionalPlan() async {
+    return get<ProfessionalPlanModel>(
+      ApiEndpoints.professionalPlan,
+      fromJson: (data) {
+        if (data is Map && data['plan'] != null) {
+          return ProfessionalPlanModel.fromJson(
+            data['plan'] as Map<String, dynamic>,
+          );
+        }
+        return ProfessionalPlanModel.fromJson(
+          data is Map<String, dynamic> ? data : {},
+        );
+      },
+    );
+  }
+
   /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
   Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
     String examId,
   ) async {
     return post<Map<String, dynamic>>(
-      ApiEndpoints.professionalPlanStripeCreate(),
-      body: {
-        'examId': examId,
-      },
+      ApiEndpoints.examStripeCreate(examId),
       fromJson: (json) =>
           json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
     );
@@ -583,10 +598,8 @@ class ApiService {
     String paymentIntentId,
   ) async {
     return post<Map<String, dynamic>>(
-      ApiEndpoints.professionalPlanStripeConfirm(),
-      body: {
-        'examId': examId,
-        'paymentIntentId': paymentIntentId},
+      ApiEndpoints.examStripeConfirm(examId),
+      body: {'paymentIntentId': paymentIntentId},
       fromJson: (json) =>
           json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
     );
