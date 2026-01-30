@@ -30,6 +30,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   @override
   void initState() {
     super.initState();
+    _userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
     _loadProfessionalPlan();
   }
 
@@ -49,14 +52,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         _planError = res.message ?? 'Failed to load plan';
       }
     });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _userController = Get.isRegistered<UserController>()
-        ? Get.find<UserController>()
-        : Get.put(UserController());
   }
 
   @override
