@@ -56,6 +56,9 @@ dependencies:
   # Path Provider (for cache clearing)
   path_provider: ^2.1.2
 
+  # Stripe payments
+  flutter_stripe: ^12.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

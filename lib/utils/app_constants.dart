@@ -6,6 +6,10 @@ class AppConstants {
   // API Constants
   static const String baseUrl = 'http://10.10.5.95:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
+
+  // Stripe (use env or build config in production)
+  static const String stripePublishableKey =
+      'pk_test_51S6pMbRZVOYD6qjBukBi2VyPiTtIhzAyYzmfyAo4izzIwemOo7I3fUYELhxmTJeNln7zMiztFA4CKihsybqrJlo800nWzvIXZY';
   
   // Storage Keys
   static const String tokenKey = 'auth_token';

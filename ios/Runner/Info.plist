@@ -45,5 +45,19 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Stripe: URL scheme for 3DS / redirect-based payment methods -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>flutterstripe</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flutterstripe</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

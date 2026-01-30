@@ -560,6 +560,30 @@ class ApiService {
     return response;
   }
 
+  /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
+  Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
+    String examId,
+  ) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examStripeCreate(examId),
+      fromJson: (json) =>
+          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  /// Confirm Stripe payment after PaymentSheet success. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/confirm
+  Future<ApiResponse<Map<String, dynamic>>> confirmExamStripePayment(
+    String examId,
+    String paymentIntentId,
+  ) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examStripeConfirm(examId),
+      body: {'paymentIntentId': paymentIntentId},
+      fromJson: (json) =>
+          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
   /// Create support ticket (Help & Support). POST {{base_url}}/api/v1/support
   /// Requires auth. Optional attachment field name is "attachment".
   Future<ApiResponse<Map<String, dynamic>>> createSupportTicket({

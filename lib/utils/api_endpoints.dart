@@ -27,4 +27,9 @@ class ApiEndpoints {
 
   // Support Endpoints
   static const String support = '/support';
+
+  // Payment Endpoints (payments base is /payments)
+  static const String payments = '/payments';
+  static String examStripeCreate(String examId) => '$payments/exam/$examId/stripe/create';
+  static String examStripeConfirm(String examId) => '$payments/exam/$examId/stripe/confirm';
 }
