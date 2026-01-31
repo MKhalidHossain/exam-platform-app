@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import 'history_detail_view.dart';
 import 'history_list_view.dart';
 import 'history_models.dart';
+import '../../controllers/history_controller.dart';
+import '../../models/history_attempt_model.dart';
 
 class HistoryTab extends StatefulWidget {
   const HistoryTab({super.key});
@@ -12,69 +15,7 @@ class HistoryTab extends StatefulWidget {
 }
 
 class _HistoryTabState extends State<HistoryTab> {
-  final List<HistoryEntry> _history = const [
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/10/2020, 10:45:37 AM',
-      scorePercent: 40.0,
-      scoreDetail: '4/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/9/2026, 4:00:18 PM',
-      scorePercent: 30.0,
-      scoreDetail: '3/10',
-    ),
-    HistoryEntry(
-      examName: 'API 570 - Piping Inspector',
-      date: '1/9/2026, 2:46:37 PM',
-      scorePercent: 20.0,
-      scoreDetail: '2/10',
-    ),
-  ];
-
+  late final HistoryController _controller;
   final List<TopicBreakdown> _topics = const [
     TopicBreakdown(
       category: 'Preheating and Heat\nTreatment',
@@ -136,29 +77,87 @@ class _HistoryTabState extends State<HistoryTab> {
   String _selectedFilter = 'All Exams';
 
   @override
-  Widget build(BuildContext context) {
-    final List<HistoryEntry> filtered = _selectedFilter == 'All Exams'
-        ? _history
-        : _history
-            .where((entry) => entry.examName == _selectedFilter)
-            .toList();
+  void initState() {
+    super.initState();
+    _controller = Get.isRegistered<HistoryController>()
+        ? Get.find<HistoryController>()
+        : Get.put(HistoryController());
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_controller.attempts.isEmpty && !_controller.isLoading.value) {
+        _controller.fetchAttempts();
+      }
+    });
+  }
+
+  HistoryEntry _mapAttemptToEntry(HistoryAttempt attempt) {
+    final total = attempt.correctCount +
+        attempt.wrongCount +
+        attempt.unansweredCount;
+    final scoreDetail = total > 0
+        ? '${attempt.correctCount}/$total'
+        : '${attempt.correctCount}/0';
+
+    return HistoryEntry(
+      examName: attempt.examName,
+      date: _formatAttemptDate(attempt),
+      scorePercent: attempt.score.toDouble(),
+      scoreDetail: scoreDetail,
+    );
+  }
+
+  String _formatAttemptDate(HistoryAttempt attempt) {
+    final date = attempt.endedAt ?? attempt.startedAt;
+    if (date == null) return '-';
+    final local = date.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final ampm = local.hour >= 12 ? 'PM' : 'AM';
+    final minute = local.minute.toString().padLeft(2, '0');
+    final second = local.second.toString().padLeft(2, '0');
+    return '${local.month}/${local.day}/${local.year}, '
+        '$hour:$minute:$second $ampm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return SafeArea(
-      child: _selectedEntry == null
-          ? HistoryListView(
-              entries: filtered,
-              filterValue: _selectedFilter,
-              onFilterChanged: (value) =>
-                  setState(() => _selectedFilter = value),
-              onSelect: (entry) =>
-                  setState(() => _selectedEntry = entry),
-            )
-          : HistoryDetailView(
-              entry: _selectedEntry!,
-              topics: _topics,
-              historyEntries: _history,
-              onBack: () => setState(() => _selectedEntry = null),
-            ),
+      child: Obx(() {
+        final entries =
+            _controller.attempts.map(_mapAttemptToEntry).toList();
+        final filters = <String>{
+          'All Exams',
+          ...entries.map((entry) => entry.examName),
+        }.toList();
+        final activeFilter = filters.contains(_selectedFilter)
+            ? _selectedFilter
+            : 'All Exams';
+
+        final List<HistoryEntry> filtered = activeFilter == 'All Exams'
+            ? entries
+            : entries
+                .where((entry) => entry.examName == activeFilter)
+                .toList();
+
+        return _selectedEntry == null
+            ? HistoryListView(
+                entries: filtered,
+                filterValue: activeFilter,
+                filterOptions: filters,
+                onFilterChanged: (value) =>
+                    setState(() => _selectedFilter = value),
+                onSelect: (entry) =>
+                    setState(() => _selectedEntry = entry),
+                isLoading: _controller.isLoading.value,
+                errorMessage: _controller.errorMessage.value,
+                onRetry: _controller.fetchAttempts,
+              )
+            : HistoryDetailView(
+                entry: _selectedEntry!,
+                topics: _topics,
+                historyEntries: entries,
+                onBack: () => setState(() => _selectedEntry = null),
+              );
+      }),
     );
   }
 }
