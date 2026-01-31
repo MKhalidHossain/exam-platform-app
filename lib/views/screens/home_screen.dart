@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import '../../controllers/home_controller.dart';
-
-enum PlanTier { starter, professional }
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
+import '../../models/user_model.dart';
 
 class HomeScreen extends StatelessWidget {
   final PlanTier planTier;
@@ -17,21 +18,38 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return HomeDashboard(
-      planTier: planTier,
-      unlockedCourseIds: unlockedCourseIds,
-    );
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+
+    return Obx(() {
+      final user = userController.user.value;
+      final effectivePlan =
+          user == null ? planTier : userController.planTier.value;
+      final effectiveUnlocked = user == null &&
+              userController.unlockedExamIds.value.isEmpty
+          ? unlockedCourseIds
+          : userController.unlockedExamIds.value;
+
+      return HomeDashboard(
+        planTier: effectivePlan,
+        unlockedCourseIds: effectiveUnlocked,
+        user: user,
+      );
+    });
   }
 }
 
 class HomeDashboard extends StatelessWidget {
   final PlanTier planTier;
   final Set<String> unlockedCourseIds;
+  final UserModel? user;
 
   const HomeDashboard({
     super.key,
     required this.planTier,
     required this.unlockedCourseIds,
+    this.user,
   });
 
   bool _isUnlocked(CourseItem course) => unlockedCourseIds.contains(course.id);
@@ -42,14 +60,19 @@ class HomeDashboard extends StatelessWidget {
         ? Get.find<HomeController>()
         : Get.put(HomeController());
 
-    final String planLabel =
-        planTier == PlanTier.professional ? 'Professional User' : 'Starter User';
+    final String planLabel = planTier.userLabel;
+    final String primaryName = (user?.name ?? '').trim();
+    final String fallbackName =
+        '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
+    final String displayName = primaryName.isNotEmpty
+        ? primaryName
+        : (fallbackName.isNotEmpty ? fallbackName : planLabel);
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          _HeaderSection(planTier: planTier),
+          _HeaderSection(planTier: planTier, user: user),
           const SizedBox(height: 16),
           _AnnouncementBanner(
             text:
@@ -57,7 +80,7 @@ class HomeDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'Welcome back, $planLabel!',
+            'Welcome back, $displayName!',
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
@@ -109,13 +132,6 @@ class HomeDashboard extends StatelessWidget {
                     isUnlocked: isUnlocked,
                     showPriceUnlock: planTier == PlanTier.professional,
                     onTap: () {
-                      if (planTier == PlanTier.starter && !isUnlocked) {
-                        context.push(
-                          '/quiz-settings',
-                          extra: {'courseTitle': course.title},
-                        );
-                        return;
-                      }
                       if (isUnlocked) {
                         context.push(
                           '/quiz-settings',
@@ -138,35 +154,47 @@ class HomeDashboard extends StatelessWidget {
 
 class _HeaderSection extends StatelessWidget {
   final PlanTier planTier;
+  final UserModel? user;
 
-  const _HeaderSection({required this.planTier});
+  const _HeaderSection({required this.planTier, this.user});
 
   @override
   Widget build(BuildContext context) {
+    final avatarUrl = user?.avatar;
+    final primaryName = (user?.name ?? '').trim();
+    final fallbackName =
+        '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
+    final userName = primaryName.isNotEmpty
+        ? primaryName
+        : (fallbackName.isNotEmpty ? fallbackName : 'User');
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           radius: 26,
-          backgroundImage: AssetImage('assets/images/onboarding1.png'),
+          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+              ? NetworkImage(avatarUrl)
+              : const AssetImage('assets/images/onboarding1.png')
+                  as ImageProvider,
         ),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Madiha Lata',
-                style: TextStyle(
+                userName,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF111827),
                 ),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
               Text(
                 'Hi, Good Morning',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: Color(0xFF6B7280),

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/api_response.dart';
 import '../models/auth_response.dart';
 import '../models/otp_response.dart';
+import '../models/professional_plan_model.dart';
 import '../utils/app_constants.dart';
 import '../utils/api_endpoints.dart';
 import 'storage_service.dart';
@@ -218,6 +219,55 @@ class ApiService {
     } catch (e) {
       debugPrint('❌ HTTP PUT Multipart Error:');
       debugPrint('   Error: $e');
+      return ApiResponse<T>(
+        success: false,
+        message: 'Network error: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<ApiResponse<T>> postMultipart<T>(
+    String endpoint, {
+    Map<String, String>? fields,
+    File? file,
+    String fileField = 'attachment',
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
+      final token = await _storageService.getToken();
+
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Accept'] = 'application/json';
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      if (fields != null) {
+        request.fields.addAll(fields);
+      }
+
+      if (file != null && await file.exists()) {
+        final fileStream = http.ByteStream(file.openRead());
+        final fileLength = await file.length();
+        final fileName = file.path.split('/').last;
+
+        final multipartFile = http.MultipartFile(
+          fileField,
+          fileStream,
+          fileLength,
+          filename: fileName,
+        );
+        request.files.add(multipartFile);
+      }
+
+      final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      return _handleResponse<T>(response, fromJson);
+    } catch (e) {
+      debugPrint('❌ HTTP POST Multipart Error: $e');
       return ApiResponse<T>(
         success: false,
         message: 'Network error: ${e.toString()}',
@@ -490,14 +540,17 @@ class ApiService {
       
       // Store role if available
       if (response.data!.role != null) {
-        await _storageService.saveString('user_role', response.data!.role!);
+        await _storageService.saveString(
+          AppConstants.userRoleKey,
+          response.data!.role!,
+        );
         debugPrint('   ✅ Role saved: ${response.data!.role}');
       }
       
       // Store user data as JSON string
       if (response.data!.user != null) {
         final userJson = jsonEncode(response.data!.user!.toJson());
-        await _storageService.saveString('user_data', userJson);
+        await _storageService.saveString(AppConstants.userDataKey, userJson);
         debugPrint('   ✅ User data saved');
       }
       
@@ -509,5 +562,72 @@ class ApiService {
     }
 
     return response;
+  }
+
+  /// GET professional plan. {{base_url}}/api/v1/payments/plan/professional
+  Future<ApiResponse<ProfessionalPlanModel>> getProfessionalPlan() async {
+    return get<ProfessionalPlanModel>(
+      ApiEndpoints.professionalPlan,
+      fromJson: (data) {
+        if (data is Map && data['plan'] != null) {
+          return ProfessionalPlanModel.fromJson(
+            data['plan'] as Map<String, dynamic>,
+          );
+        }
+        return ProfessionalPlanModel.fromJson(
+          data is Map<String, dynamic> ? data : {},
+        );
+      },
+    );
+  }
+
+  /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
+  Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
+    String examId,
+  ) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examStripeCreate(examId),
+      fromJson: (json) =>
+          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  /// Confirm Stripe payment after PaymentSheet success. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/confirm
+  Future<ApiResponse<Map<String, dynamic>>> confirmExamStripePayment(
+    String examId,
+    String paymentIntentId,
+  ) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examStripeConfirm(examId),
+      body: {'paymentIntentId': paymentIntentId},
+      fromJson: (json) =>
+          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  /// Create support ticket (Help & Support). POST {{base_url}}/api/v1/support
+  /// Requires auth. Optional attachment field name is "attachment".
+  Future<ApiResponse<Map<String, dynamic>>> createSupportTicket({
+    required String email,
+    required String subject,
+    required String description,
+    String? phone,
+    File? attachment,
+  }) async {
+    final fields = <String, String>{
+      'email': email.trim(),
+      'subject': subject.trim(),
+      'description': description.trim(),
+    };
+    if (phone != null && phone.trim().isNotEmpty) {
+      fields['phone'] = phone.trim();
+    }
+    return postMultipart<Map<String, dynamic>>(
+      ApiEndpoints.support,
+      fields: fields,
+      file: attachment,
+      fileField: 'attachment',
+      fromJson: (json) => json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+    );
   }
 }

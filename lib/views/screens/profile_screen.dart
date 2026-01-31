@@ -1,44 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
 import '../../models/user_model.dart';
 import '../../services/storage_service.dart';
-import 'home_screen.dart';
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
 
 class ProfileScreen extends StatefulWidget {
   final PlanTier planTier;
 
-  const ProfileScreen({
-    super.key,
-    this.planTier = PlanTier.starter,
-  });
+  const ProfileScreen({super.key, this.planTier = PlanTier.starter});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  UserModel? _user;
   final StorageService _storageService = StorageService();
+  late final UserController _userController;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-  }
-
-  Future<void> _loadUserData() async {
-    // Load user data from storage or API
-    // For now, using mock data
-    setState(() {
-      _user = UserModel(
-        id: '1',
-        name: 'Madiha Lata',
-        email: 'madiha@example.com',
-        phone: '+1234567890',
-        avatar: null,
-      );
-    });
+    _userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    if (_userController.user.value == null) {
+      _userController.refreshProfile();
+    }
   }
 
   String _getGreeting() {
@@ -54,231 +44,242 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        useImage: true,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                // Profile Header Section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      // Profile Picture
-                      Stack(
-                        children: [
-                          Container(
-                            width: 70,
-                            height: 70,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey[300],
-                              image: _user?.avatar != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(_user!.avatar!),
-                                      fit: BoxFit.cover,
+    return Obx(() {
+      final UserModel? user = _userController.user.value;
+      final PlanTier planTier = _userController.planTier.value;
+      final String primaryName = (user?.name ?? '').trim();
+      final String fallbackName =
+          '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
+      final String userName = primaryName.isNotEmpty
+          ? primaryName
+          : (fallbackName.isNotEmpty ? fallbackName : 'User');
+      final String? avatarUrl =
+          user?.avatar != null && user!.avatar!.isNotEmpty ? user.avatar : null;
+
+      return Scaffold(
+        body: GradientBackground(
+          useImage: true,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  // Profile Header Section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        // Profile Picture
+                        Stack(
+                          children: [
+                            Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[300],
+                                image: avatarUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(avatarUrl),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: avatarUrl == null
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Colors.grey,
                                     )
                                   : null,
                             ),
-                            child: _user?.avatar == null
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 40,
-                                    color: Colors.grey,
-                                  )
-                                : null,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 16),
-                      // Name and Greeting
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _user?.name ?? 'User',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF111827),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _getGreeting(),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
-                            ),
                           ],
                         ),
-                      ),
-                      // Plan Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                        const SizedBox(width: 16),
+                        // Name and Greeting
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _getGreeting(),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2D4F88),
-                          borderRadius: BorderRadius.circular(8),
+                        // Plan Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2D4F88),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                planTier.label,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  // Settings Section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
                             const Icon(
-                              Icons.star,
-                              color: Colors.white,
-                              size: 16,
+                              Icons.settings,
+                              color: Color(0xFF2D4F88),
+                              size: 24,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              widget.planTier == PlanTier.professional
-                                  ? 'Professional'
-                                  : 'Starter',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Setting',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2D4F88),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                // Settings Section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.settings,
-                            color: Color(0xFF2D4F88),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Setting',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D4F88),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Settings Items
-                      _SettingItem(
-                        icon: Icons.edit_outlined,
-                        title: 'Edit Profile',
-                        subtitle: 'Update your personal information',
-                        onTap: () {
-                          context.push('/edit-profile');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.dashboard_outlined,
-                        title: 'Performance',
-                        subtitle: 'Manage your Performance',
-                        onTap: () {
-                          context.push('/performance');
-                          // Navigate to performance dashboard
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.lock_outline,
-                        title: 'Change Password',
-                        subtitle: 'Update your personal information',
-                        onTap: () {
-                          context.push('/change-password');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'Subscription',
-                        subtitle: 'Manage your plan and billing',
-                        onTap: () {
-                          context.push('/subscribe');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Privacy policy',
-                        subtitle: 'How we handle your data',
-                        onTap: () {
-                          context.push('/privacy-policy');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.description_outlined,
-                        title: 'Terms of Service',
-                        subtitle: 'App usage terms and conditions',
-                        onTap: () {
-                          context.push('/terms-of-service');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.help_outline,
-                        title: 'FAQ',
-                        subtitle: 'Get the information you need',
-                        onTap: () {
-                          context.push('/faq');
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _SettingItem(
-                        icon: Icons.headset_mic_outlined,
-                        title: 'Contact Us',
-                        subtitle: 'Help and support you need',
-                        onTap: () {
-                          context.push('/contact-us');
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      // Log Out Button
-                      _SettingItem(
-                        icon: Icons.logout,
-                        title: 'Log Out',
-                        subtitle: '',
-                        isLogout: true,
-                        onTap: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Log Out'),
-                              content: const Text(
-                                'Are you sure you want to log out?',
+                        const SizedBox(height: 20),
+                        // Settings Items
+                        _SettingItem(
+                          icon: Icons.edit_outlined,
+                          title: 'Edit Profile',
+                          subtitle: 'Update your personal information',
+                          onTap: () {
+                            context.push('/edit-profile');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.dashboard_outlined,
+                          title: 'Performance',
+                          subtitle: 'Manage your Performance',
+                          onTap: () {
+                            context.push('/performance');
+                            // Navigate to performance dashboard
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.lock_outline,
+                          title: 'Change Password',
+                          subtitle: 'Update your personal information',
+                          onTap: () {
+                            context.push('/change-password');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Subscription',
+                          subtitle: 'Manage your plan and billing',
+                          onTap: () {
+                            context.push('/subscribe');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.privacy_tip_outlined,
+                          title: 'Privacy policy',
+                          subtitle: 'How we handle your data',
+                          onTap: () {
+                            context.push('/privacy-policy');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.description_outlined,
+                          title: 'Terms of Service',
+                          subtitle: 'App usage terms and conditions',
+                          onTap: () {
+                            context.push('/terms-of-service');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.help_outline,
+                          title: 'FAQ',
+                          subtitle: 'Get the information you need',
+                          onTap: () {
+                            context.push('/faq');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.headset_mic_outlined,
+                          title: 'Contact Us',
+                          subtitle: 'Help and support you need',
+                          onTap: () {
+                            context.push('/contact-us');
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        // Log Out Button
+                        _SettingItem(
+                          icon: Icons.logout,
+                          title: 'Log Out',
+                          subtitle: '',
+                          isLogout: true,
+                          onTap: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Log Out'),
+                                content: const Text(
+                                  'Are you sure you want to log out?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Log Out'),
+                                  ),
+                                ],
                               ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Log Out'),
-                                ),
-                              ],
-                            ),
-                          );
+                            );
                           if (confirm == true) {
                             // Show loading indicator
                             if (context.mounted) {
@@ -293,6 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                             // Clear all user data and cache
                             await _storageService.logout();
+                            await _userController.clearState();
 
                             if (context.mounted) {
                               // Close loading dialog
@@ -301,18 +303,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               context.go('/onboarding');
                             }
                           }
-                        },
-                      ),
-                    ],
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 32),
-              ],
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -341,10 +344,7 @@ class _SettingItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.grey[200]!,
-            width: 1,
-          ),
+          border: Border.all(color: Colors.grey[200]!, width: 1),
         ),
         child: Row(
           children: [
@@ -379,19 +379,13 @@ class _SettingItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
           ],
         ),
       ),

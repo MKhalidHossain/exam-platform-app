@@ -78,6 +78,16 @@ class StorageService {
     return prefs.getString(key);
   }
 
+  Future<void> saveStringList(String key, List<String> value) async {
+    final prefs = await _prefs;
+    await prefs.setStringList(key, value);
+  }
+
+  Future<List<String>?> getStringList(String key) async {
+    final prefs = await _prefs;
+    return prefs.getStringList(key);
+  }
+
   Future<void> saveBool(String key, bool value) async {
     final prefs = await _prefs;
     await prefs.setBool(key, value);
