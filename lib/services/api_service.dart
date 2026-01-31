@@ -53,8 +53,11 @@ class ApiService {
       String errorMessage = 'Network error occurred';
       if (e.toString().contains('Connection refused')) {
         errorMessage = 'Connection refused. Server may be down or unreachable at ${AppConstants.baseUrl}';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage = 'Request timeout. Please check your connection and try again.';
+      } else if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        errorMessage = 'Request timeout. Please check:\n'
+            '• Backend server is running (npm start)\n'
+            '• Emulator: app uses 10.0.2.2 for Android, 127.0.0.1 for iOS\n'
+            '• Physical device: both must be on same WiFi, use your PC\'s LAN IP';
       } else {
         errorMessage = 'Network error: ${e.toString()}';
       }
@@ -126,8 +129,11 @@ class ApiService {
       String errorMessage = 'Network error occurred';
       if (e.toString().contains('Connection refused')) {
         errorMessage = 'Connection refused. Server may be down or unreachable at ${AppConstants.baseUrl}';
-      } else if (e.toString().contains('timeout')) {
-        errorMessage = 'Request timeout. Please check your connection and try again.';
+      } else if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        errorMessage = 'Request timeout. Please check:\n'
+            '• Backend server is running (npm start)\n'
+            '• Emulator: app uses 10.0.2.2 for Android, 127.0.0.1 for iOS\n'
+            '• Physical device: both must be on same WiFi, use your PC\'s LAN IP';
       } else {
         errorMessage = 'Network error: ${e.toString()}';
       }
