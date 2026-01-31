@@ -49,6 +49,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
           ),
         ],
       ),
+      
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
