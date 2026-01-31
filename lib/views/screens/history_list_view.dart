@@ -7,14 +7,22 @@ class HistoryListView extends StatelessWidget {
     super.key,
     required this.entries,
     required this.filterValue,
+    required this.filterOptions,
     required this.onFilterChanged,
     required this.onSelect,
+    this.isLoading = false,
+    this.errorMessage,
+    this.onRetry,
   });
 
   final List<HistoryEntry> entries;
   final String filterValue;
+  final List<String> filterOptions;
   final ValueChanged<String> onFilterChanged;
   final ValueChanged<HistoryEntry> onSelect;
+  final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +39,11 @@ class HistoryListView extends StatelessWidget {
         final double rowScoreSize = 11 * scale;
         final double topPad = 8 * scale;
         final double bottomPad = 12 * scale;
+
+        final List<String> options =
+            filterOptions.isNotEmpty ? filterOptions : const ['All Exams'];
+        final String activeFilter =
+            options.contains(filterValue) ? filterValue : options.first;
 
         return Column(
           children: [
@@ -68,12 +81,8 @@ class HistoryListView extends StatelessWidget {
                   ),
                   const Spacer(),
                   _ExamFilterMenu(
-                    value: filterValue,
-                    options: const [
-                      'All Exams',
-                      'API 570 - Piping Inspector',
-                      'API 510 - Pressure Vessel',
-                    ],
+                    value: activeFilter,
+                    options: options,
                     maxWidth: 140 * scale,
                     onSelected: onFilterChanged,
                   ),
@@ -129,80 +138,135 @@ class HistoryListView extends StatelessWidget {
                       ),
                       const Divider(height: 1, color: Color(0xFFE4E8F2)),
                       Expanded(
-                        child: ListView.separated(
-                          padding: EdgeInsets.symmetric(horizontal: 12 * scale),
-                          itemBuilder: (context, index) {
-                            final entry = entries[index];
-                            final Color scoreColor = entry.scorePercent <= 20
-                                ? const Color(0xFFE53935)
-                                : entry.scorePercent <= 30
-                                    ? const Color(0xFFFF8A00)
-                                    : const Color(0xFFFF4D4D);
-                            return InkWell(
-                              onTap: () => onSelect(entry),
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 10 * scale,
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 3,
-                                      child: Text(
-                                        entry.examName,
-                                        style: TextStyle(
-                                          fontSize: rowTitleSize,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF2A3240),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        entry.date.replaceFirst(', ', ',\n'),
+                        child: Builder(
+                          builder: (context) {
+                            if (isLoading) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+
+                            if (errorMessage != null &&
+                                errorMessage!.trim().isNotEmpty) {
+                              return Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 16 * scale,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        errorMessage!,
                                         textAlign: TextAlign.center,
-                                        softWrap: true,
                                         style: TextStyle(
                                           fontSize: rowDateSize,
                                           color: const Color(0xFF6C7685),
                                         ),
                                       ),
+                                      if (onRetry != null) ...[
+                                        SizedBox(height: 8 * scale),
+                                        TextButton(
+                                          onPressed: onRetry,
+                                          child: const Text('Retry'),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+
+                            if (entries.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No history yet.',
+                                  style: TextStyle(
+                                    fontSize: rowDateSize,
+                                    color: const Color(0xFF6C7685),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ListView.separated(
+                              padding:
+                                  EdgeInsets.symmetric(horizontal: 12 * scale),
+                              itemBuilder: (context, index) {
+                                final entry = entries[index];
+                                final Color scoreColor = entry.scorePercent <= 20
+                                    ? const Color(0xFFE53935)
+                                    : entry.scorePercent <= 30
+                                        ? const Color(0xFFFF8A00)
+                                        : const Color(0xFFFF4D4D);
+                                return InkWell(
+                                  onTap: () => onSelect(entry),
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 10 * scale,
                                     ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '${entry.scorePercent.toStringAsFixed(1)}%',
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(
+                                            entry.examName,
                                             style: TextStyle(
-                                              fontSize: rowScoreSize,
-                                              fontWeight: FontWeight.w700,
-                                              color: scoreColor,
+                                              fontSize: rowTitleSize,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF2A3240),
                                             ),
                                           ),
-                                          Text(
-                                            entry.scoreDetail,
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            entry.date.replaceFirst(', ', ',\n'),
+                                            textAlign: TextAlign.center,
+                                            softWrap: true,
                                             style: TextStyle(
                                               fontSize: rowDateSize,
                                               color: const Color(0xFF6C7685),
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '${entry.scorePercent.toStringAsFixed(1)}%',
+                                                style: TextStyle(
+                                                  fontSize: rowScoreSize,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: scoreColor,
+                                                ),
+                                              ),
+                                              Text(
+                                                entry.scoreDetail,
+                                                style: TextStyle(
+                                                  fontSize: rowDateSize,
+                                                  color: const Color(0xFF6C7685),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                );
+                              },
+                              separatorBuilder: (context, index) => const Divider(
+                                height: 1,
+                                color: Color(0xFFE4E8F2),
                               ),
+                              itemCount: entries.length,
                             );
                           },
-                          separatorBuilder: (context, index) => const Divider(
-                            height: 1,
-                            color: Color(0xFFE4E8F2),
-                          ),
-                          itemCount: entries.length,
                         ),
                       ),
                     ],
