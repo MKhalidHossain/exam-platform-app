@@ -39,7 +39,7 @@ class HistoryListView extends StatelessWidget {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () {},
+                    onPressed: () => Navigator.of(context).maybePop(),
                     icon: const Icon(Icons.arrow_back_ios_new, size: 18),
                     color: const Color(0xFF27407C),
                   ),

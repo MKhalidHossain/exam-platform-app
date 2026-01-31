@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import 'history_models.dart';
 import 'performance_screen.dart';
+import 'history_testimonial_dialog.dart';
+import 'history_thank_you_dialog.dart';
 
 class HistoryDetailView extends StatefulWidget {
   const HistoryDetailView({
@@ -37,225 +39,20 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   }
 
   Future<void> _showTestimonialDialog(BuildContext context) async {
-    final nameController = TextEditingController(text: 'Butlar Mane');
-    final testimonialController = TextEditingController();
-    int selectedStars = 3;
-
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       barrierColor: const Color(0xFF8B909B),
       builder: (dialogContext) {
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Great Job!',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF202B3C),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      "You're amazing! Would you be willing to share a few\n"
-                      "words about your experience to help others on their\n"
-                      'certification journey?',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFF6C7685),
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Rate 1 to 5 stars',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF202B3C),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: List.generate(5, (index) {
-                        final isSelected = index < selectedStars;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: Icon(
-                              Icons.star,
-                              size: 28,
-                              color: isSelected
-                                  ? const Color(0xFFFFB233)
-                                  : const Color(0xFFB8BDC8),
-                            ),
-                            onPressed: () =>
-                                setState(() => selectedStars = index + 1),
-                          ),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Your Testimonial',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF202B3C),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: testimonialController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText:
-                            'e.g., This platform was a game-changer for my\nexam preparation.',
-                        hintStyle: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF9AA3B2),
-                        ),
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFD5DAE6)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFD5DAE6)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Your Name',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF202B3C),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF2F5BD5)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF2F5BD5)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF1E4AA8),
-                              side: const BorderSide(color: Color(0xFF1E4AA8)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                            ),
-                            child: const Text(
-                              'No, Thanks',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop();
-                              _showThankYouDialog(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E4AA8),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                            ),
-                            child: const Text(
-                              'Submit Testimonial',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Disclaimer tapped.')),
-                          );
-                        },
-                        child: const Text.rich(
-                          TextSpan(
-                            text: 'Not affiliated with or endorsed by API. ',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF6C7685),
-                            ),
-                            children: [
-                              TextSpan(
-                                text: 'See full\n',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF1E6CF3),
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'disclaimer.',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF1E6CF3),
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+        return HistoryTestimonialDialog(
+          onSkip: () => Navigator.of(dialogContext).pop(),
+          onSubmit: () {
+            Navigator.of(dialogContext).pop();
+            _showThankYouDialog(context);
+          },
         );
       },
     );
-
-    nameController.dispose();
-    testimonialController.dispose();
   }
 
   Future<void> _showThankYouDialog(BuildContext context) async {
@@ -264,73 +61,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       barrierDismissible: false,
       barrierColor: const Color(0xFF8B909B),
       builder: (dialogContext) {
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 36),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 86,
-                  height: 86,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFDFF5E2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF33C44F),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.check, color: Colors.white, size: 28),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Thank you! 🎉',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF202B3C),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'your feedback is invaluable and helps others make\n'
-                  'confident decisions. We appreciate you!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF6C7685),
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF143E88),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 26),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  icon: const Icon(Icons.arrow_back, size: 18),
-                  label: const Text(
-                    'Back to Exam',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return HistoryThankYouDialog(
+          onBackToExam: () => Navigator.of(dialogContext).pop(),
         );
       },
     );
@@ -415,8 +147,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Try Again pressed.')),
+                        context.push(
+                          '/quiz-settings',
+                          extra: {'courseTitle': widget.entry.examName},
                         );
                       },
                       style: OutlinedButton.styleFrom(
@@ -464,8 +197,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               SizedBox(height: 10 * scale),
               OutlinedButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Exam regenerated.')),
+                  context.push(
+                    '/exam-loading',
+                    extra: {'courseTitle': widget.entry.examName},
                   );
                 },
                 style: OutlinedButton.styleFrom(
@@ -604,76 +338,85 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               Center(
                 child: Container(
                   width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 10 * scale),
+                  // padding: EdgeInsets.symmetric(vertical: 10 * scale),
+                  padding: EdgeInsets.all( 10 * scale),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFE0E5F1)),
                   ),
-                  child: Center(
-                    child: Text(
-                      'Review Your Answers',
-                      style: TextStyle(
-                        fontSize: 13 * scale,
-                        fontWeight: FontWeight.w700,
+                  child: Column(
+                    children: [
+                         SizedBox(height: 4 * scale),
+                      Center(
+                        child: Text(
+                          'Review Your Answers',
+                          style: TextStyle(
+                            fontSize: 13 * scale,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
+
+                      SizedBox(height: 10 * scale),
+                      ...List.generate(
+                        10,
+                        (index) => _ReviewCard(
+                          questionNumber: index + 1,
+                          question: 'When I think about my childhood, I\nfeel?',
+                          userAnswer: '0.0025 inches/years',
+                          isCorrect: index == 3 || index == 4 || index == 5,
+                          correctAnswer: '0.010 inches/year',
+                          scale: scale,
+                          titleSize: cardTitle,
+                          bodySize: cardBody,
+                        ),
+                      ),
+                      // SizedBox(height: 12 * scale),
+                      Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Disclaimer tapped.'),
+                              ),
+                            );
+                          },
+                          child: Text.rich(
+                            TextSpan(
+                              text: 'Not affiliated with or endorsed by API. ',
+                              style: TextStyle(
+                                fontSize: 10 * scale,
+                                color: const Color(0xFF6C7685),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'See full\n',
+                                  style: TextStyle(
+                                    fontSize: 10 * scale,
+                                    color: Color(0xFF1E6CF3),
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: 'disclaimer.',
+                                  style: TextStyle(
+                                    fontSize: 10 * scale,
+                                    color: Color(0xFF1E6CF3),
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 12 * scale),
+                    ],
                   ),
                 ),
               ),
-              SizedBox(height: 10 * scale),
-              ...List.generate(
-                10,
-                (index) => _ReviewCard(
-                  questionNumber: index + 1,
-                  question: 'When I think about my childhood, I\nfeel?',
-                  userAnswer: '0.0025 inches/years',
-                  isCorrect: index == 3 || index == 4 || index == 5,
-                  correctAnswer: '0.010 inches/year',
-                  scale: scale,
-                  titleSize: cardTitle,
-                  bodySize: cardBody,
-                ),
-              ),
-              SizedBox(height: 12 * scale),
-              Center(
-                child: GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Disclaimer tapped.')),
-                    );
-                  },
-                  child: Text.rich(
-                    TextSpan(
-                      text: 'Not affiliated with or endorsed by API. ',
-                      style: TextStyle(
-                        fontSize: 10 * scale,
-                        color: const Color(0xFF6C7685),
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'See full\n',
-                          style: TextStyle(
-                            fontSize: 10 * scale,
-                            color: Color(0xFF1E6CF3),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'disclaimer.',
-                          style: TextStyle(
-                            fontSize: 10 * scale,
-                            color: Color(0xFF1E6CF3),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-              SizedBox(height: 12 * scale),
             ],
           ),
         );
@@ -710,10 +453,7 @@ class _TopicHeaderCell extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -744,6 +484,7 @@ class _ReviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       margin: EdgeInsets.only(bottom: 10 * scale),
       padding: EdgeInsets.all(10 * scale),
       decoration: BoxDecoration(
@@ -760,9 +501,25 @@ class _ReviewCard extends StatelessWidget {
           ),
           SizedBox(height: 6 * scale),
           if (!isCorrect)
-            Text(
-              'Your answer : $userAnswer (Incorrect)',
-              style: TextStyle(fontSize: bodySize, color: Colors.red),
+            Row(
+              children: [
+                Text(
+                  'Your answer : ',
+                  style: TextStyle(
+                    fontSize: bodySize + 2,
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  ' $userAnswer (Incorrect)',
+                  style: TextStyle(
+                    fontSize: bodySize,
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           SizedBox(height: 4 * scale),
           Text(
