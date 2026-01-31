@@ -26,6 +26,7 @@ class HistoryDetailView extends StatefulWidget {
 
 class _HistoryDetailViewState extends State<HistoryDetailView> {
   bool _dialogShown = false;
+  final ScrollController _topicScrollController = ScrollController();
 
   @override
   void didChangeDependencies() {
@@ -69,6 +70,12 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   }
 
   @override
+  void dispose() {
+    _topicScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -83,6 +90,16 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
         final double rowSize = 10 * scale;
         final double cardTitle = 11 * scale;
         final double cardBody = 10 * scale;
+        final double colCategory = 150 * scale;
+        final double colCorrect = 62 * scale;
+        final double colIncorrect = 70 * scale;
+        final double colAccuracy = 70 * scale;
+        final double colStatus = 60 * scale;
+        final double tableWidth = colCategory +
+            colCorrect +
+            colIncorrect +
+            colAccuracy +
+            colStatus;
 
         return SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
@@ -241,97 +258,113 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFE0E5F1)),
                 ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        _TopicHeaderCell(
-                          label: 'Category',
-                          flex: 4,
-                          fontSize: headerSize,
-                          height: 24 * scale,
-                        ),
-                        _TopicHeaderCell(
-                          label: 'Correct',
-                          flex: 2,
-                          fontSize: headerSize,
-                          height: 24 * scale,
-                        ),
-                        _TopicHeaderCell(
-                          label: 'Incorrect',
-                          flex: 2,
-                          fontSize: headerSize,
-                          height: 24 * scale,
-                        ),
-                        _TopicHeaderCell(
-                          label: 'Acc',
-                          flex: 1,
-                          fontSize: headerSize,
-                          height: 24 * scale,
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 6 * scale),
-                    ...widget.topics.map(
-                      (topic) => Padding(
-                        padding: EdgeInsets.symmetric(vertical: 6 * scale),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: Text(
-                                topic.category,
-                                style: TextStyle(fontSize: rowSize),
+                child: Scrollbar(
+                  controller: _topicScrollController,
+                  thumbVisibility: true,
+                  thickness: 2,
+                  radius: const Radius.circular(4),
+                  child: SingleChildScrollView(
+                    controller: _topicScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: tableWidth,
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              _TopicHeaderCell(
+                                label: 'Category',
+                                width: colCategory,
+                                fontSize: headerSize,
+                                height: 24 * scale,
                               ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '${topic.correct}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: rowSize),
+                              _TopicHeaderCell(
+                                label: 'Correct',
+                                width: colCorrect,
+                                fontSize: headerSize,
+                                height: 24 * scale,
                               ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '${topic.incorrect}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: rowSize),
+                              _TopicHeaderCell(
+                                label: 'Incorrect',
+                                width: colIncorrect,
+                                fontSize: headerSize,
+                                height: 24 * scale,
                               ),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Text(
-                                '${topic.accuracy}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: rowSize),
+                              _TopicHeaderCell(
+                                label: 'Accuracy',
+                                width: colAccuracy,
+                                fontSize: headerSize,
+                                height: 24 * scale,
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 6 * scale),
-                    Container(
-                      height: 8 * scale,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE6E8EC),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 36 * scale,
-                          margin: EdgeInsets.all(1.5 * scale),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF7A7F88),
-                            borderRadius: BorderRadius.circular(6),
+                              _TopicHeaderCell(
+                                label: 'Status',
+                                width: colStatus,
+                                fontSize: headerSize,
+                                height: 24 * scale,
+                              ),
+                            ],
                           ),
-                        ),
+                          SizedBox(height: 14 * scale),
+                          ...widget.topics.map(
+                            (topic) {
+                              final bool passed = topic.correct > 0;
+                              return Padding(
+                                padding: EdgeInsets.symmetric(vertical: 6 * scale),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: colCategory,
+                                      child: Text(
+                                        topic.category,
+                                        style: TextStyle(fontSize: rowSize),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: colCorrect,
+                                      child: Text(
+                                        '${topic.correct}',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(fontSize: rowSize),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: colIncorrect,
+                                      child: Text(
+                                        '${topic.incorrect}',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(fontSize: rowSize),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: colAccuracy,
+                                      child: Text(
+                                        '${topic.accuracy}%',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(fontSize: rowSize),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: colStatus,
+                                      child: Center(
+                                        child: Icon(
+                                          passed ? Icons.check : Icons.close,
+                                          size: 16 * scale,
+                                          color: passed
+                                              ? const Color(0xFF1BA64B)
+                                              : const Color(0xFFE53935),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
               SizedBox(height: 16 * scale),
@@ -428,33 +461,31 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
 class _TopicHeaderCell extends StatelessWidget {
   const _TopicHeaderCell({
     required this.label,
-    required this.flex,
+    required this.width,
     required this.fontSize,
     required this.height,
   });
 
   final String label;
-  final int flex;
+  final double width;
   final double fontSize;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      flex: flex,
-      child: Container(
-        height: height,
-        alignment: Alignment.center,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFFE0E5F1)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
-        ),
+    return Container(
+      width: width,
+      height: height,
+      alignment: Alignment.center,
+      margin: EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE0E5F1)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
       ),
     );
   }
