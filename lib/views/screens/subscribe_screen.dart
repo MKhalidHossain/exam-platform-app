@@ -23,9 +23,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   late final UserController _userController;
   bool _isPaymentLoading = false;
 
-  ProfessionalPlanModel? _professionalPlan;
-  bool _planLoading = true;
-  String? _planError;
+  ProfessionalPlanModel? professionalPlan;
+  bool planLoading = true;
+  String? planError;
 
   @override
   void initState() {
@@ -38,18 +38,18 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   Future<void> _loadProfessionalPlan() async {
     setState(() {
-      _planLoading = true;
-      _planError = null;
+      planLoading = true;
+      planError = null;
     });
     final res = await _apiService.getProfessionalPlan();
     if (!mounted) return;
     setState(() {
-      _planLoading = false;
+      planLoading = false;
       if (res.success && res.data != null) {
-        _professionalPlan = res.data;
-        _planError = null;
+        professionalPlan = res.data;
+        planError = null;
       } else {
-        _planError = res.message ?? 'Failed to load plan';
+        planError = res.message ?? 'Failed to load plan';
       }
     });
   }

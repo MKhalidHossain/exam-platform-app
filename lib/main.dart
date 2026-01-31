@@ -12,6 +12,10 @@ final _router = getRouter();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // For physical device: use your machine's LAN IP (both device and PC on same WiFi)
+  // AppConstants.baseUrlOverride = 'http://10.10.5.94:5001/api/v1';
+
   Stripe.publishableKey = AppConstants.stripePublishableKey;
   // Return URL scheme for 3DS / redirect-based payment methods (Android & iOS)
   Stripe.urlScheme = 'flutterstripe';

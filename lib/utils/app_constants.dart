@@ -1,3 +1,7 @@
+// Conditional import: dart:io on mobile/desktop, stub on web
+import 'app_constants_io.dart' if (dart.library.html) 'app_constants_web.dart'
+    as platform;
+
 class AppConstants {
   // App Info
   static const String appName = 'EJ Flutter App';
