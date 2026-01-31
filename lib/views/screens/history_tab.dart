@@ -103,6 +103,8 @@ class _HistoryTabState extends State<HistoryTab> {
       date: _formatAttemptDate(attempt),
       scorePercent: attempt.score.toDouble(),
       scoreDetail: scoreDetail,
+      attemptId: attempt.attemptId,
+      examId: attempt.examId,
     );
   }
 

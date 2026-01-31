@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import '../models/api_response.dart';
 import '../models/history_attempt_model.dart';
+import '../models/history_attempt_detail_model.dart';
 import '../services/api_service.dart';
 import '../utils/api_endpoints.dart';
 
@@ -11,6 +12,11 @@ class HistoryController extends GetxController {
   final Rx<AttemptsMeta?> meta = Rx<AttemptsMeta?>(null);
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
+
+  final RxMap<String, HistoryAttemptDetail> attemptDetails =
+      <String, HistoryAttemptDetail>{}.obs;
+  final RxMap<String, bool> attemptDetailLoading = <String, bool>{}.obs;
+  final RxMap<String, String> attemptDetailErrors = <String, String>{}.obs;
 
   Future<void> fetchAttempts({int page = 1, int limit = 10}) async {
     isLoading.value = true;
@@ -36,5 +42,28 @@ class HistoryController extends GetxController {
     }
 
     isLoading.value = false;
+  }
+
+  Future<void> fetchAttemptDetail(String attemptId) async {
+    if (attemptId.trim().isEmpty) return;
+    attemptDetailLoading[attemptId] = true;
+    attemptDetailErrors.remove(attemptId);
+
+    final ApiResponse<HistoryAttemptDetail> response =
+        await _apiService.get<HistoryAttemptDetail>(
+      ApiEndpoints.historyAttemptDetail(attemptId),
+      fromJson: (json) => HistoryAttemptDetail.fromJson(
+        Map<String, dynamic>.from(json as Map),
+      ),
+    );
+
+    if (response.success && response.data != null) {
+      attemptDetails[attemptId] = response.data!;
+    } else {
+      attemptDetailErrors[attemptId] =
+          response.message ?? 'Failed to load attempt details';
+    }
+
+    attemptDetailLoading[attemptId] = false;
   }
 }

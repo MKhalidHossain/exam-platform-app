@@ -4,12 +4,16 @@ class HistoryEntry {
     required this.date,
     required this.scorePercent,
     required this.scoreDetail,
+    this.attemptId,
+    this.examId,
   });
 
   final String examName;
   final String date;
   final double scorePercent;
   final String scoreDetail;
+  final String? attemptId;
+  final String? examId;
 }
 
 class TopicBreakdown {
