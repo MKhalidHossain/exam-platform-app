@@ -3,8 +3,8 @@ class AppConstants {
   static const String appName = 'EJ Flutter App';
   static const String appVersion = '1.0.0';
 
-  // API Constants
-  static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
+  // API Constants 
+  static const String baseUrl = 'http://10.10.5.85:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
   // Stripe (use env or build config in production)
