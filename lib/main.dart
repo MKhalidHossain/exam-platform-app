@@ -13,9 +13,6 @@ final _router = getRouter();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // For physical device: use your machine's LAN IP (both device and PC on same WiFi)
-  // AppConstants.baseUrlOverride = 'http://10.10.5.94:5001/api/v1';
-
   Stripe.publishableKey = AppConstants.stripePublishableKey;
   // Return URL scheme for 3DS / redirect-based payment methods (Android & iOS)
   Stripe.urlScheme = 'flutterstripe';
@@ -37,13 +34,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
 
-    return Obx(() => MaterialApp.router(
-      title: 'EJ Flutter App',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeController.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      routerConfig: _router,
-    ));
+    return Obx(() {
+      final themeMode = themeController.isDarkMode ? ThemeMode.dark : ThemeMode.light;
+      return MaterialApp.router(
+        key: ValueKey<ThemeMode>(themeMode),
+        title: 'EJ Flutter App',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        routerConfig: _router,
+      );
+    });
   }
 }
