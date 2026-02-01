@@ -1,13 +1,15 @@
 // Conditional import: dart:io on mobile/desktop, stub on web
-
+import 'app_constants_io.dart'
+    if (dart.library.html) 'app_constants_web.dart'
+    as platform;
 
 class AppConstants {
   // App Info
   static const String appName = 'EJ Flutter App';
   static const String appVersion = '1.0.0';
 
-  // API Constants 
-  static const String baseUrl = 'http://10.10.5.95:5001/api/v1';
+  // API Constants
+  static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
   // Stripe (use env or build config in production)
