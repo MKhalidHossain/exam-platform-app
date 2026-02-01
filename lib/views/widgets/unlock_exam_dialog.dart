@@ -53,7 +53,16 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
     if (!res.success) {
       throw Exception(res.message ?? 'Failed to fetch exams');
     }
-    return res.data ?? const [];
+    final exams = res.data ?? const [];
+    if (_selectedIds.isNotEmpty) {
+      final unlockedIds = exams
+          .where((exam) => exam.unlocked == true)
+          .map((exam) => exam.id)
+          .toSet();
+      unlockedIds.addAll(widget.unlockedIds);
+      _selectedIds.removeWhere((id) => unlockedIds.contains(id));
+    }
+    return exams;
   }
 
   void _toggle(String id) {
@@ -69,10 +78,6 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasLockedSelection = _selectedIds
-        .any((id) => !widget.unlockedIds.contains(id));
-    final canConfirm = _acknowledged && hasLockedSelection;
-
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -115,6 +120,15 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
             }
 
             final exams = snapshot.data ?? const <ExamModel>[];
+            final unlockedIds = <String>{...widget.unlockedIds};
+            for (final exam in exams) {
+              if (exam.unlocked == true) {
+                unlockedIds.add(exam.id);
+              }
+            }
+            final bool hasLockedSelection =
+                _selectedIds.any((id) => !unlockedIds.contains(id));
+            final canConfirm = _acknowledged && hasLockedSelection;
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -137,7 +151,7 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                         const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final e = exams[index];
-                      final bool isUnlocked = widget.unlockedIds.contains(e.id);
+                      final bool isUnlocked = unlockedIds.contains(e.id);
                       final selected = _selectedIds.contains(e.id);
                       final disabled =
                           isUnlocked ||

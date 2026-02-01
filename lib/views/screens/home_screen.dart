@@ -57,7 +57,17 @@ class HomeDashboard extends StatelessWidget {
     this.user,
   });
 
-  bool _isUnlocked(CourseItem course) => unlockedCourseIds.contains(course.id);
+  bool _isUnlocked(CourseItem course) {
+    if (course.isUnlocked == true) return true;
+    if (course.isUnlocked == false) return false;
+    final String rawId = (course.examId ?? course.id).trim();
+    if (rawId.isEmpty) return false;
+    if (unlockedCourseIds.contains(rawId)) return true;
+    final String normalized = rawId.toLowerCase();
+    return unlockedCourseIds.any(
+      (id) => id.trim().toLowerCase() == normalized,
+    );
+  }
 
   void _showLoading(BuildContext context, String message) {
     showDialog<void>(
@@ -139,6 +149,26 @@ class HomeDashboard extends StatelessWidget {
             content: Text(createRes.message ?? 'Failed to create payment'),
             backgroundColor: Colors.red,
           ),
+        );
+        return;
+      }
+
+      final bool alreadyUnlocked =
+          createRes.data?['unlocked'] == true ||
+          createRes.data?['alreadyUnlocked'] == true;
+      if (alreadyUnlocked) {
+        await userController.addUnlockedExamId(examId);
+        await userController.refreshProfile();
+        if (!context.mounted) return;
+        context.push(
+          '/quiz-settings',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': examId,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+          },
         );
         return;
       }
@@ -275,10 +305,23 @@ class HomeDashboard extends StatelessWidget {
                         questionCount: exam.questionCount,
                         effectivitySheetContent: exam.effectivitySheetContent,
                         bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
+                        isUnlocked: exam.unlocked,
+                        unlockPrice: exam.unlockPrice,
+                        currency: exam.currency,
                       ),
                     )
                     .toList()
                 : _courses;
+            final unlockedItems = <CourseItem>[];
+            final lockedItems = <CourseItem>[];
+            for (final course in items) {
+              if (_isUnlocked(course)) {
+                unlockedItems.add(course);
+              } else {
+                lockedItems.add(course);
+              }
+            }
+            final orderedItems = [...unlockedItems, ...lockedItems];
 
             if (isLoading && controller.exams.isEmpty) {
               return const Padding(
@@ -290,7 +333,7 @@ class HomeDashboard extends StatelessWidget {
             }
 
             return Column(
-              children: items.map((course) {
+              children: orderedItems.map((course) {
                 final isUnlocked = _isUnlocked(course);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -565,6 +608,8 @@ class CourseCard extends StatelessWidget {
             _CourseStatus(
               isUnlocked: isUnlocked,
               showPriceUnlock: showPriceUnlock,
+              unlockPrice: course.unlockPrice,
+              currency: course.currency,
             ),
           ],
         ),
@@ -573,13 +618,28 @@ class CourseCard extends StatelessWidget {
   }
 }
 
+String _formatUnlockLabel(double? price, String? currency) {
+  if (price == null) return 'Unlock for \$150';
+  final trimmedCurrency = currency?.trim().toUpperCase();
+  final formatted =
+      price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
+  if (trimmedCurrency == null || trimmedCurrency.isEmpty || trimmedCurrency == 'USD') {
+    return 'Unlock for \$$formatted';
+  }
+  return 'Unlock for $trimmedCurrency $formatted';
+}
+
 class _CourseStatus extends StatelessWidget {
   final bool isUnlocked;
   final bool showPriceUnlock;
+  final double? unlockPrice;
+  final String? currency;
 
   const _CourseStatus({
     required this.isUnlocked,
     required this.showPriceUnlock,
+    this.unlockPrice,
+    this.currency,
   });
 
   @override
@@ -606,14 +666,15 @@ class _CourseStatus extends StatelessWidget {
     }
 
     if (showPriceUnlock) {
+      final label = _formatUnlockLabel(unlockPrice, currency);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFF2DBD67),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Text(
-          'Unlock for \$150',
+        child: Text(
+          label,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -708,6 +769,9 @@ class CourseItem {
   final int? questionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
+  final bool? isUnlocked;
+  final double? unlockPrice;
+  final String? currency;
 
   const CourseItem({
     required this.id,
@@ -719,6 +783,9 @@ class CourseItem {
     this.questionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
+    this.isUnlocked,
+    this.unlockPrice,
+    this.currency,
   });
 }
 
