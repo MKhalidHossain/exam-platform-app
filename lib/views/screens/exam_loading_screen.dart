@@ -56,6 +56,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
         '/mcq',
         extra: {
           'courseTitle': widget.courseTitle,
+          'examId': examId,
           'questions': response.data!.questions,
           'startTime': response.data!.startTime,
           'endTime': response.data!.endTime,
