@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../services/api_service.dart';
 import '../controllers/user_controller.dart';
+import '../controllers/home_controller.dart';
 
 class AuthController extends GetxController {
   final ApiService _apiService = ApiService();
@@ -24,8 +25,15 @@ class AuthController extends GetxController {
         final UserController userController = Get.isRegistered<UserController>()
             ? Get.find<UserController>()
             : Get.put(UserController());
+        final HomeController? homeController = Get.isRegistered<HomeController>()
+            ? Get.find<HomeController>()
+            : null;
         await userController.clearState();
+        homeController?.clearState();
         await userController.refreshProfile();
+        if (homeController != null) {
+          await homeController.fetchActiveExams();
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(response.message ?? 'Login successful!'),
