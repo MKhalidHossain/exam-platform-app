@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../models/user_model.dart';
+import '../../services/api_service.dart';
+import '../../models/exam_model.dart';
+import '../widgets/unlock_exam_dialog.dart';
+import '../../services/exam_service.dart';
 
 class HomeScreen extends StatelessWidget {
   final PlanTier planTier;
@@ -53,6 +58,164 @@ class HomeDashboard extends StatelessWidget {
   });
 
   bool _isUnlocked(CourseItem course) => unlockedCourseIds.contains(course.id);
+
+  void _showLoading(BuildContext context, String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hideLoading(BuildContext context) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _unlockExam(
+    BuildContext context,
+    ExamModel exam,
+  ) async {
+    final examId = exam.id.trim();
+    if (examId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exam ID missing. Please try again.')),
+      );
+      return;
+    }
+
+    final ApiService apiService = ApiService();
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    bool loadingShown = false;
+
+    void showLoading(String message) {
+      if (loadingShown) return;
+      _showLoading(context, message);
+      loadingShown = true;
+    }
+
+    void hideLoading() {
+      if (!loadingShown) return;
+      _hideLoading(context);
+      loadingShown = false;
+    }
+
+    try {
+      showLoading('Preparing secure checkout...');
+      final createRes = await apiService.createExamStripePaymentIntent(examId);
+      if (!context.mounted) return;
+      hideLoading();
+
+      if (!createRes.success || createRes.data == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(createRes.message ?? 'Failed to create payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final clientSecret = createRes.data!['clientSecret'] as String?;
+      final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
+      if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid payment response'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'EJ Exam Access',
+          returnURL: 'flutterstripe://redirect',
+        ),
+      );
+      if (!context.mounted) return;
+
+      await Stripe.instance.presentPaymentSheet();
+      if (!context.mounted) return;
+
+      showLoading('Confirming payment...');
+      final confirmRes =
+          await apiService.confirmExamStripePayment(examId, paymentIntentId);
+      if (!context.mounted) return;
+      hideLoading();
+
+      if (confirmRes.success) {
+        await userController.applyProfessionalUpgrade(examId: examId);
+        await userController.refreshProfile();
+        if (!context.mounted) return;
+        context.push(
+          '/exam-unlock-success',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': examId,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+            'amountPaid': 150,
+          },
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(confirmRes.message ?? 'Failed to confirm payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on StripeException catch (e) {
+      if (!context.mounted) return;
+      hideLoading();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.error.message ?? 'Stripe error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      hideLoading();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,18 +299,50 @@ class HomeDashboard extends StatelessWidget {
                     isUnlocked: isUnlocked,
                     showPriceUnlock: planTier == PlanTier.professional,
                     onTap: () {
-                      context.push(
-                        '/quiz-settings',
-                        extra: {
-                          'courseTitle': course.title,
-                          'examId': course.examId ?? course.id,
-                          'questionCount': course.questionCount,
-                          'effectivitySheetContent':
-                              course.effectivitySheetContent,
-                          'bodyOfKnowledgeContent':
-                              course.bodyOfKnowledgeContent,
-                        },
-                      );
+                      if (isUnlocked || planTier == PlanTier.starter) {
+                        context.push(
+                          '/quiz-settings',
+                          extra: {
+                            'courseTitle': course.title,
+                            'examId': course.examId ?? course.id,
+                            'questionCount': course.questionCount,
+                            'effectivitySheetContent':
+                                course.effectivitySheetContent,
+                            'bodyOfKnowledgeContent':
+                                course.bodyOfKnowledgeContent,
+                          },
+                        );
+                        return;
+                      }
+
+                      showDialog<UnlockExamDialogResult>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (dialogContext) => UnlockExamDialog(
+                          examService: ExamService(),
+                          maxSelect: 1,
+                          initialSelectedId: course.examId ?? course.id,
+                          unlockedIds: unlockedCourseIds,
+                        ),
+                      ).then((result) {
+                        if (result == null) return;
+                        if (result.alreadyUnlocked) {
+                          context.push(
+                            '/quiz-settings',
+                            extra: {
+                              'courseTitle': result.exam.name,
+                              'examId': result.exam.id,
+                              'questionCount': result.exam.questionCount,
+                              'effectivitySheetContent':
+                                  result.exam.effectivitySheetContent,
+                              'bodyOfKnowledgeContent':
+                                  result.exam.bodyOfKnowledgeContent,
+                            },
+                          );
+                          return;
+                        }
+                        _unlockExam(context, result.exam);
+                      });
                     },
                   ),
                 );

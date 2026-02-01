@@ -2,11 +2,17 @@ class ExamModel {
   final String id;
   final String name;
   final String? imageUrl;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
 
   const ExamModel({
     required this.id,
     required this.name,
     this.imageUrl,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
   });
 
   factory ExamModel.fromJson(Map<String, dynamic> json) {
@@ -19,6 +25,9 @@ class ExamModel {
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
       imageUrl: url,
+      questionCount: Exam._toInt(json['n_question']),
+      effectivitySheetContent: json['effectivitySheetContent']?.toString(),
+      bodyOfKnowledgeContent: json['bodyOfKnowledgeContent']?.toString(),
     );
   }
 }
