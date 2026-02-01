@@ -108,6 +108,10 @@ class HomeDashboard extends StatelessWidget {
                         subtitle: 'Master your certification exam',
                         imageUrl: exam.image?.url,
                         imageAsset: 'assets/images/onboarding1.png',
+                        examId: exam.id,
+                        questionCount: exam.questionCount,
+                        effectivitySheetContent: exam.effectivitySheetContent,
+                        bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
                       ),
                     )
                     .toList()
@@ -132,12 +136,18 @@ class HomeDashboard extends StatelessWidget {
                     isUnlocked: isUnlocked,
                     showPriceUnlock: planTier == PlanTier.professional,
                     onTap: () {
-                      if (isUnlocked) {
-                        context.push(
-                          '/quiz-settings',
-                          extra: {'courseTitle': course.title},
-                        );
-                      }
+                      context.push(
+                        '/quiz-settings',
+                        extra: {
+                          'courseTitle': course.title,
+                          'examId': course.examId ?? course.id,
+                          'questionCount': course.questionCount,
+                          'effectivitySheetContent':
+                              course.effectivitySheetContent,
+                          'bodyOfKnowledgeContent':
+                              course.bodyOfKnowledgeContent,
+                        },
+                      );
                     },
                   ),
                 );
@@ -499,6 +509,10 @@ class CourseItem {
   final String subtitle;
   final String imageAsset;
   final String? imageUrl;
+  final String? examId;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
 
   const CourseItem({
     required this.id,
@@ -506,6 +520,10 @@ class CourseItem {
     required this.subtitle,
     required this.imageAsset,
     this.imageUrl,
+    this.examId,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
   });
 }
 

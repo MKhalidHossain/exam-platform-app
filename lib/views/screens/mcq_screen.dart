@@ -1,12 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
+  final List<dynamic>? questions;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final int? durationMinutes;
 
   const McqScreen({
     super.key,
     required this.courseTitle,
+    this.questions,
+    this.startTime,
+    this.endTime,
+    this.durationMinutes,
   });
 
   @override
@@ -20,14 +29,47 @@ class _McqScreenState extends State<McqScreen> {
   final Set<int> _lockedQuestions = {};
   final Set<int> _flaggedQuestions = {};
   bool _showExplanation = false;
+  Timer? _timer;
+  Duration? _remaining;
 
   @override
   void initState() {
     super.initState();
-    _questions = _buildQuestions();
+    _questions = _buildQuestions(widget.questions);
+    _setupTimer();
   }
 
-  List<_Question> _buildQuestions() {
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _setupTimer() {
+    final int? durationMinutes = widget.durationMinutes;
+    if (durationMinutes == null || durationMinutes <= 0) {
+      return;
+    }
+
+    final DateTime endTime = widget.endTime ??
+        widget.startTime?.add(Duration(minutes: durationMinutes)) ??
+        DateTime.now().add(Duration(minutes: durationMinutes));
+    _remaining = endTime.difference(DateTime.now());
+    if (_remaining!.isNegative) {
+      _remaining = Duration.zero;
+    }
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final remaining = endTime.difference(DateTime.now());
+      setState(() {
+        _remaining = remaining.isNegative ? Duration.zero : remaining;
+      });
+    });
+  }
+
+  List<_Question> _buildQuestions(List<dynamic>? rawQuestions) {
+    final parsed = _parseQuestions(rawQuestions);
+    if (parsed.isNotEmpty) return parsed;
     return List<_Question>.generate(20, (index) {
       return _Question(
         number: index + 1,
@@ -39,19 +81,140 @@ class _McqScreenState extends State<McqScreen> {
           'Grateful for the lessons learned',
         ],
         correctIndex: 2,
-        codeReference:
-            'API 510, Section 3 (Definitions) - "Alteration"',
+        codeReference: 'API 510, Section 3 (Definitions) - "Alteration"',
         explanation:
             'An alteration is a change that affects the pressure-retaining capability or design conditions of a pressure vessel.\n\nA change in design temperature directly affects allowable stress and MAWP, so it is classified as an alteration.\n\n• D (weld buildup to restore metal loss) is a repair, not an alteration, because it restores the vessel to its original design condition.',
       );
     });
   }
 
+  List<_Question> _parseQuestions(List<dynamic>? rawQuestions) {
+    if (rawQuestions == null || rawQuestions.isEmpty) {
+      return [];
+    }
+
+    final List<_Question> parsed = [];
+    for (int i = 0; i < rawQuestions.length; i++) {
+      final raw = rawQuestions[i];
+      if (raw is! Map) {
+        if (raw is String) {
+          parsed.add(
+            _Question(
+              number: i + 1,
+              text: raw,
+              options: const [
+                'Option A',
+                'Option B',
+                'Option C',
+                'Option D',
+              ],
+              correctIndex: null,
+              codeReference: '',
+              explanation: '',
+            ),
+          );
+        }
+        continue;
+      }
+      final data = Map<String, dynamic>.from(raw as Map);
+      final String text = (data['question'] ??
+              data['text'] ??
+              data['prompt'] ??
+              'Question ${i + 1}')
+          .toString();
+
+      final dynamic rawOptions =
+          data['options'] ?? data['choices'] ?? data['answers'];
+      final List<String> options = [];
+      int? correctIndex;
+
+      if (rawOptions is List) {
+        for (int optIndex = 0; optIndex < rawOptions.length; optIndex++) {
+          final option = rawOptions[optIndex];
+          if (option is Map) {
+            final optionText = option['option'] ??
+                option['text'] ??
+                option['label'] ??
+                option['value'] ??
+                option['answer'];
+            if (optionText != null) {
+              options.add(optionText.toString());
+            }
+            final bool isCorrect = option['is_correct'] == true ||
+                option['isCorrect'] == true ||
+                option['correct'] == true;
+            if (isCorrect && correctIndex == null) {
+              correctIndex = optIndex;
+            }
+          } else {
+            options.add(option.toString());
+          }
+        }
+      }
+
+      if (correctIndex == null) {
+        final dynamic correctAnswer =
+            data['correctAnswer'] ?? data['answer'] ?? data['correct'];
+        if (correctAnswer is int && correctAnswer >= 0) {
+          correctIndex =
+              correctAnswer < options.length ? correctAnswer : null;
+        } else if (correctAnswer is String) {
+          final idx = options.indexWhere(
+            (opt) => opt.toLowerCase().trim() ==
+                correctAnswer.toLowerCase().trim(),
+          );
+          if (idx >= 0) correctIndex = idx;
+        } else if (correctAnswer is List && correctAnswer.isNotEmpty) {
+          final first = correctAnswer.first;
+          if (first is int && first >= 0 && first < options.length) {
+            correctIndex = first;
+          } else if (first is String) {
+            final idx = options.indexWhere(
+              (opt) => opt.toLowerCase().trim() ==
+                  first.toLowerCase().trim(),
+            );
+            if (idx >= 0) correctIndex = idx;
+          }
+        }
+      }
+
+      final String codeReference = (data['codeReference'] ??
+              data['reference'] ??
+              data['source'] ??
+              data['citation'] ??
+              '')
+          .toString();
+      final String explanation = (data['explanation'] ??
+              data['rationale'] ??
+              data['reason'] ??
+              '')
+          .toString();
+
+      if (options.isEmpty) {
+        options.addAll(const ['Option A', 'Option B', 'Option C', 'Option D']);
+      }
+
+      parsed.add(
+        _Question(
+          number: i + 1,
+          text: text,
+          options: options,
+          correctIndex: correctIndex,
+          codeReference: codeReference,
+          explanation: explanation,
+        ),
+      );
+    }
+
+    return parsed;
+  }
+
   void _onSelect(int index) {
     if (_lockedQuestions.contains(_currentIndex)) return;
     setState(() {
       _selectedIndex[_currentIndex] = index;
-      if (index != _questions[_currentIndex].correctIndex) {
+      final correctIndex = _questions[_currentIndex].correctIndex;
+      if (correctIndex != null && index != correctIndex) {
         _lockedQuestions.add(_currentIndex);
       }
     });
@@ -106,6 +269,9 @@ class _McqScreenState extends State<McqScreen> {
     final _Question question = _questions[_currentIndex];
     final int? selected = _selectedIndex[_currentIndex];
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    final String timerLabel = _remaining == null
+        ? '--:--'
+        : _formatDuration(_remaining!);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
@@ -136,12 +302,13 @@ class _McqScreenState extends State<McqScreen> {
             Row(
               children: [
                 _InfoPill(
-                  label: '${_selectedIndex.length}/20 Question Answered',
+                  label:
+                      '${_selectedIndex.length}/${_questions.length} Question Answered',
                 ),
                 const SizedBox(width: 8),
                 _InfoPill(
                   icon: Icons.timer,
-                  label: '19 m 20s',
+                  label: timerLabel,
                 ),
                 const Spacer(),
                 IconButton(
@@ -167,16 +334,23 @@ class _McqScreenState extends State<McqScreen> {
                   Color textColor = const Color(0xFF111827);
 
                   if (isAnswered) {
-                    final bool isCorrect =
-                        selected == _questions[index].correctIndex;
-                    if (isCorrect) {
-                      fill = const Color(0xFFD8F5D8);
-                      border = const Color(0xFF2DBD67);
-                      textColor = const Color(0xFF1B6C3E);
+                    final int? correctIndex =
+                        _questions[index].correctIndex;
+                    if (correctIndex != null) {
+                      final bool isCorrect = selected == correctIndex;
+                      if (isCorrect) {
+                        fill = const Color(0xFFD8F5D8);
+                        border = const Color(0xFF2DBD67);
+                        textColor = const Color(0xFF1B6C3E);
+                      } else {
+                        fill = const Color(0xFFFFD6D6);
+                        border = const Color(0xFFE24B4B);
+                        textColor = const Color(0xFFB42323);
+                      }
                     } else {
-                      fill = const Color(0xFFFFD6D6);
-                      border = const Color(0xFFE24B4B);
-                      textColor = const Color(0xFFB42323);
+                      fill = const Color(0xFFE7F0FF);
+                      border = const Color(0xFF2F6DE0);
+                      textColor = const Color(0xFF1E4C9A);
                     }
                   } else if (isFlag) {
                     fill = const Color(0xFFFFF4D6);
@@ -222,7 +396,9 @@ class _McqScreenState extends State<McqScreen> {
             ...List.generate(question.options.length, (index) {
               final String option = question.options[index];
               final bool isSelected = selected == index;
-              final bool isCorrect = index == question.correctIndex;
+              final bool isCorrect =
+                  question.correctIndex != null &&
+                      index == question.correctIndex;
               final bool locked = _lockedQuestions.contains(_currentIndex);
 
               Color borderColor = const Color(0xFFE5E7EB);
@@ -230,15 +406,21 @@ class _McqScreenState extends State<McqScreen> {
               Color textColor = const Color(0xFF111827);
 
               if (selected != null) {
-                if (isCorrect) {
-                  borderColor = const Color(0xFF2DBD67);
-                  fillColor = const Color(0xFFD8F5D8);
-                  textColor = const Color(0xFF1B6C3E);
-                }
-                if (isSelected && !isCorrect) {
-                  borderColor = const Color(0xFFE24B4B);
-                  fillColor = const Color(0xFFFFD6D6);
-                  textColor = const Color(0xFFB42323);
+                if (question.correctIndex != null) {
+                  if (isCorrect) {
+                    borderColor = const Color(0xFF2DBD67);
+                    fillColor = const Color(0xFFD8F5D8);
+                    textColor = const Color(0xFF1B6C3E);
+                  }
+                  if (isSelected && !isCorrect) {
+                    borderColor = const Color(0xFFE24B4B);
+                    fillColor = const Color(0xFFFFD6D6);
+                    textColor = const Color(0xFFB42323);
+                  }
+                } else if (isSelected) {
+                  borderColor = const Color(0xFF2F6DE0);
+                  fillColor = const Color(0xFFE7F0FF);
+                  textColor = const Color(0xFF1E4C9A);
                 }
               }
 
@@ -324,10 +506,16 @@ class _McqScreenState extends State<McqScreen> {
             if (_showExplanation) ...[
               const SizedBox(height: 12),
               _ReferenceSection(
-                reference: question.codeReference,
+                reference: question.codeReference.isNotEmpty
+                    ? question.codeReference
+                    : 'No code reference available.',
               ),
               const SizedBox(height: 16),
-              _ExplanationSection(text: question.explanation),
+              _ExplanationSection(
+                text: question.explanation.isNotEmpty
+                    ? question.explanation
+                    : 'No explanation available.',
+              ),
             ],
             const SizedBox(height: 18),
             const _DisclaimerSection(),
@@ -342,7 +530,7 @@ class _Question {
   final int number;
   final String text;
   final List<String> options;
-  final int correctIndex;
+  final int? correctIndex;
   final String codeReference;
   final String explanation;
 
@@ -354,6 +542,15 @@ class _Question {
     required this.codeReference,
     required this.explanation,
   });
+}
+
+String _formatDuration(Duration duration) {
+  final int totalSeconds = duration.inSeconds.clamp(0, 24 * 60 * 60);
+  final int minutes = totalSeconds ~/ 60;
+  final int seconds = totalSeconds % 60;
+  final String mm = minutes.toString().padLeft(2, '0');
+  final String ss = seconds.toString().padLeft(2, '0');
+  return '$mm:$ss';
 }
 
 class _InfoPill extends StatelessWidget {

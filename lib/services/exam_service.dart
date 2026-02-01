@@ -1,5 +1,6 @@
 import '../models/api_response.dart';
 import '../models/exam_model.dart';
+import '../models/start_exam_model.dart';
 import '../utils/api_endpoints.dart';
 import 'api_service.dart';
 
@@ -35,5 +36,30 @@ class ExamService {
       data: exams,
     );
   }
-}
 
+  Future<ApiResponse<StartExamData>> startExam({
+    required String examId,
+    required int questionCount,
+    bool recreate = false,
+    String? examType,
+  }) async {
+    final body = <String, dynamic>{
+      'n_question': questionCount,
+      'recreate': recreate,
+    };
+    if (examType != null && examType.trim().isNotEmpty) {
+      body['exam_type'] = examType.trim();
+    }
+
+    return _apiService.post<StartExamData>(
+      ApiEndpoints.examStart(examId),
+      body: body,
+      fromJson: (json) {
+        if (json is Map<String, dynamic>) {
+          return StartExamData.fromJson(json);
+        }
+        return StartExamData.fromJson(const <String, dynamic>{});
+      },
+    );
+  }
+}
