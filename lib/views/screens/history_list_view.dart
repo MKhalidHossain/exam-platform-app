@@ -39,6 +39,8 @@ class HistoryListView extends StatelessWidget {
         final double rowScoreSize = 11 * scale;
         final double topPad = 8 * scale;
         final double bottomPad = 12 * scale;
+        final double headerContentWidth = (width - (2 * hPad)).clamp(0.0, width);
+        final double filterMaxWidth = headerContentWidth * 0.55;
 
         final List<String> options =
             filterOptions.isNotEmpty ? filterOptions : const ['All Exams'];
@@ -51,11 +53,12 @@ class HistoryListView extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(hPad - 4, topPad, hPad, bottomPad),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                    color: const Color(0xFF27407C),
-                  ),
+                  SizedBox(),
+                  // IconButton(
+                  //   onPressed: () => Navigator.of(context).maybePop(),
+                  //   icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                  //   color: const Color(0xFF27407C),
+                  // ),
                   Text(
                     'History',
                     style: TextStyle(
@@ -71,19 +74,23 @@ class HistoryListView extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: hPad),
               child: Row(
                 children: [
-                  Text(
-                    'Consolidated Quiz History',
-                    style: TextStyle(
-                      fontSize: subtitleSize,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF202B3C),
+                  Expanded(
+                    child: Text(
+                      'Consolidated Quiz History',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: subtitleSize,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF202B3C),
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  SizedBox(width: 8 * scale),
                   _ExamFilterMenu(
                     value: activeFilter,
                     options: options,
-                    maxWidth: 140 * scale,
+                    maxWidth: filterMaxWidth,
                     onSelected: onFilterChanged,
                   ),
                 ],
@@ -337,6 +344,13 @@ class _ExamFilterMenu extends StatefulWidget {
 class _ExamFilterMenuState extends State<_ExamFilterMenu> {
   @override
   Widget build(BuildContext context) {
+    const double horizontalPadding = 12;
+    const double iconSpacing = 6;
+    const double iconSize = 16;
+    final double labelMaxWidth =
+        (widget.maxWidth - (horizontalPadding * 2 + iconSpacing + iconSize))
+            .clamp(0.0, widget.maxWidth);
+
     return PopupMenuButton<String>(
       onSelected: (value) {
         widget.onSelected(value);
@@ -349,29 +363,43 @@ class _ExamFilterMenuState extends State<_ExamFilterMenu> {
             ),
           )
           .toList(),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E4AA8),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.maxWidth),
-              child: Text(
-                widget.value,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: widget.maxWidth),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E4AA8),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                fit: FlexFit.loose,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: labelMaxWidth),
+                  child: Text(
+                    widget.value,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 16),
-          ],
+              const SizedBox(width: iconSpacing),
+              const Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.white,
+                size: iconSize,
+              ),
+            ],
+          ),
         ),
       ),
     );
