@@ -70,24 +70,38 @@ class HistoryListView extends StatelessWidget {
             ),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: hPad),
-              child: Row(
-                children: [
-                  Text(
-                    'Consolidated Quiz History',
-                    style: TextStyle(
-                      fontSize: subtitleSize,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF202B3C),
-                    ),
-                  ),
-                  const Spacer(),
-                  _ExamFilterMenu(
-                    value: activeFilter,
-                    options: options,
-                    maxWidth: 140 * scale,
-                    onSelected: onFilterChanged,
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, headerConstraints) {
+                  final double maxButtonWidth =
+                      (headerConstraints.maxWidth * 0.55)
+                          .clamp(0.0, headerConstraints.maxWidth);
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Consolidated Quiz History',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: subtitleSize,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF202B3C),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8 * scale),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxButtonWidth),
+                        child: _ExamFilterMenu(
+                          value: activeFilter,
+                          options: options,
+                          maxWidth: maxButtonWidth,
+                          onSelected: onFilterChanged,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             SizedBox(height: 12 * scale),
@@ -338,6 +352,13 @@ class _ExamFilterMenu extends StatefulWidget {
 class _ExamFilterMenuState extends State<_ExamFilterMenu> {
   @override
   Widget build(BuildContext context) {
+    const double horizontalPadding = 12;
+    const double iconSpacing = 6;
+    const double iconSize = 16;
+    final double labelMaxWidth =
+        (widget.maxWidth - (horizontalPadding * 2 + iconSpacing + iconSize))
+            .clamp(0.0, widget.maxWidth);
+
     return PopupMenuButton<String>(
       onSelected: (value) {
         widget.onSelected(value);
@@ -351,18 +372,22 @@ class _ExamFilterMenuState extends State<_ExamFilterMenu> {
           )
           .toList(),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
           color: const Color(0xFF1E4AA8),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.maxWidth),
+              constraints: BoxConstraints(maxWidth: labelMaxWidth),
               child: Text(
                 widget.value,
-                overflow: TextOverflow.ellipsis,
+                softWrap: true,
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -370,8 +395,12 @@ class _ExamFilterMenuState extends State<_ExamFilterMenu> {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 16),
+            const SizedBox(width: iconSpacing),
+            const Icon(
+              Icons.keyboard_arrow_down,
+              color: Colors.white,
+              size: iconSize,
+            ),
           ],
         ),
       ),
