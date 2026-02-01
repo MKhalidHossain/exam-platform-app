@@ -2,11 +2,23 @@ class ExamModel {
   final String id;
   final String name;
   final String? imageUrl;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
+  final bool? unlocked;
+  final double? unlockPrice;
+  final String? currency;
 
   const ExamModel({
     required this.id,
     required this.name,
     this.imageUrl,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
+    this.unlocked,
+    this.unlockPrice,
+    this.currency,
   });
 
   factory ExamModel.fromJson(Map<String, dynamic> json) {
@@ -19,6 +31,12 @@ class ExamModel {
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
       imageUrl: url,
+      questionCount: Exam._toInt(json['n_question']),
+      effectivitySheetContent: json['effectivitySheetContent']?.toString(),
+      bodyOfKnowledgeContent: json['bodyOfKnowledgeContent']?.toString(),
+      unlocked: Exam._toBool(json['unlocked']),
+      unlockPrice: Exam._toDouble(json['unlockPrice'] ?? json['unlock_price']),
+      currency: json['currency']?.toString(),
     );
   }
 }
@@ -59,6 +77,9 @@ class Exam {
   final String? createdBy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final bool? unlocked;
+  final double? unlockPrice;
+  final String? currency;
 
   const Exam({
     this.id,
@@ -72,6 +93,9 @@ class Exam {
     this.createdBy,
     this.createdAt,
     this.updatedAt,
+    this.unlocked,
+    this.unlockPrice,
+    this.currency,
   });
 
   static int? _toInt(dynamic value) {
@@ -79,6 +103,24 @@ class Exam {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value.toString());
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  static bool? _toBool(dynamic value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final lowered = value.toString().toLowerCase();
+    if (lowered == 'true' || lowered == '1' || lowered == 'yes') return true;
+    if (lowered == 'false' || lowered == '0' || lowered == 'no') return false;
+    return null;
   }
 
   static DateTime? _toDate(dynamic value) {
@@ -102,6 +144,9 @@ class Exam {
       createdBy: json['createdBy']?.toString(),
       createdAt: _toDate(json['createdAt']),
       updatedAt: _toDate(json['updatedAt']),
+      unlocked: _toBool(json['unlocked']),
+      unlockPrice: _toDouble(json['unlockPrice'] ?? json['unlock_price']),
+      currency: json['currency']?.toString(),
     );
   }
 
@@ -118,6 +163,9 @@ class Exam {
       'createdBy': createdBy,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'unlocked': unlocked,
+      'unlockPrice': unlockPrice,
+      'currency': currency,
     };
   }
 }

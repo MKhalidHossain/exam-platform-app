@@ -535,7 +535,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                         onPressed: () {
                           context.push(
                             '/quiz-settings',
-                            extra: {'courseTitle': examName},
+                            extra: {
+                              'courseTitle': examName,
+                              'examId': widget.entry.examId,
+                            },
                           );
                         },
                         style: OutlinedButton.styleFrom(
