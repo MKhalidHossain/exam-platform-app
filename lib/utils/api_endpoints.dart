@@ -24,6 +24,7 @@ class ApiEndpoints {
 
   // Exam Endpoints
   static const String exams = '/exam';
+  static String examStart(String examId) => '$exams/$examId/start';
 
   // Analytics Endpoints
   static const String historyAttempts = '/analytics/history/attempts';

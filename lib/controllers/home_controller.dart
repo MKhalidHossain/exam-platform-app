@@ -18,6 +18,13 @@ class HomeController extends GetxController {
     fetchActiveExams();
   }
 
+  void clearState() {
+    exams.clear();
+    meta.value = null;
+    isLoading.value = false;
+    errorMessage.value = '';
+  }
+
   Future<void> fetchActiveExams() async {
     isLoading.value = true;
     errorMessage.value = '';

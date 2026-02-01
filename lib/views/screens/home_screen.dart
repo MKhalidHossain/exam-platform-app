@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../models/user_model.dart';
+import '../../services/api_service.dart';
+import '../../models/exam_model.dart';
+import '../widgets/unlock_exam_dialog.dart';
+import '../../services/exam_service.dart';
 
 class HomeScreen extends StatelessWidget {
   final PlanTier planTier;
@@ -52,7 +57,195 @@ class HomeDashboard extends StatelessWidget {
     this.user,
   });
 
-  bool _isUnlocked(CourseItem course) => unlockedCourseIds.contains(course.id);
+  bool _isUnlocked(CourseItem course) {
+    if (course.isUnlocked == true) return true;
+    if (course.isUnlocked == false) return false;
+    final String rawId = (course.examId ?? course.id).trim();
+    if (rawId.isEmpty) return false;
+    if (unlockedCourseIds.contains(rawId)) return true;
+    final String normalized = rawId.toLowerCase();
+    return unlockedCourseIds.any(
+      (id) => id.trim().toLowerCase() == normalized,
+    );
+  }
+
+  void _showLoading(BuildContext context, String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hideLoading(BuildContext context) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _unlockExam(
+    BuildContext context,
+    ExamModel exam,
+  ) async {
+    final examId = exam.id.trim();
+    if (examId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exam ID missing. Please try again.')),
+      );
+      return;
+    }
+
+    final ApiService apiService = ApiService();
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    bool loadingShown = false;
+
+    void showLoading(String message) {
+      if (loadingShown) return;
+      _showLoading(context, message);
+      loadingShown = true;
+    }
+
+    void hideLoading() {
+      if (!loadingShown) return;
+      _hideLoading(context);
+      loadingShown = false;
+    }
+
+    try {
+      showLoading('Preparing secure checkout...');
+      final createRes = await apiService.createExamStripePaymentIntent(examId);
+      if (!context.mounted) return;
+      hideLoading();
+
+      if (!createRes.success || createRes.data == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(createRes.message ?? 'Failed to create payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final bool alreadyUnlocked =
+          createRes.data?['unlocked'] == true ||
+          createRes.data?['alreadyUnlocked'] == true;
+      if (alreadyUnlocked) {
+        await userController.addUnlockedExamId(examId);
+        await userController.refreshProfile();
+        if (!context.mounted) return;
+        context.push(
+          '/quiz-settings',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': examId,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+          },
+        );
+        return;
+      }
+
+      final clientSecret = createRes.data!['clientSecret'] as String?;
+      final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
+      if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid payment response'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'EJ Exam Access',
+          returnURL: 'flutterstripe://redirect',
+        ),
+      );
+      if (!context.mounted) return;
+
+      await Stripe.instance.presentPaymentSheet();
+      if (!context.mounted) return;
+
+      showLoading('Confirming payment...');
+      final confirmRes =
+          await apiService.confirmExamStripePayment(examId, paymentIntentId);
+      if (!context.mounted) return;
+      hideLoading();
+
+      if (confirmRes.success) {
+        await userController.applyProfessionalUpgrade(examId: examId);
+        await userController.refreshProfile();
+        if (!context.mounted) return;
+        context.push(
+          '/exam-unlock-success',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': examId,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+            'amountPaid': 150,
+          },
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(confirmRes.message ?? 'Failed to confirm payment'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } on StripeException catch (e) {
+      if (!context.mounted) return;
+      hideLoading();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.error.message ?? 'Stripe error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      hideLoading();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,10 +301,27 @@ class HomeDashboard extends StatelessWidget {
                         subtitle: 'Master your certification exam',
                         imageUrl: exam.image?.url,
                         imageAsset: 'assets/images/onboarding1.png',
+                        examId: exam.id,
+                        questionCount: exam.questionCount,
+                        effectivitySheetContent: exam.effectivitySheetContent,
+                        bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
+                        isUnlocked: exam.unlocked,
+                        unlockPrice: exam.unlockPrice,
+                        currency: exam.currency,
                       ),
                     )
                     .toList()
                 : _courses;
+            final unlockedItems = <CourseItem>[];
+            final lockedItems = <CourseItem>[];
+            for (final course in items) {
+              if (_isUnlocked(course)) {
+                unlockedItems.add(course);
+              } else {
+                lockedItems.add(course);
+              }
+            }
+            final orderedItems = [...unlockedItems, ...lockedItems];
 
             if (isLoading && controller.exams.isEmpty) {
               return const Padding(
@@ -123,7 +333,7 @@ class HomeDashboard extends StatelessWidget {
             }
 
             return Column(
-              children: items.map((course) {
+              children: orderedItems.map((course) {
                 final isUnlocked = _isUnlocked(course);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -132,12 +342,50 @@ class HomeDashboard extends StatelessWidget {
                     isUnlocked: isUnlocked,
                     showPriceUnlock: planTier == PlanTier.professional,
                     onTap: () {
-                      if (isUnlocked) {
+                      if (isUnlocked || planTier == PlanTier.starter) {
                         context.push(
                           '/quiz-settings',
-                          extra: {'courseTitle': course.title},
+                          extra: {
+                            'courseTitle': course.title,
+                            'examId': course.examId ?? course.id,
+                            'questionCount': course.questionCount,
+                            'effectivitySheetContent':
+                                course.effectivitySheetContent,
+                            'bodyOfKnowledgeContent':
+                                course.bodyOfKnowledgeContent,
+                          },
                         );
+                        return;
                       }
+
+                      showDialog<UnlockExamDialogResult>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (dialogContext) => UnlockExamDialog(
+                          examService: ExamService(),
+                          maxSelect: 1,
+                          initialSelectedId: course.examId ?? course.id,
+                          unlockedIds: unlockedCourseIds,
+                        ),
+                      ).then((result) {
+                        if (result == null) return;
+                        if (result.alreadyUnlocked) {
+                          context.push(
+                            '/quiz-settings',
+                            extra: {
+                              'courseTitle': result.exam.name,
+                              'examId': result.exam.id,
+                              'questionCount': result.exam.questionCount,
+                              'effectivitySheetContent':
+                                  result.exam.effectivitySheetContent,
+                              'bodyOfKnowledgeContent':
+                                  result.exam.bodyOfKnowledgeContent,
+                            },
+                          );
+                          return;
+                        }
+                        _unlockExam(context, result.exam);
+                      });
                     },
                   ),
                 );
@@ -360,6 +608,8 @@ class CourseCard extends StatelessWidget {
             _CourseStatus(
               isUnlocked: isUnlocked,
               showPriceUnlock: showPriceUnlock,
+              unlockPrice: course.unlockPrice,
+              currency: course.currency,
             ),
           ],
         ),
@@ -368,13 +618,28 @@ class CourseCard extends StatelessWidget {
   }
 }
 
+String _formatUnlockLabel(double? price, String? currency) {
+  if (price == null) return 'Unlock for \$150';
+  final trimmedCurrency = currency?.trim().toUpperCase();
+  final formatted =
+      price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
+  if (trimmedCurrency == null || trimmedCurrency.isEmpty || trimmedCurrency == 'USD') {
+    return 'Unlock for \$$formatted';
+  }
+  return 'Unlock for $trimmedCurrency $formatted';
+}
+
 class _CourseStatus extends StatelessWidget {
   final bool isUnlocked;
   final bool showPriceUnlock;
+  final double? unlockPrice;
+  final String? currency;
 
   const _CourseStatus({
     required this.isUnlocked,
     required this.showPriceUnlock,
+    this.unlockPrice,
+    this.currency,
   });
 
   @override
@@ -401,14 +666,15 @@ class _CourseStatus extends StatelessWidget {
     }
 
     if (showPriceUnlock) {
+      final label = _formatUnlockLabel(unlockPrice, currency);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFF2DBD67),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Text(
-          'Unlock for \$150',
+        child: Text(
+          label,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -499,6 +765,13 @@ class CourseItem {
   final String subtitle;
   final String imageAsset;
   final String? imageUrl;
+  final String? examId;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
+  final bool? isUnlocked;
+  final double? unlockPrice;
+  final String? currency;
 
   const CourseItem({
     required this.id,
@@ -506,6 +779,13 @@ class CourseItem {
     required this.subtitle,
     required this.imageAsset,
     this.imageUrl,
+    this.examId,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
+    this.isUnlocked,
+    this.unlockPrice,
+    this.currency,
   });
 }
 

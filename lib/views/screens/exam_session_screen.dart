@@ -3,17 +3,32 @@ import 'package:go_router/go_router.dart';
 
 class ExamSessionScreen extends StatelessWidget {
   final String courseTitle;
+  final String? examId;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
 
   const ExamSessionScreen({
     super.key,
     required this.courseTitle,
+    this.examId,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
   });
 
-  void _showInstructions(BuildContext context, String sessionLabel) {
+  void _showInstructions(
+    BuildContext context,
+    String sessionLabel,
+    String examType,
+  ) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final effectivity = effectivitySheetContent?.trim() ?? '';
+        final bodyOfKnowledge = bodyOfKnowledgeContent?.trim() ?? '';
+
         return Dialog(
           backgroundColor: Colors.white,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -50,6 +65,46 @@ class ExamSessionScreen extends StatelessWidget {
                     color: Color(0xFF4B5563),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  'Effectivity Sheet',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  effectivity.isNotEmpty
+                      ? effectivity
+                      : 'No effectivity sheet content available.',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: Color(0xFF4B5563),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Body of Knowledge',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  bodyOfKnowledge.isNotEmpty
+                      ? bodyOfKnowledge
+                      : 'No body of knowledge content available.',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: Color(0xFF4B5563),
+                  ),
+                ),
                 const SizedBox(height: 18),
                 Row(
                   children: [
@@ -76,10 +131,26 @@ class ExamSessionScreen extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          final id = examId?.trim();
+                          if (id == null || id.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Exam ID missing. Please try again.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           Navigator.of(dialogContext).pop();
                           context.push(
                             '/exam-loading',
-                            extra: {'courseTitle': courseTitle},
+                            extra: {
+                              'courseTitle': courseTitle,
+                              'examId': id,
+                              'questionCount': questionCount ?? 1,
+                              'examType': examType,
+                            },
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -166,7 +237,8 @@ class ExamSessionScreen extends StatelessWidget {
                       title: 'Open Book\nSession',
                       description:
                           'This session tests your ability to efficiently find and apply information from the official code documents under time pressure.',
-                      onTap: () => _showInstructions(context, 'Open Book'),
+                      onTap: () =>
+                          _showInstructions(context, 'Open Book', 'open_book'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -175,7 +247,8 @@ class ExamSessionScreen extends StatelessWidget {
                       title: 'Closed Book\nSession',
                       description:
                           'This session tests your foundational knowledge of concepts, definitions, and procedures that you must know from memory.',
-                      onTap: () => _showInstructions(context, 'Closed Book'),
+                      onTap: () =>
+                          _showInstructions(context, 'Closed Book', 'closed_book'),
                     ),
                   ),
                 ],
@@ -187,7 +260,7 @@ class ExamSessionScreen extends StatelessWidget {
               description:
                   'Replicates the complete exam experience, starting with a timed closed-book session, followed by a timed open-book session.',
               isPrimary: true,
-              onTap: () => _showInstructions(context, 'Full Exam'),
+              onTap: () => _showInstructions(context, 'Full Exam', 'full_exam'),
             ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
