@@ -23,6 +23,10 @@ void main() async {
   Get.put(AuthController(), permanent: true);
   Get.put(SplashController(), permanent: true);
 
+
+
+
+
   runApp(const MyApp());
 }
 
