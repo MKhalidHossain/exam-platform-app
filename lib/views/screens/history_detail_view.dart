@@ -587,9 +587,25 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                   SizedBox(height: 10 * scale),
                   OutlinedButton.icon(
                     onPressed: () {
+                      final examId = widget.entry.examId?.trim();
+                      if (examId == null || examId.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Exam ID missing. Please try again.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       context.push(
                         '/exam-loading',
-                        extra: {'courseTitle': examName},
+                        extra: {
+                          'courseTitle': examName,
+                          'examId': examId,
+                          'questionCount': 120,
+                          'examType': 'full_exam',
+                        },
                       );
                     },
                     style: OutlinedButton.styleFrom(
