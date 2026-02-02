@@ -156,9 +156,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (mounted) {
         if (response.success && response.data != null) {
-          // Refresh UserController so Profile and Home screens show updated name and image
+          // Update UserController so Profile and Home screens show updated name and image
           if (Get.isRegistered<UserController>()) {
-            await Get.find<UserController>().refreshProfile();
+            await Get.find<UserController>().applyProfile(response.data!);
           }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

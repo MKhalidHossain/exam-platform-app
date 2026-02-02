@@ -23,6 +23,23 @@ class UserController extends GetxController {
     refreshProfile();
   }
 
+  Future<void> applyProfile(UserModel next) async {
+    final previousPlan = planTier.value;
+    user.value = next;
+    final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
+    final nextPlan =
+        (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
+            ? PlanTier.professional
+            : fromProfile;
+    if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
+      planTier.value = previousPlan;
+    } else {
+      planTier.value = nextPlan;
+    }
+    final userJson = jsonEncode(next.toJson());
+    await _storageService.saveString(AppConstants.userDataKey, userJson);
+  }
+
   Future<void> _loadCached() async {
     try {
       final cachedUser = await _storageService.getString(AppConstants.userDataKey);
@@ -60,20 +77,7 @@ class UserController extends GetxController {
 
     final response = await _userService.getProfile();
     if (response.success && response.data != null) {
-      final previousPlan = planTier.value;
-      user.value = response.data;
-      final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-      final nextPlan =
-          (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
-              ? PlanTier.professional
-              : fromProfile;
-      if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
-        planTier.value = previousPlan;
-      } else {
-        planTier.value = nextPlan;
-      }
-      final userJson = jsonEncode(response.data!.toJson());
-      await _storageService.saveString(AppConstants.userDataKey, userJson);
+      await applyProfile(response.data!);
     } else {
       errorMessage.value = response.message ?? 'Failed to load profile';
     }
