@@ -71,8 +71,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   }
 
   String _joinAnswers(List<String> values) {
-    final cleaned =
-        values.map((value) => value.trim()).where((value) => value.isNotEmpty);
+    final cleaned = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty);
     return cleaned.isEmpty ? '-' : cleaned.join(', ');
   }
 
@@ -97,7 +98,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     VoidCallback? onRetry,
   }) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 12 * scale, horizontal: 8 * scale),
+      padding: EdgeInsets.symmetric(
+        vertical: 12 * scale,
+        horizontal: 8 * scale,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -111,10 +115,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           ),
           if (onRetry != null) ...[
             SizedBox(height: 8 * scale),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ],
       ),
@@ -164,18 +165,21 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       final HistoryAttemptDetail? detail = attemptId == null
           ? null
           : _controller.attemptDetails[attemptId];
-      final bool isDetailLoading = attemptId != null &&
+      final bool isDetailLoading =
+          attemptId != null &&
           (_controller.attemptDetailLoading[attemptId] ?? false);
-      final String? detailError =
-          attemptId == null ? null : _controller.attemptDetailErrors[attemptId];
+      final String? detailError = attemptId == null
+          ? null
+          : _controller.attemptDetailErrors[attemptId];
       final List<TopicBreakdown> detailTopics = _mapTopicBreakdown(detail);
       final List<AttemptReviewAnswer> reviewAnswers =
           detail?.review?.answers ?? const [];
       final String examName = (detail?.exam?.name ?? '').trim().isNotEmpty
           ? detail!.exam!.name
           : widget.entry.examName;
-      final double scorePercent =
-          detail != null ? detail.score.toDouble() : widget.entry.scorePercent;
+      final double scorePercent = detail != null
+          ? detail.score.toDouble()
+          : widget.entry.scorePercent;
 
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -196,13 +200,11 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           final double colAccuracy = 70 * scale;
           final double colStatus = 60 * scale;
           final bool useFallbackTopics = attemptId == null;
-          final List<TopicBreakdown> topics =
-              useFallbackTopics ? widget.topics : detailTopics;
-          final double topicTableWidth = colCategory +
-              colCorrect +
-              colIncorrect +
-              colAccuracy +
-              colStatus;
+          final List<TopicBreakdown> topics = useFallbackTopics
+              ? widget.topics
+              : detailTopics;
+          final double topicTableWidth =
+              colCategory + colCorrect + colIncorrect + colAccuracy + colStatus;
           final double questionTableWidth =
               colCategory + colCorrect + colIncorrect + colStatus;
 
@@ -266,61 +268,59 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                         ],
                       ),
                       SizedBox(height: 14 * scale),
-                      ...topics.map(
-                        (topic) {
-                          final bool passed = topic.correct > 0;
-                          return Padding(
-                            padding: EdgeInsets.symmetric(vertical: 6 * scale),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: colCategory,
-                                  child: Text(
-                                    topic.category,
-                                    style: TextStyle(fontSize: rowSize),
+                      ...topics.map((topic) {
+                        final bool passed = topic.correct > 0;
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: 6 * scale),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: colCategory,
+                                child: Text(
+                                  topic.category,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: colCorrect,
+                                child: Text(
+                                  '${topic.correct}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: colIncorrect,
+                                child: Text(
+                                  '${topic.incorrect}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: colAccuracy,
+                                child: Text(
+                                  '${topic.accuracy}%',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: colStatus,
+                                child: Center(
+                                  child: Icon(
+                                    passed ? Icons.check : Icons.close,
+                                    size: 16 * scale,
+                                    color: passed
+                                        ? const Color(0xFF1BA64B)
+                                        : const Color(0xFFE53935),
                                   ),
                                 ),
-                                SizedBox(
-                                  width: colCorrect,
-                                  child: Text(
-                                    '${topic.correct}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colIncorrect,
-                                  child: Text(
-                                    '${topic.incorrect}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colAccuracy,
-                                  child: Text(
-                                    '${topic.accuracy}%',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colStatus,
-                                  child: Center(
-                                    child: Icon(
-                                      passed ? Icons.check : Icons.close,
-                                      size: 16 * scale,
-                                      color: passed
-                                          ? const Color(0xFF1BA64B)
-                                          : const Color(0xFFE53935),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -424,8 +424,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               ),
             );
           } else {
-            topicContent =
-                _buildSectionMessage('No topic breakdown available.', scale);
+            topicContent = _buildSectionMessage(
+              'No topic breakdown available.',
+              scale,
+            );
           }
 
           final Widget reviewContent;
@@ -444,8 +446,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               onRetry: _fetchDetail,
             );
           } else if (reviewAnswers.isEmpty) {
-            reviewContent =
-                _buildSectionMessage('No answers available.', scale);
+            reviewContent = _buildSectionMessage(
+              'No answers available.',
+              scale,
+            );
           } else {
             reviewContent = Column(
               children: reviewAnswers.asMap().entries.map((entry) {
@@ -470,237 +474,262 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.onBack,
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      color: const Color(0xFF27407C),
-                    ),
-                    Expanded(
-                      child: Text(
-                        examName,
-                        style: TextStyle(
-                          fontSize: titleSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF27407C),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: EdgeInsets.only(left: 6 * scale),
-                  child: Text(
-                    "Here's how you did on the '$examName'\nexam.",
-                    style: TextStyle(
-                      fontSize: captionSize,
-                      color: const Color(0xFF6C7685),
-                    ),
+          return Container(
+            color: Colors.white,
+            child: SafeArea(
+              bottom: false,
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    hPad,
+                    6 * scale,
+                    hPad,
+                    24 * scale,
                   ),
-                ),
-                SizedBox(height: 12 * scale),
-                Center(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Your Score.',
-                        style: TextStyle(
-                          fontSize: captionSize,
-                          color: const Color(0xFF6C7685),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: widget.onBack,
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 18,
+                            ),
+                            color: const Color(0xFF27407C),
+                          ),
+                          Expanded(
+                            child: Text(
+                              examName,
+                              style: TextStyle(
+                                fontSize: titleSize,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF27407C),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(left: 6 * scale),
+                        child: Text(
+                          "Here's how you did on the '$examName'\nexam.",
+                          style: TextStyle(
+                            fontSize: captionSize,
+                            color: const Color(0xFF6C7685),
+                          ),
                         ),
                       ),
-                      SizedBox(height: 4 * scale),
-                      Text(
-                        '${scorePercent.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: scoreSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF1E6CF3),
+                      SizedBox(height: 12 * scale),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              'Your Score.',
+                              style: TextStyle(
+                                fontSize: captionSize,
+                                color: const Color(0xFF6C7685),
+                              ),
+                            ),
+                            SizedBox(height: 4 * scale),
+                            Text(
+                              '${scorePercent.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: scoreSize,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1E6CF3),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 12 * scale),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                context.push(
+                                  '/quiz-settings',
+                                  extra: {
+                                    'courseTitle': examName,
+                                    'examId': widget.entry.examId,
+                                  },
+                                );
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF20324A),
+                                backgroundColor: const Color(0xFFE1E4EA),
+                                side: const BorderSide(
+                                  color: Color(0xFFBCC6D6),
+                                ),
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 12 * scale,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                              ),
+                              child: Text(
+                                'Try Again',
+                                style: TextStyle(fontSize: buttonSize),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 12 * scale),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                context.push(
+                                  '/performance',
+                                  extra: PerformanceArgs(
+                                    entry: widget.entry,
+                                    history: widget.historyEntries,
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1E4AA8),
+                                padding: EdgeInsets.symmetric(
+                                  vertical: 12 * scale,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                              ),
+                              child: Text(
+                                'Performance',
+                                style: TextStyle(fontSize: buttonSize),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 10 * scale),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          context.push(
+                            '/exam-loading',
+                            extra: {'courseTitle': examName},
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1E4AA8),
+                          side: const BorderSide(color: Color(0xFF9FB4E9)),
+                          padding: EdgeInsets.symmetric(
+                            vertical: 12 * scale,
+                            horizontal: 16 * scale,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: Text(
+                          'Regenerate Exam (120 New Questions)',
+                          style: TextStyle(fontSize: buttonSize),
+                        ),
+                      ),
+                      SizedBox(height: 16 * scale),
+                      Center(
+                        child: Text(
+                          'Topic Breakdown',
+                          style: TextStyle(
+                            fontSize: sectionTitle,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 8 * scale),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8 * scale,
+                          vertical: 8 * scale,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE0E5F1)),
+                        ),
+                        child: topicContent,
+                      ),
+                      SizedBox(height: 16 * scale),
+                      Center(
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(10 * scale),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE0E5F1)),
+                          ),
+                          child: Column(
+                            children: [
+                              SizedBox(height: 4 * scale),
+                              Center(
+                                child: Text(
+                                  'Review Your Answers',
+                                  style: TextStyle(
+                                    fontSize: 13 * scale,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 10 * scale),
+                              reviewContent,
+                              Center(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Disclaimer tapped.'),
+                                      ),
+                                    );
+                                  },
+                                  child: Text.rich(
+                                    TextSpan(
+                                      text:
+                                          'Not affiliated with or endorsed by API. ',
+                                      style: TextStyle(
+                                        fontSize: 10 * scale,
+                                        color: const Color(0xFF6C7685),
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: 'See full\n',
+                                          style: TextStyle(
+                                            fontSize: 10 * scale,
+                                            color: Color(0xFF1E6CF3),
+                                            decoration:
+                                                TextDecoration.underline,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: 'disclaimer.',
+                                          style: TextStyle(
+                                            fontSize: 10 * scale,
+                                            color: Color(0xFF1E6CF3),
+                                            decoration:
+                                                TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 12 * scale),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: 12 * scale),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          context.push(
-                            '/quiz-settings',
-                            extra: {
-                              'courseTitle': examName,
-                              'examId': widget.entry.examId,
-                            },
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF20324A),
-                          backgroundColor: const Color(0xFFE1E4EA),
-                          side: const BorderSide(color: Color(0xFFBCC6D6)),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Try Again',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12 * scale),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          context.push(
-                            '/performance',
-                            extra: PerformanceArgs(
-                              entry: widget.entry,
-                              history: widget.historyEntries,
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E4AA8),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Performance',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 10 * scale),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/exam-loading',
-                      extra: {'courseTitle': examName},
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1E4AA8),
-                    side: const BorderSide(color: Color(0xFF9FB4E9)),
-                    padding: EdgeInsets.symmetric(
-                      vertical: 12 * scale,
-                      horizontal: 16 * scale,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(
-                    'Regenerate Exam (120 New Questions)',
-                    style: TextStyle(fontSize: buttonSize),
-                  ),
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Text(
-                    'Topic Breakdown',
-                    style: TextStyle(
-                      fontSize: sectionTitle,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8 * scale),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8 * scale,
-                    vertical: 8 * scale,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE0E5F1)),
-                  ),
-                  child: topicContent,
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(10 * scale),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE0E5F1)),
-                    ),
-                    child: Column(
-                      children: [
-                        SizedBox(height: 4 * scale),
-                        Center(
-                          child: Text(
-                            'Review Your Answers',
-                            style: TextStyle(
-                              fontSize: 13 * scale,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 10 * scale),
-                        reviewContent,
-                        Center(
-                          child: GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Disclaimer tapped.'),
-                                ),
-                              );
-                            },
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Not affiliated with or endorsed by API. ',
-                                style: TextStyle(
-                                  fontSize: 10 * scale,
-                                  color: const Color(0xFF6C7685),
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: 'See full\n',
-                                    style: TextStyle(
-                                      fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'disclaimer.',
-                                    style: TextStyle(
-                                      fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 12 * scale),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
