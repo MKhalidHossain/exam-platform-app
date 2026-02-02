@@ -34,12 +34,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) {
+    if (hour < 5) {
+      return 'Hi, Good Night';
+    } else if (hour < 12) {
       return 'Hi, Good Morning';
     } else if (hour < 17) {
       return 'Hi, Good Afternoon';
-    } else {
+    } else if (hour < 21) {
       return 'Hi, Good Evening';
+    } else {
+      return 'Hi, Good Night';
     }
   }
 
@@ -54,8 +58,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final String userName = fallbackName.isNotEmpty
           ? fallbackName
           : (primaryName.isNotEmpty ? primaryName : 'User');
-      final String? avatarUrl =
-          user?.avatar != null && user!.avatar!.isNotEmpty ? user.avatar : null;
+      final String? avatarUrl = user?.avatar != null && user!.avatar!.isNotEmpty
+          ? user.avatar
+          : null;
       final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
       final String? avatarDisplayUrl = avatarUrl != null && avatarStamp != null
           ? '${avatarUrl}${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
@@ -281,44 +286,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: const Text('Cancel'),
                                   ),
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
                                     child: const Text('Log Out'),
                                   ),
                                 ],
                               ),
                             );
-                          if (confirm == true) {
-                            // Show loading indicator
-                            if (context.mounted) {
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (context) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
+                            if (confirm == true) {
+                              // Show loading indicator
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (context) => const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
 
-                            // Clear all user data and cache
-                            await _storageService.logout();
-                            await _userController.clearState();
-                            if (Get.isRegistered<HomeController>()) {
-                              Get.find<HomeController>().clearState();
-                            }
+                              // Clear all user data and cache
+                              await _storageService.logout();
+                              await _userController.clearState();
+                              if (Get.isRegistered<HomeController>()) {
+                                Get.find<HomeController>().clearState();
+                              }
 
-                            if (context.mounted) {
-                              // Close loading dialog
-                              Navigator.of(context, rootNavigator: true).pop();
-                              // Navigate to onboarding screen
-                              context.go('/onboarding');
+                              if (context.mounted) {
+                                // Close loading dialog
+                                Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).pop();
+                                // Navigate to onboarding screen
+                                context.go('/onboarding');
+                              }
                             }
-                          }
                           },
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 100),
                 ],
               ),
             ),
