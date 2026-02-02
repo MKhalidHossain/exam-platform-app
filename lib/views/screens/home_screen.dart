@@ -257,9 +257,9 @@ class HomeDashboard extends StatelessWidget {
     final String primaryName = (user?.name ?? '').trim();
     final String fallbackName =
         '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
-    final String displayName = primaryName.isNotEmpty
-        ? primaryName
-        : (fallbackName.isNotEmpty ? fallbackName : planLabel);
+    final String displayName = fallbackName.isNotEmpty
+        ? fallbackName
+        : (primaryName.isNotEmpty ? primaryName : planLabel);
 
     return SafeArea(
       child: ListView(
@@ -409,20 +409,25 @@ class _HeaderSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final avatarUrl = user?.avatar;
+    final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
+    final String? avatarDisplayUrl =
+        avatarUrl != null && avatarUrl.isNotEmpty && avatarStamp != null
+            ? '${avatarUrl}${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
+            : avatarUrl;
     final primaryName = (user?.name ?? '').trim();
     final fallbackName =
         '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
-    final userName = primaryName.isNotEmpty
-        ? primaryName
-        : (fallbackName.isNotEmpty ? fallbackName : 'User');
+    final userName = fallbackName.isNotEmpty
+        ? fallbackName
+        : (primaryName.isNotEmpty ? primaryName : 'User');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         CircleAvatar(
           radius: 26,
-          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-              ? NetworkImage(avatarUrl)
+          backgroundImage: avatarDisplayUrl != null && avatarDisplayUrl.isNotEmpty
+              ? NetworkImage(avatarDisplayUrl)
               : const AssetImage('assets/images/onboarding1.png')
                   as ImageProvider,
         ),
