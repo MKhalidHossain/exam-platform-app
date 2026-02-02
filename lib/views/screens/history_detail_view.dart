@@ -524,32 +524,29 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           }
 
           return Scaffold(
-            body: Container(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.6),
-                  radius: 1.1,
-                  colors: [
-                    Color(0xFFEFF4FF),
-                    Color(0xFFFFFFFF),
-                  ],
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/splash_background.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
-              ),
-              child: SafeArea(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      hPad,
-                      10 * scale,
-                      hPad,
-                      24 * scale,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        hPad,
+                        10 * scale,
+                        hPad,
+                        24 * scale,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
                           Align(
                             alignment: Alignment.centerLeft,
                             child: IconButton(
@@ -790,12 +787,13 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                               ],
                             ),
                           ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           );
         },
