@@ -118,7 +118,7 @@ class _McqScreenState extends State<McqScreen> {
         }
         continue;
       }
-      final data = Map<String, dynamic>.from(raw as Map);
+      final data = Map<String, dynamic>.from(raw);
       final String text = (data['question'] ??
               data['text'] ??
               data['prompt'] ??
