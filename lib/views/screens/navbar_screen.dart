@@ -30,6 +30,16 @@ class _NavbarScreenState extends State<NavbarScreen> {
       body: Stack(
         children: [
           Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/splash_background.png'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
             child: SafeArea(
               child: Padding(
                 padding: EdgeInsets.zero,
