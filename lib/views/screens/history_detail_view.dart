@@ -76,6 +76,34 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     return cleaned.isEmpty ? '-' : cleaned.join(', ');
   }
 
+  int _ensureAccuracy({
+    required int accuracy,
+    required int correct,
+    required int incorrect,
+  }) {
+    if (accuracy > 0) return accuracy;
+    final total = correct + incorrect;
+    if (total == 0) return 0;
+    return ((correct / total) * 100).round();
+  }
+
+  TopicBreakdown? _buildAccuracyRow(List<TopicBreakdown> topics) {
+    if (topics.isEmpty) return null;
+    final int totalCorrect =
+        topics.fold(0, (sum, topic) => sum + topic.correct);
+    final int totalIncorrect =
+        topics.fold(0, (sum, topic) => sum + topic.incorrect);
+    final int total = totalCorrect + totalIncorrect;
+    final int accuracy =
+        total == 0 ? 0 : ((totalCorrect / total) * 100).round();
+    return TopicBreakdown(
+      category: 'Accuracy',
+      correct: totalCorrect,
+      incorrect: totalIncorrect,
+      accuracy: accuracy,
+    );
+  }
+
   List<TopicBreakdown> _mapTopicBreakdown(HistoryAttemptDetail? detail) {
     final breakdown = detail?.review?.topicBreakdown ?? const [];
     if (breakdown.isEmpty) return const [];
@@ -85,7 +113,11 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             category: topic.category,
             correct: topic.correct,
             incorrect: topic.incorrect,
-            accuracy: topic.accuracy,
+            accuracy: _ensureAccuracy(
+              accuracy: topic.accuracy,
+              correct: topic.correct,
+              incorrect: topic.incorrect,
+            ),
           ),
         )
         .toList();
@@ -190,21 +222,39 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           final double rowSize = 10 * scale;
           final double cardTitle = 11 * scale;
           final double cardBody = 10 * scale;
-          final double colCategory = 150 * scale;
-          final double colCorrect = 62 * scale;
-          final double colIncorrect = 70 * scale;
-          final double colAccuracy = 70 * scale;
-          final double colStatus = 60 * scale;
+          final double contentWidth =
+              (constraints.maxWidth - (hPad * 2)).clamp(0.0, 420.0);
+          final double topicColCorrect = contentWidth * 0.14;
+          final double topicColIncorrect = contentWidth * 0.14;
+          final double topicColAccuracy = contentWidth * 0.16;
+          final double topicColStatus = contentWidth * 0.12;
+          final double topicColCategory = contentWidth -
+              (topicColCorrect +
+                  topicColIncorrect +
+                  topicColAccuracy +
+                  topicColStatus);
+          final double questionColCorrect = contentWidth * 0.16;
+          final double questionColIncorrect = contentWidth * 0.16;
+          final double questionColStatus = contentWidth * 0.16;
+          final double questionColCategory = contentWidth -
+              (questionColCorrect + questionColIncorrect + questionColStatus);
           final bool useFallbackTopics = attemptId == null;
           final List<TopicBreakdown> topics =
               useFallbackTopics ? widget.topics : detailTopics;
-          final double topicTableWidth = colCategory +
-              colCorrect +
-              colIncorrect +
-              colAccuracy +
-              colStatus;
-          final double questionTableWidth =
-              colCategory + colCorrect + colIncorrect + colStatus;
+          final TopicBreakdown? accuracyRow = _buildAccuracyRow(topics);
+          final List<TopicBreakdown> topicRows = [
+            ...topics,
+            if (accuracyRow != null) accuracyRow,
+          ];
+          final double topicTableWidth = topicColCategory +
+              topicColCorrect +
+              topicColIncorrect +
+              topicColAccuracy +
+              topicColStatus;
+          final double questionTableWidth = questionColCategory +
+              questionColCorrect +
+              questionColIncorrect +
+              questionColStatus;
 
           final Widget topicContent;
           if (attemptId != null && detail == null && isDetailLoading) {
@@ -235,38 +285,38 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                         children: [
                           _TopicHeaderCell(
                             label: 'Category',
-                            width: colCategory,
+                            width: topicColCategory,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Correct',
-                            width: colCorrect,
+                            width: topicColCorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Incorrect',
-                            width: colIncorrect,
+                            width: topicColIncorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Accuracy',
-                            width: colAccuracy,
+                            width: topicColAccuracy,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Status',
-                            width: colStatus,
+                            width: topicColStatus,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                         ],
                       ),
                       SizedBox(height: 14 * scale),
-                      ...topics.map(
+                      ...topicRows.map(
                         (topic) {
                           final bool passed = topic.correct > 0;
                           return Padding(
@@ -274,14 +324,16 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                             child: Row(
                               children: [
                                 SizedBox(
-                                  width: colCategory,
+                                  width: topicColCategory,
                                   child: Text(
                                     topic.category,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(fontSize: rowSize),
                                   ),
                                 ),
                                 SizedBox(
-                                  width: colCorrect,
+                                  width: topicColCorrect,
                                   child: Text(
                                     '${topic.correct}',
                                     textAlign: TextAlign.center,
@@ -289,7 +341,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                   ),
                                 ),
                                 SizedBox(
-                                  width: colIncorrect,
+                                  width: topicColIncorrect,
                                   child: Text(
                                     '${topic.incorrect}',
                                     textAlign: TextAlign.center,
@@ -297,7 +349,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                   ),
                                 ),
                                 SizedBox(
-                                  width: colAccuracy,
+                                  width: topicColAccuracy,
                                   child: Text(
                                     '${topic.accuracy}%',
                                     textAlign: TextAlign.center,
@@ -305,7 +357,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                   ),
                                 ),
                                 SizedBox(
-                                  width: colStatus,
+                                  width: topicColStatus,
                                   child: Center(
                                     child: Icon(
                                       passed ? Icons.check : Icons.close,
@@ -345,25 +397,25 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                           _TopicHeaderCell(
                             // label: 'Category',
                             label: 'Questions',
-                            width: colCategory,
+                            width: questionColCategory,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Correct',
-                            width: colCorrect,
+                            width: questionColCorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Incorrect',
-                            width: colIncorrect,
+                            width: questionColIncorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Status',
-                            width: colStatus,
+                            width: questionColStatus,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
@@ -378,14 +430,14 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                           child: Row(
                             children: [
                               SizedBox(
-                                width: colCategory,
+                                width: questionColCategory,
                                 child: Text(
                                   'Q${index + 1}',
                                   style: TextStyle(fontSize: rowSize),
                                 ),
                               ),
                               SizedBox(
-                                width: colCorrect,
+                                width: questionColCorrect,
                                 child: Text(
                                   answer.isCorrect ? '1' : '0',
                                   textAlign: TextAlign.center,
@@ -393,7 +445,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 ),
                               ),
                               SizedBox(
-                                width: colIncorrect,
+                                width: questionColIncorrect,
                                 child: Text(
                                   answer.isCorrect ? '0' : '1',
                                   textAlign: TextAlign.center,
@@ -401,7 +453,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 ),
                               ),
                               SizedBox(
-                                width: colStatus,
+                                width: questionColStatus,
                                 child: Center(
                                   child: Icon(
                                     answer.isCorrect
@@ -471,227 +523,230 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             );
           }
 
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-
-            child: SafeArea(
-              bottom: false,
-              child: Scaffold(
-                body: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    hPad,
-                    6 * scale,
-                    hPad,
-                    24 * scale,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+          return Scaffold(
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.6),
+                  radius: 1.1,
+                  colors: [
+                    Color(0xFFEFF4FF),
+                    Color(0xFFFFFFFF),
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      hPad,
+                      10 * scale,
+                      hPad,
+                      24 * scale,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          IconButton(
-                            onPressed: widget.onBack,
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              size: 18,
-                            ),
-                            color: const Color(0xFF27407C),
-                          ),
-                          Expanded(
-                            child: Text(
-                              examName,
-                              style: TextStyle(
-                                fontSize: titleSize,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF27407C),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              onPressed: widget.onBack,
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new,
+                                size: 18,
                               ),
+                              color: const Color(0xFF27407C),
                             ),
                           ),
-                        ],
-                      ),
-                      Padding(
-                        padding: EdgeInsets.only(left: 6 * scale),
-                        child: Text(
-                          "Here's how you did on the '$examName'\nexam.",
-                          style: TextStyle(
-                            fontSize: captionSize,
-                            color: const Color(0xFF6C7685),
+                          Text(
+                            'Quiz Complete!',
+                            style: TextStyle(
+                              fontSize: titleSize + 1,
+                              fontWeight: FontWeight.w700,
+                              color: const Color.fromARGB(255, 33, 46, 74),
+                            ),
                           ),
-                        ),
-                      ),
-                      SizedBox(height: 12 * scale),
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              'Your Score.',
-                              style: TextStyle(
-                                fontSize: captionSize,
-                                color: const Color(0xFF6C7685),
-                              ),
+                          SizedBox(height: 6 * scale),
+                          Text(
+                            "Here's how you did on the '$examName'\nexam.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: captionSize,
+                              color: const Color(0xFF6C7685),
                             ),
-                            SizedBox(height: 4 * scale),
-                            Text(
-                              '${scorePercent.toStringAsFixed(1)}%',
-                              style: TextStyle(
-                                fontSize: scoreSize,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF1E6CF3),
+                          ),
+                          SizedBox(height: 14 * scale),
+                          Column(
+                            children: [
+                              Text(
+                                'Your Score.',
+                                style: TextStyle(
+                                  fontSize: captionSize,
+                                  color: const Color(0xFF6C7685),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: 12 * scale),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                context.push(
-                                  '/quiz-settings',
-                                  extra: {
-                                    'courseTitle': examName,
-                                    'examId': widget.entry.examId,
+                              SizedBox(height: 4 * scale),
+                              Text(
+                                '${scorePercent.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: scoreSize,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1E6CF3),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 14 * scale),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    context.push(
+                                      '/quiz-settings',
+                                      extra: {
+                                        'courseTitle': examName,
+                                        'examId': widget.entry.examId,
+                                      },
+                                    );
                                   },
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF20324A),
-                                backgroundColor: const Color(0xFFE1E4EA),
-                                side: const BorderSide(
-                                  color: Color(0xFFBCC6D6),
-                                ),
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 12 * scale,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF20324A),
+                                    backgroundColor: const Color(0xFFE6E9EF),
+                                    side: const BorderSide(
+                                      color: Color(0xFFBCC6D6),
+                                    ),
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 11 * scale,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Try Again',
+                                    style: TextStyle(fontSize: buttonSize),
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                'Try Again',
-                                style: TextStyle(fontSize: buttonSize),
+                              SizedBox(width: 12 * scale),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    context.push(
+                                      '/performance',
+                                      extra: PerformanceArgs(
+                                        entry: widget.entry,
+                                        history: widget.historyEntries,
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1E4AA8),
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 11 * scale,
+                                    ),
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Performance',
+                                    style: TextStyle(fontSize: buttonSize),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                          SizedBox(width: 12 * scale),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () {
-                                context.push(
-                                  '/performance',
-                                  extra: PerformanceArgs(
-                                    entry: widget.entry,
-                                    history: widget.historyEntries,
+                          SizedBox(height: 10 * scale),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              final examId = widget.entry.examId?.trim();
+                              if (examId == null || examId.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Exam ID missing. Please try again.',
+                                    ),
                                   ),
                                 );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E4AA8),
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 12 * scale,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
+                                return;
+                              }
+                              context.push(
+                                '/exam-loading',
+                                extra: {
+                                  'courseTitle': examName,
+                                  'examId': examId,
+                                  'questionCount': 120,
+                                  'examType': 'full_exam',
+                                },
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF1E4AA8),
+                              side: const BorderSide(color: Color(0xFF9FB4E9)),
+                              padding: EdgeInsets.symmetric(
+                                vertical: 11 * scale,
+                                horizontal: 14 * scale,
                               ),
-                              child: Text(
-                                'Performance',
-                                style: TextStyle(fontSize: buttonSize),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
                               ),
                             ),
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: Text(
+                              'Regenerate Exam (120 New Questions)',
+                              style: TextStyle(fontSize: buttonSize),
+                            ),
                           ),
-                        ],
-                      ),
-                      SizedBox(height: 10 * scale),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          final examId = widget.entry.examId?.trim();
-                          if (examId == null || examId.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Exam ID missing. Please try again.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          context.push(
-                            '/exam-loading',
-                            extra: {
-                              'courseTitle': examName,
-                              'examId': examId,
-                              'questionCount': 120,
-                              'examType': 'full_exam',
-                            },
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1E4AA8),
-                          side: const BorderSide(color: Color(0xFF9FB4E9)),
-                          padding: EdgeInsets.symmetric(
-                            vertical: 12 * scale,
-                            horizontal: 16 * scale,
+                          SizedBox(height: 18 * scale),
+                          Text(
+                            'Topic Breakdown',
+                            style: TextStyle(
+                              fontSize: sectionTitle,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1F2A44),
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                          SizedBox(height: 10 * scale),
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8 * scale,
+                              vertical: 10 * scale,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE0E5F1)),
+                            ),
+                            child: topicContent,
                           ),
-                        ),
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: Text(
-                          'Regenerate Exam (120 New Questions)',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
-                      ),
-                      SizedBox(height: 16 * scale),
-                      Center(
-                        child: Text(
-                          'Topic Breakdown',
-                          style: TextStyle(
-                            fontSize: sectionTitle,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 8 * scale),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8 * scale,
-                          vertical: 8 * scale,
-                        ),
-                      ),
-                      SizedBox(height: 16 * scale),
-                      Center(
-                        child: Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.all(10 * scale),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE0E5F1)),
-                          ),
-                          child: Column(
-                            children: [
-                              SizedBox(height: 4 * scale),
-                              Center(
-                                child: Text(
+                          SizedBox(height: 16 * scale),
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.all(10 * scale),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE0E5F1)),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
                                   'Review Your Answers',
                                   style: TextStyle(
                                     fontSize: 13 * scale,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              ),
-                              SizedBox(height: 10 * scale),
-                              reviewContent,
-                              Center(
-                                child: GestureDetector(
+                                SizedBox(height: 10 * scale),
+                                reviewContent,
+                                GestureDetector(
                                   onTap: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
@@ -731,13 +786,13 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
-                              ),
-                              SizedBox(height: 12 * scale),
-                            ],
+                                SizedBox(height: 12 * scale),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -770,7 +825,7 @@ class _TopicHeaderCell extends StatelessWidget {
       alignment: Alignment.center,
       margin: EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF7F9FF),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE0E5F1)),
       ),
