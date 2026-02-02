@@ -34,12 +34,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) {
+    if (hour < 5) {
+      return 'Hi, Good Night';
+    } else if (hour < 12) {
       return 'Hi, Good Morning';
     } else if (hour < 17) {
       return 'Hi, Good Afternoon';
-    } else {
+    } else if (hour < 21) {
       return 'Hi, Good Evening';
+    } else {
+      return 'Hi, Good Night';
     }
   }
 
