@@ -371,7 +371,15 @@ class _McqScreenState extends State<McqScreen> {
             Row(
               children: [
                 IconButton(
-                  onPressed: () => context.pop(),
+                  onPressed: () {
+                    context.push(
+                      '/quiz-settings',
+                      extra: {
+                        'courseTitle': widget.courseTitle,
+                        'examId': widget.examId,
+                      },
+                    );
+                  },
                   icon: const Icon(Icons.arrow_back, size: 22),
                 ),
                 Expanded(
