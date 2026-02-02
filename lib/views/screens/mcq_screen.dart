@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -26,11 +27,13 @@ class McqScreen extends StatefulWidget {
 
 class _McqScreenState extends State<McqScreen> {
   late final List<_Question> _questions;
+  late final FlutterTts _tts;
   int _currentIndex = 0;
   final Map<int, int> _selectedIndex = {};
   final Set<int> _lockedQuestions = {};
   final Set<int> _flaggedQuestions = {};
   bool _showExplanation = false;
+  bool _isSpeaking = false;
   Timer? _timer;
   Duration? _remaining;
 
@@ -38,33 +41,82 @@ class _McqScreenState extends State<McqScreen> {
   void initState() {
     super.initState();
     _questions = _buildQuestions(widget.questions);
+    _tts = FlutterTts();
+    _configureTts();
     _setupTimer();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    unawaited(_tts.stop());
     super.dispose();
   }
 
-  void _setupTimer() {
+  Future<void> _configureTts() async {
+    await _tts.setLanguage('en-US');
+    await _tts.setSpeechRate(0.5);
+    await _tts.setPitch(1.0);
+    _tts.setCompletionHandler(() {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+    _tts.setCancelHandler(() {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+    _tts.setErrorHandler((_) {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+  }
+
+  DateTime? _resolveEndTime() {
+    final now = DateTime.now();
     final int? durationMinutes = widget.durationMinutes;
-    if (durationMinutes == null || durationMinutes <= 0) {
-      return;
+    final Duration? duration = (durationMinutes != null && durationMinutes > 0)
+        ? Duration(minutes: durationMinutes)
+        : null;
+    DateTime? endTime = widget.endTime;
+
+    if (endTime == null && widget.startTime != null && duration != null) {
+      endTime = widget.startTime!.add(duration);
+    }
+    if (endTime == null && duration != null) {
+      endTime = now.add(duration);
+    }
+    if (endTime == null) return null;
+
+    if (duration != null) {
+      if (endTime.isBefore(now)) {
+        endTime = now.add(duration);
+      }
+      if (widget.startTime != null && widget.startTime!.isAfter(now)) {
+        endTime = now.add(duration);
+      }
     }
 
-    final DateTime endTime = widget.endTime ??
-        widget.startTime?.add(Duration(minutes: durationMinutes)) ??
-        DateTime.now().add(Duration(minutes: durationMinutes));
-    _remaining = endTime.difference(DateTime.now());
-    if (_remaining!.isNegative) {
-      _remaining = Duration.zero;
-    }
+    return endTime;
+  }
+
+  void _setupTimer() {
+    _timer?.cancel();
+    final DateTime? endTime = _resolveEndTime();
+    if (endTime == null) return;
+
+    final remaining = endTime.difference(DateTime.now());
+    _remaining = remaining.isNegative ? Duration.zero : remaining;
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final remaining = endTime.difference(DateTime.now());
+      if (!mounted) return;
       setState(() {
-        _remaining = remaining.isNegative ? Duration.zero : remaining;
+        if (remaining <= Duration.zero) {
+          _remaining = Duration.zero;
+          _timer?.cancel();
+        } else {
+          _remaining = remaining;
+        }
       });
     });
   }
@@ -104,12 +156,7 @@ class _McqScreenState extends State<McqScreen> {
             _Question(
               number: i + 1,
               text: raw,
-              options: const [
-                'Option A',
-                'Option B',
-                'Option C',
-                'Option D',
-              ],
+              options: const ['Option A', 'Option B', 'Option C', 'Option D'],
               correctIndex: null,
               codeReference: '',
               explanation: '',
@@ -119,11 +166,12 @@ class _McqScreenState extends State<McqScreen> {
         continue;
       }
       final data = Map<String, dynamic>.from(raw);
-      final String text = (data['question'] ??
-              data['text'] ??
-              data['prompt'] ??
-              'Question ${i + 1}')
-          .toString();
+      final String text =
+          (data['question'] ??
+                  data['text'] ??
+                  data['prompt'] ??
+                  'Question ${i + 1}')
+              .toString();
 
       final dynamic rawOptions =
           data['options'] ?? data['choices'] ?? data['answers'];
@@ -134,7 +182,8 @@ class _McqScreenState extends State<McqScreen> {
         for (int optIndex = 0; optIndex < rawOptions.length; optIndex++) {
           final option = rawOptions[optIndex];
           if (option is Map) {
-            final optionText = option['option'] ??
+            final optionText =
+                option['option'] ??
                 option['text'] ??
                 option['label'] ??
                 option['value'] ??
@@ -142,7 +191,8 @@ class _McqScreenState extends State<McqScreen> {
             if (optionText != null) {
               options.add(optionText.toString());
             }
-            final bool isCorrect = option['is_correct'] == true ||
+            final bool isCorrect =
+                option['is_correct'] == true ||
                 option['isCorrect'] == true ||
                 option['correct'] == true;
             if (isCorrect && correctIndex == null) {
@@ -158,12 +208,11 @@ class _McqScreenState extends State<McqScreen> {
         final dynamic correctAnswer =
             data['correctAnswer'] ?? data['answer'] ?? data['correct'];
         if (correctAnswer is int && correctAnswer >= 0) {
-          correctIndex =
-              correctAnswer < options.length ? correctAnswer : null;
+          correctIndex = correctAnswer < options.length ? correctAnswer : null;
         } else if (correctAnswer is String) {
           final idx = options.indexWhere(
-            (opt) => opt.toLowerCase().trim() ==
-                correctAnswer.toLowerCase().trim(),
+            (opt) =>
+                opt.toLowerCase().trim() == correctAnswer.toLowerCase().trim(),
           );
           if (idx >= 0) correctIndex = idx;
         } else if (correctAnswer is List && correctAnswer.isNotEmpty) {
@@ -172,25 +221,23 @@ class _McqScreenState extends State<McqScreen> {
             correctIndex = first;
           } else if (first is String) {
             final idx = options.indexWhere(
-              (opt) => opt.toLowerCase().trim() ==
-                  first.toLowerCase().trim(),
+              (opt) => opt.toLowerCase().trim() == first.toLowerCase().trim(),
             );
             if (idx >= 0) correctIndex = idx;
           }
         }
       }
 
-      final String codeReference = (data['codeReference'] ??
-              data['reference'] ??
-              data['source'] ??
-              data['citation'] ??
-              '')
-          .toString();
-      final String explanation = (data['explanation'] ??
-              data['rationale'] ??
-              data['reason'] ??
-              '')
-          .toString();
+      final String codeReference =
+          (data['codeReference'] ??
+                  data['reference'] ??
+                  data['source'] ??
+                  data['citation'] ??
+                  '')
+              .toString();
+      final String explanation =
+          (data['explanation'] ?? data['rationale'] ?? data['reason'] ?? '')
+              .toString();
 
       if (options.isEmpty) {
         options.addAll(const ['Option A', 'Option B', 'Option C', 'Option D']);
@@ -223,22 +270,30 @@ class _McqScreenState extends State<McqScreen> {
   }
 
   void _onNext() async {
-    if (_selectedIndex[_currentIndex] == null) return;
+    final bool hasAnswer = _selectedIndex[_currentIndex] != null;
+    final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    if (!hasAnswer && !isFlagged) return;
     if (_currentIndex < _questions.length - 1) {
+      unawaited(_tts.stop());
       setState(() {
         _currentIndex += 1;
         _showExplanation = false;
+        _isSpeaking = false;
       });
       return;
     }
 
-    if (_selectedIndex.length < _questions.length) {
+    final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
+    if (covered.length < _questions.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please answer all questions first.')),
+        const SnackBar(
+          content: Text('Please answer or flag all questions first.'),
+        ),
       );
       return;
     }
 
+    unawaited(_tts.stop());
     final result = await context.push<Object?>(
       '/exam-review',
       extra: {
@@ -251,8 +306,10 @@ class _McqScreenState extends State<McqScreen> {
     );
 
     if (result is int) {
+      unawaited(_tts.stop());
       setState(() {
         _currentIndex = result.clamp(0, _questions.length - 1);
+        _isSpeaking = false;
       });
     }
   }
@@ -267,11 +324,40 @@ class _McqScreenState extends State<McqScreen> {
     });
   }
 
+  Future<void> _speakCurrentQuestion() async {
+    final _Question question = _questions[_currentIndex];
+    final buffer = StringBuffer();
+    buffer.write('Question ${question.number}. ');
+    buffer.write(question.text);
+    if (question.options.isNotEmpty) {
+      buffer.write(' Options: ');
+      for (int i = 0; i < question.options.length; i++) {
+        final label = String.fromCharCode(65 + i);
+        buffer.write('$label. ${question.options[i]}. ');
+      }
+    }
+    await _tts.stop();
+    await _tts.speak(buffer.toString());
+    if (!mounted) return;
+    setState(() => _isSpeaking = true);
+  }
+
+  Future<void> _toggleSpeak() async {
+    if (_isSpeaking) {
+      await _tts.stop();
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+      return;
+    }
+    await _speakCurrentQuestion();
+  }
+
   @override
   Widget build(BuildContext context) {
     final _Question question = _questions[_currentIndex];
     final int? selected = _selectedIndex[_currentIndex];
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    final bool canGoNext = selected != null || isFlagged;
     final String timerLabel = _remaining == null
         ? '--:--'
         : _formatDuration(_remaining!);
@@ -309,14 +395,15 @@ class _McqScreenState extends State<McqScreen> {
                       '${_selectedIndex.length}/${_questions.length} Question Answered',
                 ),
                 const SizedBox(width: 8),
-                _InfoPill(
-                  icon: Icons.timer,
-                  label: timerLabel,
-                ),
+                _InfoPill(icon: Icons.timer, label: timerLabel),
                 const Spacer(),
                 IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.volume_up, color: Color(0xFF274B8A)),
+                  onPressed: _toggleSpeak,
+                  icon: Icon(
+                    _isSpeaking ? Icons.volume_up : Icons.volume_off,
+                    color: const Color(0xFF274B8A),
+                  ),
+                  tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
                 ),
               ],
             ),
@@ -337,8 +424,7 @@ class _McqScreenState extends State<McqScreen> {
                   Color textColor = const Color(0xFF111827);
 
                   if (isAnswered) {
-                    final int? correctIndex =
-                        _questions[index].correctIndex;
+                    final int? correctIndex = _questions[index].correctIndex;
                     if (correctIndex != null) {
                       final bool isCorrect = selected == correctIndex;
                       if (isCorrect) {
@@ -365,7 +451,13 @@ class _McqScreenState extends State<McqScreen> {
                   }
 
                   return GestureDetector(
-                    onTap: () => setState(() => _currentIndex = index),
+                    onTap: () {
+                      unawaited(_tts.stop());
+                      setState(() {
+                        _currentIndex = index;
+                        _isSpeaking = false;
+                      });
+                    },
                     child: Container(
                       width: 40,
                       alignment: Alignment.center,
@@ -401,7 +493,7 @@ class _McqScreenState extends State<McqScreen> {
               final bool isSelected = selected == index;
               final bool isCorrect =
                   question.correctIndex != null &&
-                      index == question.correctIndex;
+                  index == question.correctIndex;
               final bool locked = _lockedQuestions.contains(_currentIndex);
 
               Color borderColor = const Color(0xFFE5E7EB);
@@ -431,7 +523,10 @@ class _McqScreenState extends State<McqScreen> {
                 onTap: locked ? null : () => _onSelect(index),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: fillColor,
                     borderRadius: BorderRadius.circular(14),
@@ -488,7 +583,10 @@ class _McqScreenState extends State<McqScreen> {
                 ),
                 style: TextButton.styleFrom(
                   backgroundColor: const Color(0xFFE5E7EB),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -498,7 +596,7 @@ class _McqScreenState extends State<McqScreen> {
             const SizedBox(height: 14),
             _PrimaryButton(
               label: 'Next',
-              isEnabled: selected != null,
+              isEnabled: canGoNext,
               onTap: _onNext,
             ),
             const SizedBox(height: 14),
@@ -634,10 +732,7 @@ class _DropdownHeader extends StatelessWidget {
   final bool isExpanded;
   final VoidCallback onTap;
 
-  const _DropdownHeader({
-    required this.isExpanded,
-    required this.onTap,
-  });
+  const _DropdownHeader({required this.isExpanded, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

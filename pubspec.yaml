@@ -59,6 +59,9 @@ dependencies:
   # Stripe payments
   flutter_stripe: ^12.2.0
 
+  # Text to speech
+  flutter_tts: ^3.8.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
