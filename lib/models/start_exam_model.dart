@@ -49,11 +49,18 @@ class StartExamData {
   }
 
   factory StartExamData.fromJson(Map<String, dynamic> json) {
+    final dynamic rawStartTime =
+        json['startTime'] ?? json['start_time'] ?? json['startedAt'];
+    final dynamic rawEndTime =
+        json['endTime'] ?? json['end_time'] ?? json['endedAt'];
+    final dynamic rawDuration = json['durationMinutes'] ??
+        json['duration_minutes'] ??
+        json['duration'];
     return StartExamData(
       questions: _parseQuestions(json['questions']),
-      startTime: _toDate(json['startTime']),
-      endTime: _toDate(json['endTime']),
-      durationMinutes: _toInt(json['durationMinutes']),
+      startTime: _toDate(rawStartTime),
+      endTime: _toDate(rawEndTime),
+      durationMinutes: _toInt(rawDuration),
       fromCache: json['fromCache'] == true,
       status: json['status']?.toString(),
       statusCode: _toInt(json['statusCode']),
