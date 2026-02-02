@@ -343,7 +343,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                       Row(
                         children: [
                           _TopicHeaderCell(
-                            label: 'Category',
+                            // label: 'Category',
+                            label: 'Questions',
                             width: colCategory,
                             fontSize: headerSize,
                             height: 24 * scale,
