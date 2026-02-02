@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
+  final String? examId;
   final List<dynamic>? questions;
   final DateTime? startTime;
   final DateTime? endTime;
@@ -12,6 +13,7 @@ class McqScreen extends StatefulWidget {
   const McqScreen({
     super.key,
     required this.courseTitle,
+    this.examId,
     this.questions,
     this.startTime,
     this.endTime,
@@ -241,6 +243,7 @@ class _McqScreenState extends State<McqScreen> {
       '/exam-review',
       extra: {
         'courseTitle': widget.courseTitle,
+        'examId': widget.examId,
         'questions': _questions,
         'selected': _selectedIndex,
         'flagged': _flaggedQuestions,

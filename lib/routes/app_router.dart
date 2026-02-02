@@ -25,6 +25,7 @@ import '../views/screens/exam_loading_screen.dart';
 import '../views/screens/mcq_screen.dart';
 import '../views/screens/exam_review_screen.dart';
 import '../views/screens/exam_unlock_success_screen.dart';
+import '../views/screens/history_detail_view.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -279,6 +280,7 @@ GoRouter getRouter() {
           DateTime? startTime;
           DateTime? endTime;
           int? durationMinutes;
+          String? examId;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -295,6 +297,7 @@ GoRouter getRouter() {
 
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
             final rawQuestions = extra['questions'];
             if (rawQuestions is List) {
               questions = rawQuestions;
@@ -305,6 +308,7 @@ GoRouter getRouter() {
           }
           return McqScreen(
             courseTitle: title,
+            examId: examId,
             questions: questions,
             startTime: startTime,
             endTime: endTime,
@@ -321,9 +325,18 @@ GoRouter getRouter() {
           List<dynamic> questions = const [];
           Map<int, int> selected = const {};
           Set<int> flagged = const {};
+          String? examId;
+          List<int>? timeSpentSec;
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
             questions = (extra['questions'] as List<dynamic>?) ?? const [];
+            final rawTimeSpent = extra['timeSpentSec'];
+            if (rawTimeSpent is List) {
+              timeSpentSec = rawTimeSpent
+                  .map((e) => int.tryParse(e.toString()) ?? 0)
+                  .toList();
+            }
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
               selected = rawSelected.map(
@@ -345,6 +358,43 @@ GoRouter getRouter() {
             questions: questions,
             selected: selected,
             flagged: flagged,
+            examId: examId,
+            timeSpentSec: timeSpentSec,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/history-detail',
+        name: 'history-detail',
+        builder: (context, state) {
+          final extra = state.extra;
+          HistoryEntry entry = const HistoryEntry(
+            examName: 'Exam',
+            date: '-',
+            scorePercent: 0,
+            scoreDetail: '0/0',
+          );
+          List<HistoryEntry> historyEntries = const [];
+          List<TopicBreakdown> topics = const [];
+          if (extra is Map) {
+            final rawEntry = extra['entry'];
+            if (rawEntry is HistoryEntry) {
+              entry = rawEntry;
+            }
+            final rawHistory = extra['historyEntries'];
+            if (rawHistory is List<HistoryEntry>) {
+              historyEntries = rawHistory;
+            }
+            final rawTopics = extra['topics'];
+            if (rawTopics is List<TopicBreakdown>) {
+              topics = rawTopics;
+            }
+          }
+          return HistoryDetailView(
+            entry: entry,
+            topics: topics,
+            historyEntries: historyEntries,
+            onBack: () => context.pop(),
           );
         },
       ),

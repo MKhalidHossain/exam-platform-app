@@ -62,4 +62,29 @@ class ExamService {
       },
     );
   }
+
+  Future<ApiResponse<Map<String, dynamic>>> submitExam({
+    required String examId,
+    required List<dynamic> answers,
+    List<String>? flaggedQuestionIds,
+    List<int>? timeSpentSec,
+  }) async {
+    final body = <String, dynamic>{
+      'answers': answers,
+    };
+    if (flaggedQuestionIds != null) {
+      body['flaggedQuestionIds'] = flaggedQuestionIds;
+    }
+    if (timeSpentSec != null) {
+      body['timeSpent'] = timeSpentSec;
+    }
+
+    return _apiService.post<Map<String, dynamic>>(
+      ApiEndpoints.examSubmit(examId),
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
 }
