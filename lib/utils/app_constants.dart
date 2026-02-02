@@ -6,7 +6,7 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // API Constants
-  static const String baseUrl = 'http://10.10.5.95:5001/api/v1';
+  static const String baseUrl = 'http://10.10.5.80:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
   // Stripe (use env or build config in production)

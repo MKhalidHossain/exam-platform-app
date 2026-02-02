@@ -470,237 +470,239 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.onBack,
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      color: const Color(0xFF27407C),
-                    ),
-                    Expanded(
-                      child: Text(
-                        examName,
-                        style: TextStyle(
-                          fontSize: titleSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF27407C),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: EdgeInsets.only(left: 6 * scale),
-                  child: Text(
-                    "Here's how you did on the '$examName'\nexam.",
-                    style: TextStyle(
-                      fontSize: captionSize,
-                      color: const Color(0xFF6C7685),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 12 * scale),
-                Center(
-                  child: Column(
+          return Scaffold(
+            body: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'Your Score.',
-                        style: TextStyle(
-                          fontSize: captionSize,
-                          color: const Color(0xFF6C7685),
-                        ),
+                      IconButton(
+                        onPressed: widget.onBack,
+                        icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                        color: const Color(0xFF27407C),
                       ),
-                      SizedBox(height: 4 * scale),
-                      Text(
-                        '${scorePercent.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: scoreSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF1E6CF3),
+                      Expanded(
+                        child: Text(
+                          examName,
+                          style: TextStyle(
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF27407C),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                SizedBox(height: 12 * scale),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          context.push(
-                            '/quiz-settings',
-                            extra: {
-                              'courseTitle': examName,
-                              'examId': widget.entry.examId,
-                            },
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF20324A),
-                          backgroundColor: const Color(0xFFE1E4EA),
-                          side: const BorderSide(color: Color(0xFFBCC6D6)),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Try Again',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
+                  Padding(
+                    padding: EdgeInsets.only(left: 6 * scale),
+                    child: Text(
+                      "Here's how you did on the '$examName'\nexam.",
+                      style: TextStyle(
+                        fontSize: captionSize,
+                        color: const Color(0xFF6C7685),
                       ),
                     ),
-                    SizedBox(width: 12 * scale),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          context.push(
-                            '/performance',
-                            extra: PerformanceArgs(
-                              entry: widget.entry,
-                              history: widget.historyEntries,
+                  ),
+                  SizedBox(height: 12 * scale),
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          'Your Score.',
+                          style: TextStyle(
+                            fontSize: captionSize,
+                            color: const Color(0xFF6C7685),
+                          ),
+                        ),
+                        SizedBox(height: 4 * scale),
+                        Text(
+                          '${scorePercent.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: scoreSize,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF1E6CF3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 12 * scale),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            context.push(
+                              '/quiz-settings',
+                              extra: {
+                                'courseTitle': examName,
+                                'examId': widget.entry.examId,
+                              },
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF20324A),
+                            backgroundColor: const Color(0xFFE1E4EA),
+                            side: const BorderSide(color: Color(0xFFBCC6D6)),
+                            padding: EdgeInsets.symmetric(vertical: 12 * scale),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E4AA8),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Text(
+                            'Try Again',
+                            style: TextStyle(fontSize: buttonSize),
                           ),
                         ),
-                        child: Text(
-                          'Performance',
-                          style: TextStyle(fontSize: buttonSize),
+                      ),
+                      SizedBox(width: 12 * scale),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            context.push(
+                              '/performance',
+                              extra: PerformanceArgs(
+                                entry: widget.entry,
+                                history: widget.historyEntries,
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E4AA8),
+                            padding: EdgeInsets.symmetric(vertical: 12 * scale),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                          child: Text(
+                            'Performance',
+                            style: TextStyle(fontSize: buttonSize),
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                  SizedBox(height: 10 * scale),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      context.push(
+                        '/exam-loading',
+                        extra: {'courseTitle': examName},
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1E4AA8),
+                      side: const BorderSide(color: Color(0xFF9FB4E9)),
+                      padding: EdgeInsets.symmetric(
+                        vertical: 12 * scale,
+                        horizontal: 16 * scale,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
                     ),
-                  ],
-                ),
-                SizedBox(height: 10 * scale),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/exam-loading',
-                      extra: {'courseTitle': examName},
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1E4AA8),
-                    side: const BorderSide(color: Color(0xFF9FB4E9)),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(
+                      'Regenerate Exam (120 New Questions)',
+                      style: TextStyle(fontSize: buttonSize),
+                    ),
+                  ),
+                  SizedBox(height: 16 * scale),
+                  Center(
+                    child: Text(
+                      'Topic Breakdown',
+                      style: TextStyle(
+                        fontSize: sectionTitle,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 8 * scale),
+                  Container(
                     padding: EdgeInsets.symmetric(
-                      vertical: 12 * scale,
-                      horizontal: 16 * scale,
+                      horizontal: 8 * scale,
+                      vertical: 8 * scale,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(
-                    'Regenerate Exam (120 New Questions)',
-                    style: TextStyle(fontSize: buttonSize),
-                  ),
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Text(
-                    'Topic Breakdown',
-                    style: TextStyle(
-                      fontSize: sectionTitle,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8 * scale),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8 * scale,
-                    vertical: 8 * scale,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE0E5F1)),
-                  ),
-                  child: topicContent,
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(10 * scale),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: const Color(0xFFE0E5F1)),
                     ),
-                    child: Column(
-                      children: [
-                        SizedBox(height: 4 * scale),
-                        Center(
-                          child: Text(
-                            'Review Your Answers',
-                            style: TextStyle(
-                              fontSize: 13 * scale,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 10 * scale),
-                        reviewContent,
-                        Center(
-                          child: GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Disclaimer tapped.'),
-                                ),
-                              );
-                            },
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Not affiliated with or endorsed by API. ',
-                                style: TextStyle(
-                                  fontSize: 10 * scale,
-                                  color: const Color(0xFF6C7685),
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: 'See full\n',
-                                    style: TextStyle(
-                                      fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'disclaimer.',
-                                    style: TextStyle(
-                                      fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ],
+                    child: topicContent,
+                  ),
+                  SizedBox(height: 16 * scale),
+                  Center(
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(10 * scale),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE0E5F1)),
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(height: 4 * scale),
+                          Center(
+                            child: Text(
+                              'Review Your Answers',
+                              style: TextStyle(
+                                fontSize: 13 * scale,
+                                fontWeight: FontWeight.w700,
                               ),
-                              textAlign: TextAlign.center,
                             ),
                           ),
-                        ),
-                        SizedBox(height: 12 * scale),
-                      ],
+                          SizedBox(height: 10 * scale),
+                          reviewContent,
+                          Center(
+                            child: GestureDetector(
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Disclaimer tapped.'),
+                                  ),
+                                );
+                              },
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'Not affiliated with or endorsed by API. ',
+                                  style: TextStyle(
+                                    fontSize: 10 * scale,
+                                    color: const Color(0xFF6C7685),
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: 'See full\n',
+                                      style: TextStyle(
+                                        fontSize: 10 * scale,
+                                        color: Color(0xFF1E6CF3),
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'disclaimer.',
+                                      style: TextStyle(
+                                        fontSize: 10 * scale,
+                                        color: Color(0xFF1E6CF3),
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 12 * scale),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },

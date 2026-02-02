@@ -20,6 +20,7 @@ class ApiEndpoints {
   static const String updateUserPassword = '$user/password';
   static String getUserDetails(String id) => '$user/$id';
   static String updateUserStatus(String id) => '$user/$id/status';
+  
   static String deleteUser(String id) => '$user/$id';
 
   // Exam Endpoints
