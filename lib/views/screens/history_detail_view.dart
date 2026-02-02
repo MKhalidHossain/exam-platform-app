@@ -71,9 +71,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   }
 
   String _joinAnswers(List<String> values) {
-    final cleaned = values
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty);
+    final cleaned =
+        values.map((value) => value.trim()).where((value) => value.isNotEmpty);
     return cleaned.isEmpty ? '-' : cleaned.join(', ');
   }
 
@@ -98,10 +97,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     VoidCallback? onRetry,
   }) {
     return Padding(
-      padding: EdgeInsets.symmetric(
-        vertical: 12 * scale,
-        horizontal: 8 * scale,
-      ),
+      padding: EdgeInsets.symmetric(vertical: 12 * scale, horizontal: 8 * scale),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -115,7 +111,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           ),
           if (onRetry != null) ...[
             SizedBox(height: 8 * scale),
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('Retry'),
+            ),
           ],
         ],
       ),
@@ -165,21 +164,18 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       final HistoryAttemptDetail? detail = attemptId == null
           ? null
           : _controller.attemptDetails[attemptId];
-      final bool isDetailLoading =
-          attemptId != null &&
+      final bool isDetailLoading = attemptId != null &&
           (_controller.attemptDetailLoading[attemptId] ?? false);
-      final String? detailError = attemptId == null
-          ? null
-          : _controller.attemptDetailErrors[attemptId];
+      final String? detailError =
+          attemptId == null ? null : _controller.attemptDetailErrors[attemptId];
       final List<TopicBreakdown> detailTopics = _mapTopicBreakdown(detail);
       final List<AttemptReviewAnswer> reviewAnswers =
           detail?.review?.answers ?? const [];
       final String examName = (detail?.exam?.name ?? '').trim().isNotEmpty
           ? detail!.exam!.name
           : widget.entry.examName;
-      final double scorePercent = detail != null
-          ? detail.score.toDouble()
-          : widget.entry.scorePercent;
+      final double scorePercent =
+          detail != null ? detail.score.toDouble() : widget.entry.scorePercent;
 
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -200,11 +196,13 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           final double colAccuracy = 70 * scale;
           final double colStatus = 60 * scale;
           final bool useFallbackTopics = attemptId == null;
-          final List<TopicBreakdown> topics = useFallbackTopics
-              ? widget.topics
-              : detailTopics;
-          final double topicTableWidth =
-              colCategory + colCorrect + colIncorrect + colAccuracy + colStatus;
+          final List<TopicBreakdown> topics =
+              useFallbackTopics ? widget.topics : detailTopics;
+          final double topicTableWidth = colCategory +
+              colCorrect +
+              colIncorrect +
+              colAccuracy +
+              colStatus;
           final double questionTableWidth =
               colCategory + colCorrect + colIncorrect + colStatus;
 
@@ -268,59 +266,61 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                         ],
                       ),
                       SizedBox(height: 14 * scale),
-                      ...topics.map((topic) {
-                        final bool passed = topic.correct > 0;
-                        return Padding(
-                          padding: EdgeInsets.symmetric(vertical: 6 * scale),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: colCategory,
-                                child: Text(
-                                  topic.category,
-                                  style: TextStyle(fontSize: rowSize),
-                                ),
-                              ),
-                              SizedBox(
-                                width: colCorrect,
-                                child: Text(
-                                  '${topic.correct}',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: rowSize),
-                                ),
-                              ),
-                              SizedBox(
-                                width: colIncorrect,
-                                child: Text(
-                                  '${topic.incorrect}',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: rowSize),
-                                ),
-                              ),
-                              SizedBox(
-                                width: colAccuracy,
-                                child: Text(
-                                  '${topic.accuracy}%',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: rowSize),
-                                ),
-                              ),
-                              SizedBox(
-                                width: colStatus,
-                                child: Center(
-                                  child: Icon(
-                                    passed ? Icons.check : Icons.close,
-                                    size: 16 * scale,
-                                    color: passed
-                                        ? const Color(0xFF1BA64B)
-                                        : const Color(0xFFE53935),
+                      ...topics.map(
+                        (topic) {
+                          final bool passed = topic.correct > 0;
+                          return Padding(
+                            padding: EdgeInsets.symmetric(vertical: 6 * scale),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: colCategory,
+                                  child: Text(
+                                    topic.category,
+                                    style: TextStyle(fontSize: rowSize),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                                SizedBox(
+                                  width: colCorrect,
+                                  child: Text(
+                                    '${topic.correct}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: rowSize),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: colIncorrect,
+                                  child: Text(
+                                    '${topic.incorrect}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: rowSize),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: colAccuracy,
+                                  child: Text(
+                                    '${topic.accuracy}%',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: rowSize),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: colStatus,
+                                  child: Center(
+                                    child: Icon(
+                                      passed ? Icons.check : Icons.close,
+                                      size: 16 * scale,
+                                      color: passed
+                                          ? const Color(0xFF1BA64B)
+                                          : const Color(0xFFE53935),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -425,10 +425,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               ),
             );
           } else {
-            topicContent = _buildSectionMessage(
-              'No topic breakdown available.',
-              scale,
-            );
+            topicContent =
+                _buildSectionMessage('No topic breakdown available.', scale);
           }
 
           final Widget reviewContent;
@@ -447,10 +445,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               onRetry: _fetchDetail,
             );
           } else if (reviewAnswers.isEmpty) {
-            reviewContent = _buildSectionMessage(
-              'No answers available.',
-              scale,
-            );
+            reviewContent =
+                _buildSectionMessage('No answers available.', scale);
           } else {
             reviewContent = Column(
               children: reviewAnswers.asMap().entries.map((entry) {
@@ -586,12 +582,6 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                             style: TextStyle(fontSize: buttonSize),
                           ),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE0E5F1)),
-                        ),
-                        child: topicContent,
                       ),
                     ],
                   ),
