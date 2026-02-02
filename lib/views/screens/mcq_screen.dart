@@ -270,7 +270,9 @@ class _McqScreenState extends State<McqScreen> {
   }
 
   void _onNext() async {
-    if (_selectedIndex[_currentIndex] == null) return;
+    final bool hasAnswer = _selectedIndex[_currentIndex] != null;
+    final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    if (!hasAnswer && !isFlagged) return;
     if (_currentIndex < _questions.length - 1) {
       unawaited(_tts.stop());
       setState(() {
@@ -281,9 +283,12 @@ class _McqScreenState extends State<McqScreen> {
       return;
     }
 
-    if (_selectedIndex.length < _questions.length) {
+    final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
+    if (covered.length < _questions.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please answer all questions first.')),
+        const SnackBar(
+          content: Text('Please answer or flag all questions first.'),
+        ),
       );
       return;
     }
@@ -352,6 +357,7 @@ class _McqScreenState extends State<McqScreen> {
     final _Question question = _questions[_currentIndex];
     final int? selected = _selectedIndex[_currentIndex];
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    final bool canGoNext = selected != null || isFlagged;
     final String timerLabel = _remaining == null
         ? '--:--'
         : _formatDuration(_remaining!);
@@ -590,7 +596,7 @@ class _McqScreenState extends State<McqScreen> {
             const SizedBox(height: 14),
             _PrimaryButton(
               label: 'Next',
-              isEnabled: selected != null,
+              isEnabled: canGoNext,
               onTap: _onNext,
             ),
             const SizedBox(height: 14),
