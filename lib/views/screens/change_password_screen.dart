@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import '../../core/error/error_handler.dart';
 import '../../services/user_service.dart';
 
@@ -261,16 +262,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Save',
                                   style: TextStyle(

@@ -6,6 +6,8 @@ import '../services/api_service.dart';
 import '../utils/api_endpoints.dart';
 
 class PerformanceController extends GetxController {
+  static const String overviewKey = '__overview__';
+
   final ApiService _apiService = ApiService();
 
   final RxMap<String, PerformanceData> performanceByExam =
@@ -36,5 +38,28 @@ class PerformanceController extends GetxController {
     }
 
     loadingByExam[examId] = false;
+  }
+
+  Future<void> fetchOverview() async {
+    if (loadingByExam[overviewKey] == true) return;
+
+    loadingByExam[overviewKey] = true;
+    errorByExam.remove(overviewKey);
+
+    final ApiResponse<PerformanceData> response =
+        await _apiService.get<PerformanceData>(
+      ApiEndpoints.overviewMe,
+      fromJson: (json) =>
+          PerformanceData.fromJson(Map<String, dynamic>.from(json as Map)),
+    );
+
+    if (response.success && response.data != null) {
+      performanceByExam[overviewKey] = response.data!;
+    } else {
+      errorByExam[overviewKey] =
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load performance overview');
+    }
+
+    loadingByExam[overviewKey] = false;
   }
 }

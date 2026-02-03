@@ -6,6 +6,7 @@ import 'history_models.dart';
 import 'performance_screen.dart';
 import 'history_testimonial_dialog.dart';
 import 'history_thank_you_dialog.dart';
+import '../widgets/app_shimmer.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_detail_model.dart';
 
@@ -74,6 +75,93 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     final cleaned =
         values.map((value) => value.trim()).where((value) => value.isNotEmpty);
     return cleaned.isEmpty ? '-' : cleaned.join(', ');
+  }
+
+  Widget _buildTopicLoadingShimmer(double scale) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8 * scale),
+      child: Column(
+        children: List.generate(5, (index) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: 8 * scale),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: AppShimmerBox(
+                    height: 10 * scale,
+                    radius: 4 * scale,
+                  ),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(
+                    height: 10 * scale,
+                    radius: 4 * scale,
+                  ),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(
+                    height: 10 * scale,
+                    radius: 4 * scale,
+                  ),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(
+                    height: 10 * scale,
+                    radius: 4 * scale,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildReviewLoadingShimmer(double scale) {
+    return Column(
+      children: List.generate(3, (index) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: 12 * scale),
+          child: Container(
+            padding: EdgeInsets.all(12 * scale),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE3E7F2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppShimmerBox(
+                  width: 120 * scale,
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+                SizedBox(height: 10 * scale),
+                AppShimmerBox(
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+                SizedBox(height: 6 * scale),
+                AppShimmerBox(
+                  width: 180 * scale,
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
   }
 
   int _ensureAccuracy({
@@ -258,7 +346,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
 
           final Widget topicContent;
           if (attemptId != null && detail == null && isDetailLoading) {
-            topicContent = const Center(child: CircularProgressIndicator());
+            topicContent = _buildTopicLoadingShimmer(scale);
           } else if (attemptId != null &&
               detail == null &&
               detailError != null &&
@@ -483,9 +571,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
 
           final Widget reviewContent;
           if (attemptId != null && detail == null && isDetailLoading) {
-            reviewContent = const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: CircularProgressIndicator()),
+            reviewContent = Padding(
+              padding: EdgeInsets.symmetric(vertical: 12 * scale),
+              child: _buildReviewLoadingShimmer(scale),
             );
           } else if (attemptId != null &&
               detail == null &&
@@ -696,7 +784,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                             ),
                             icon: const Icon(Icons.refresh, size: 16),
                             label: Text(
-                              'Regenerate Exam (120 New Questions)',
+                              'Regenerate Exam (New Questions)',
                               style: TextStyle(fontSize: buttonSize),
                             ),
                           ),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import '../../core/error/error_handler.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
@@ -123,12 +124,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                                   : null,
                         ),
                         if (_isPaymentLoading)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 16),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
                             child: Center(
                               child: Column(
-                                children: [
-                                  CircularProgressIndicator(),
+                                children: const [
+                                  AppShimmerCircle(size: 28),
                                   SizedBox(height: 12),
                                   Text('Processing payment...'),
                                 ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_shimmer.dart';
 import '../../core/error/app_exception.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/exam_model.dart';
@@ -98,9 +99,38 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
+              return SizedBox(
                 height: 320,
-                child: Center(child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppShimmerBox(width: 180, height: 18, radius: 8),
+                      const SizedBox(height: 16),
+                      ...List.generate(3, (index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: const [
+                              AppShimmerCircle(size: 36),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: AppShimmerBox(
+                                  height: 14,
+                                  radius: 6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
               );
             }
             if (snapshot.hasError) {
