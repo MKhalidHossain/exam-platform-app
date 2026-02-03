@@ -45,6 +45,53 @@ class HistoryController extends GetxController {
     isLoading.value = false;
   }
 
+  Future<void> fetchAllAttempts({int limit = 20}) async {
+    isLoading.value = true;
+    errorMessage.value = '';
+
+    final List<HistoryAttempt> allAttempts = <HistoryAttempt>[];
+    AttemptsMeta? latestMeta;
+    int page = 1;
+
+    while (true) {
+      final ApiResponse<HistoryAttemptsData> response =
+          await _apiService.get<HistoryAttemptsData>(
+        ApiEndpoints.historyAttempts,
+        queryParams: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+        },
+        fromJson: (json) => HistoryAttemptsData.fromJson(
+          Map<String, dynamic>.from(json as Map),
+        ),
+      );
+
+      if (!response.success || response.data == null) {
+        errorMessage.value = ErrorHandler.getMessageFromResponse(
+          response,
+          failureFallback: 'Failed to load attempts',
+        );
+        break;
+      }
+
+      allAttempts.addAll(response.data!.attempts);
+      latestMeta = response.data!.meta;
+
+      final totalPages = latestMeta?.totalPages;
+      if (totalPages == null || page >= totalPages) {
+        break;
+      }
+      page += 1;
+    }
+
+    if (errorMessage.value.isEmpty) {
+      attempts.assignAll(allAttempts);
+      meta.value = latestMeta;
+    }
+
+    isLoading.value = false;
+  }
+
   Future<void> fetchAttemptDetail(String attemptId) async {
     if (attemptId.trim().isEmpty) return;
     attemptDetailLoading[attemptId] = true;

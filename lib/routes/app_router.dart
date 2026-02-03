@@ -164,6 +164,7 @@ GoRouter getRouter() {
               scoreDetail: '4/10',
             ),
             history: [],
+            isProfileFlow: true,
           );
         },
       ),

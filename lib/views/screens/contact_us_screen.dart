@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../core/error/error_handler.dart';
@@ -347,16 +348,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Save & Submit',
                                   style: TextStyle(

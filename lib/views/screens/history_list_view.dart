@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_shimmer.dart';
 
 import 'history_models.dart';
 
@@ -156,9 +157,7 @@ class HistoryListView extends StatelessWidget {
                         child: Builder(
                           builder: (context) {
                             if (isLoading) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
+                              return _HistoryListShimmer(scale: scale);
                             }
 
                             if (errorMessage != null &&
@@ -404,6 +403,76 @@ class _ExamFilterMenuState extends State<_ExamFilterMenu> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HistoryListShimmer extends StatelessWidget {
+  const _HistoryListShimmer({required this.scale});
+
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: 12 * scale),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 10 * scale),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: AppShimmerBox(
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    AppShimmerBox(
+                      width: 70 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                    SizedBox(height: 6 * scale),
+                    AppShimmerBox(
+                      width: 50 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    AppShimmerBox(
+                      width: 36 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                    SizedBox(height: 6 * scale),
+                    AppShimmerBox(
+                      width: 28 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      separatorBuilder: (context, index) =>
+          const Divider(height: 1, color: Color(0xFFE4E8F2)),
+      itemCount: 6,
     );
   }
 }

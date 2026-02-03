@@ -2,14 +2,26 @@ class PerformanceData {
   const PerformanceData({
     this.attempts = const [],
     this.timeline = const [],
+    this.totalAttempts,
+    this.avgScore,
+    this.bestScore,
+    this.streak,
   });
 
   final List<PerformanceAttempt> attempts;
   final List<PerformanceTimelineEntry> timeline;
+  final int? totalAttempts;
+  final double? avgScore;
+  final double? bestScore;
+  final int? streak;
 
   factory PerformanceData.fromJson(Map<String, dynamic> json) {
     final attemptsJson = json['attempts'];
     final timelineJson = json['timeline'];
+    final totalAttemptsJson = json['totalAttempts'];
+    final avgScoreJson = json['avgScore'];
+    final bestScoreJson = json['bestScore'];
+    final streakJson = json['streak'];
     final attempts = attemptsJson is List
         ? attemptsJson
             .whereType<Map>()
@@ -24,7 +36,24 @@ class PerformanceData {
                 Map<String, dynamic>.from(item)))
             .toList()
         : <PerformanceTimelineEntry>[];
-    return PerformanceData(attempts: attempts, timeline: timeline);
+
+    double? toDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
+    }
+
+    return PerformanceData(
+      attempts: attempts,
+      timeline: timeline,
+      totalAttempts: totalAttemptsJson == null
+          ? null
+          : PerformanceAttempt._toInt(totalAttemptsJson),
+      avgScore: toDouble(avgScoreJson),
+      bestScore: toDouble(bestScoreJson),
+      streak:
+          streakJson == null ? null : PerformanceAttempt._toInt(streakJson),
+    );
   }
 }
 

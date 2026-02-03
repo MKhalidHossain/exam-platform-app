@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/edit_profile_shimmer.dart';
+import '../widgets/app_shimmer.dart';
 import '../../core/error/error_handler.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/user_model.dart';
@@ -362,16 +363,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Next',
                                   style: TextStyle(

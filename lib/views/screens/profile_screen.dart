@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import '../../models/user_model.dart';
 import '../../services/storage_service.dart';
 import '../../controllers/user_controller.dart';
@@ -300,7 +301,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   context: context,
                                   barrierDismissible: false,
                                   builder: (context) => const Center(
-                                    child: CircularProgressIndicator(),
+                                    child: AppShimmerCircle(size: 36),
                                   ),
                                 );
                               }

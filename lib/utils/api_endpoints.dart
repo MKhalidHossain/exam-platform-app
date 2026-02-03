@@ -34,6 +34,7 @@ class ApiEndpoints {
   static String historyAttemptDetail(String attemptId) =>
       '$historyAttempts/$attemptId';
   static const String performanceMe = '/analytics/me/performance';
+  static const String overviewMe = '/analytics/me/overview';
 
   // Support Endpoints
   static const String support = '/support';

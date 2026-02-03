@@ -5,6 +5,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
+import '../widgets/app_shimmer.dart';
 import '../../models/plan_tier.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
@@ -84,7 +85,7 @@ class HomeDashboard extends StatelessWidget {
                 const SizedBox(
                   width: 28,
                   height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 3),
+                  child: AppShimmerCircle(size: 28),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -298,10 +299,23 @@ class HomeDashboard extends StatelessWidget {
             final orderedItems = [...unlockedItems, ...lockedItems];
 
             if (isLoading && controller.exams.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: AppShimmer(
+                  child: Column(
+                    children: List.generate(3, (index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          height: 110,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
                 ),
               );
             }
