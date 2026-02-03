@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/plan_tier.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
@@ -79,7 +80,7 @@ class UserController extends GetxController {
     if (response.success && response.data != null) {
       await applyProfile(response.data!);
     } else {
-      errorMessage.value = response.message ?? 'Failed to load profile';
+      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile');
     }
 
     isLoading.value = false;

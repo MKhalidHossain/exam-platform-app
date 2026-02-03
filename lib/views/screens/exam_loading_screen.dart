@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/error/error_handler.dart';
 import '../../services/exam_service.dart';
 
 class ExamLoadingScreen extends StatefulWidget {
@@ -68,8 +69,10 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
 
     setState(() {
       _isLoading = false;
-      _errorMessage =
-          response.message ?? 'Failed to start the exam. Please try again.';
+      _errorMessage = ErrorHandler.getMessageFromResponse(
+        response,
+        failureFallback: 'Failed to start the exam. Please try again.',
+      );
     });
   }
 

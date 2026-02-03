@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
+import '../../core/error/error_handler.dart';
 import '../../controllers/auth_controller.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
@@ -42,54 +43,29 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   Future<void> _handleVerifyOtp() async {
     if (widget.email == null || widget.email!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email is required'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Email is required', isError: true, context: context);
       return;
     }
 
     if (_otp.isEmpty || _otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid 6-digit OTP'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Please enter a valid 6-digit OTP', isError: true, context: context);
       return;
     }
 
     // If password reset, validate password fields
     if (widget.isForPasswordReset) {
       if (_passwordController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter your new password'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showSnackBar('Please enter your new password', isError: true, context: context);
         return;
       }
 
       if (_passwordController.text.length < 8) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password must be at least 8 characters'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showSnackBar('Password must be at least 8 characters', isError: true, context: context);
         return;
       }
 
       if (_passwordController.text != _confirmPasswordController.text) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Passwords do not match'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showSnackBar('Passwords do not match', isError: true, context: context);
         return;
       }
     }
@@ -103,12 +79,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       );
     } else {
       // keep UI only; other OTP flows can be added later
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP verification flow is not implemented yet'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('OTP verification flow is not implemented yet', isError: true, context: context);
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../services/api_service.dart';
 import '../controllers/user_controller.dart';
 import '../controllers/home_controller.dart';
@@ -34,31 +35,18 @@ class AuthController extends GetxController {
         if (homeController != null) {
           await homeController.fetchActiveExams();
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Login successful!'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'Login successful!'),
+          isError: false,
+          context: context,
         );
         context.go('/home');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Login failed. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Login failed. Please try again.');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context);
       }
     } finally {
       isLoading.value = false;
@@ -86,31 +74,18 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Registration successful!'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'Registration successful!'),
+          isError: false,
+          context: context,
         );
         context.go('/login');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Registration failed. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Registration failed. Please try again.');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context);
       }
     } finally {
       isLoading.value = false;
@@ -128,34 +103,21 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'OTP sent to your email successfully'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'OTP sent to your email successfully'),
+          isError: false,
+          context: context,
         );
         context.go('/verify-otp', extra: {
           'email': email,
           'isForPasswordReset': true,
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Failed to send OTP. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to send OTP. Please try again.');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context);
       }
     } finally {
       isLoading.value = false;
@@ -179,31 +141,18 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Password reset successfully'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'Password reset successfully'),
+          isError: false,
+          context: context,
         );
         context.go('/login');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Failed to reset password. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to reset password. Please try again.');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context);
       }
     } finally {
       isLoading.value = false;

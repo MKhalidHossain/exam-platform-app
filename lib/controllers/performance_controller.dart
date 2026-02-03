@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/performance_model.dart';
 import '../services/api_service.dart';
@@ -31,7 +32,7 @@ class PerformanceController extends GetxController {
       performanceByExam[examId] = response.data!;
     } else {
       errorByExam[examId] =
-          response.message ?? 'Failed to load performance';
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load performance');
     }
 
     loadingByExam[examId] = false;

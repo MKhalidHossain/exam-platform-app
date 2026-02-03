@@ -62,6 +62,9 @@ dependencies:
   # Text to speech
   flutter_tts: ^3.8.5
 
+  # Shimmer loading
+  shimmer: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

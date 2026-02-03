@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/edit_profile_shimmer.dart';
+import '../../core/error/error_handler.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
@@ -47,22 +49,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         });
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to load profile'),
-              backgroundColor: Colors.red,
-            ),
+          ErrorHandler.showSnackBar(
+            ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile'),
+            isError: true,
+            context: context,
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading profile: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error loading profile.');
       }
     } finally {
       if (mounted) {
@@ -89,12 +85,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error picking image.');
       }
     }
   }
@@ -134,12 +125,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final lastName = _lastNameController.text.trim();
 
     if (firstName.isEmpty && lastName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter at least first name or last name'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Please enter at least first name or last name', isError: true, context: context);
       return;
     }
 
@@ -160,30 +146,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           if (Get.isRegistered<UserController>()) {
             await Get.find<UserController>().applyProfile(response.data!);
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Profile updated successfully'),
-              backgroundColor: Colors.green,
-            ),
+          ErrorHandler.showSnackBar(
+            ErrorHandler.getMessageFromResponse(response, successFallback: 'Profile updated successfully'),
+            isError: false,
+            context: context,
           );
           context.pop();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to update profile'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to update profile');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating profile: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error updating profile.');
       }
     } finally {
       if (mounted) {
@@ -236,9 +211,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               Expanded(
                 child: _isLoadingProfile
-                    ? const Center(
-                        child: CircularProgressIndicator(),
-                      )
+                    ? const EditProfileShimmer()
                     : SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Column(
