@@ -70,6 +70,12 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
       if (_selectedIds.contains(id)) {
         _selectedIds.remove(id);
       } else {
+        if (widget.maxSelect == 1) {
+          _selectedIds
+            ..clear()
+            ..add(id);
+          return;
+        }
         if (_selectedIds.length >= widget.maxSelect) return;
         _selectedIds.add(id);
       }
@@ -148,14 +154,15 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                   child: ListView.separated(
                     itemCount: exams.length,
                     separatorBuilder: (context, index) =>
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final e = exams[index];
                       final bool isUnlocked = unlockedIds.contains(e.id);
                       final selected = _selectedIds.contains(e.id);
-                      final disabled =
-                          isUnlocked ||
-                          (!selected && _selectedIds.length >= widget.maxSelect);
+                      final disabled = isUnlocked ||
+                          (!selected &&
+                              widget.maxSelect != 1 &&
+                              _selectedIds.length >= widget.maxSelect);
 
                       return InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -171,7 +178,10 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                                 : null)
                             : () => _toggle(e.id),
                         child: Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
                             border:
@@ -192,7 +202,7 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                                     Text(
                                       e.name,
                                       style: const TextStyle(
-                                        fontSize: 18,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w800,
                                       ),
                                       maxLines: 2,
@@ -202,7 +212,7 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                                     Text(
                                       'Master your certification exam',
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: 12.5,
                                         color: Colors.grey[700],
                                       ),
                                     ),
