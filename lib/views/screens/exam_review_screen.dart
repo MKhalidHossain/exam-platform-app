@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
+import '../../core/error/error_handler.dart';
 import '../../services/exam_service.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_model.dart';
@@ -201,9 +202,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     if (_isSubmitting) return;
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Exam ID missing. Please try again.')),
-      );
+      ErrorHandler.showSnackBar('Exam ID missing. Please try again.', isError: true, context: context);
       return;
     }
 
@@ -246,11 +245,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Final answers submitted.'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'Final answers submitted.'),
+          isError: false,
+          context: context,
         );
         context.push(
           '/history-detail',
@@ -261,21 +259,11 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
           },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Failed to submit answers.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to submit answers.');
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Submit failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showFromException(e, context: context, fallback: 'Submit failed. Please try again.');
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

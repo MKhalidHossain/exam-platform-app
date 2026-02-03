@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/error/app_exception.dart';
+import '../../core/error/error_handler.dart';
 import '../../models/exam_model.dart';
 import '../../services/exam_service.dart';
 
@@ -51,7 +53,9 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
   Future<List<ExamModel>> _load() async {
     final res = await widget.examService.getActiveExams();
     if (!res.success) {
-      throw Exception(res.message ?? 'Failed to fetch exams');
+      throw AppException(
+        userMessage: ErrorHandler.getMessageFromResponse(res, failureFallback: 'Failed to fetch exams'),
+      );
     }
     final exams = res.data ?? const [];
     if (_selectedIds.isNotEmpty) {

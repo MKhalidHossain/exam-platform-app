@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/auth_response.dart';
 import '../models/otp_response.dart';
@@ -39,32 +40,14 @@ class ApiService {
     } on SocketException catch (e) {
       debugPrint('❌ HTTP GET Error - SocketException:');
       debugPrint('   Error: $e');
-      
-      String errorMessage = 'Cannot connect to server. Please check:\n'
-          '• Server is running\n'
-          '• Network connection\n'
-          '• Server address: ${AppConstants.baseUrl}';
-      
       return ApiResponse<T>(
         success: false,
-        message: errorMessage,
+        message: ErrorHandler.getMessageFromException(e),
       );
     } catch (e) {
-      String errorMessage = 'Network error occurred';
-      if (e.toString().contains('Connection refused')) {
-        errorMessage = 'Connection refused. Server may be down or unreachable at ${AppConstants.baseUrl}';
-      } else if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
-        errorMessage = 'Request timeout. Please check:\n'
-            '• Backend server is running (npm start)\n'
-            '• Emulator: app uses 10.0.2.2 for Android, 127.0.0.1 for iOS\n'
-            '• Physical device: both must be on same WiFi, use your PC\'s LAN IP';
-      } else {
-        errorMessage = 'Network error: ${e.toString()}';
-      }
-      
       return ApiResponse<T>(
         success: false,
-        message: errorMessage,
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -101,46 +84,24 @@ class ApiService {
     } on SocketException catch (e) {
       debugPrint('❌ HTTP POST Error - SocketException:');
       debugPrint('   Error: $e');
-      debugPrint('   Address: ${e.address}');
-      debugPrint('   Port: ${e.port}');
-      
-      String errorMessage = 'Cannot connect to server. Please check:\n'
-          '• Server is running\n'
-          '• Network connection\n'
-          '• Server address: ${AppConstants.baseUrl}';
-      
       return ApiResponse<T>(
         success: false,
-        message: errorMessage,
+        message: ErrorHandler.getMessageFromException(e),
       );
     } on HttpException catch (e) {
       debugPrint('❌ HTTP POST Error - HttpException:');
       debugPrint('   Error: $e');
-      
       return ApiResponse<T>(
         success: false,
-        message: 'HTTP error: ${e.message}',
+        message: ErrorHandler.getMessageFromException(e),
       );
     } catch (e, stackTrace) {
       debugPrint('❌ HTTP POST Error:');
       debugPrint('   Error: $e');
       debugPrint('   Stack Trace: $stackTrace');
-      
-      String errorMessage = 'Network error occurred';
-      if (e.toString().contains('Connection refused')) {
-        errorMessage = 'Connection refused. Server may be down or unreachable at ${AppConstants.baseUrl}';
-      } else if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
-        errorMessage = 'Request timeout. Please check:\n'
-            '• Backend server is running (npm start)\n'
-            '• Emulator: app uses 10.0.2.2 for Android, 127.0.0.1 for iOS\n'
-            '• Physical device: both must be on same WiFi, use your PC\'s LAN IP';
-      } else {
-        errorMessage = 'Network error: ${e.toString()}';
-      }
-      
       return ApiResponse<T>(
         success: false,
-        message: errorMessage,
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -165,7 +126,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse<T>(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -227,7 +188,7 @@ class ApiService {
       debugPrint('   Error: $e');
       return ApiResponse<T>(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -276,7 +237,7 @@ class ApiService {
       debugPrint('❌ HTTP POST Multipart Error: $e');
       return ApiResponse<T>(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -296,7 +257,7 @@ class ApiService {
     } catch (e) {
       return ApiResponse<T>(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: ErrorHandler.getMessageFromException(e),
       );
     }
   }
@@ -359,11 +320,11 @@ class ApiService {
       debugPrint('   Error: $e');
       debugPrint('   Stack Trace: $stackTrace');
       debugPrint('   Response Body: ${response.body}');
-      
-      return ApiResponse<T>(
-        success: false,
-        message: 'Failed to parse response: ${e.toString()}',
+      final userMessage = ErrorHandler.getMessageFromErrorBody(
+        response.body,
+        statusCode: response.statusCode,
       );
+      return ApiResponse<T>(success: false, message: userMessage);
     }
   }
 

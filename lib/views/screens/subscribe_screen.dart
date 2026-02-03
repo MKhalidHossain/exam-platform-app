@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
+import '../../core/error/error_handler.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../services/exam_service.dart';
@@ -50,7 +51,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         professionalPlan = res.data;
         planError = null;
       } else {
-        planError = res.message ?? 'Failed to load plan';
+        planError = ErrorHandler.getMessageFromResponse(res, failureFallback: 'Failed to load plan');
       }
     });
   }
@@ -149,11 +150,10 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   void _handleUpgrade(PlanTier planTier) {
     // Handle upgrade logic here
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Upgrading to ${planTier == PlanTier.professional ? 'Professional' : 'Starter'} plan...'),
-        backgroundColor: Colors.green,
-      ),
+    ErrorHandler.showSnackBar(
+      'Upgrading to ${planTier == PlanTier.professional ? 'Professional' : 'Starter'} plan...',
+      isError: false,
+      context: context,
     );
     // TODO: Implement actual upgrade API call
   }
@@ -200,12 +200,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(createRes.message ?? 'Failed to create payment'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(createRes, context: context, failureFallback: 'Failed to create payment');
         return;
       }
 
@@ -213,12 +208,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
       if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
         setState(() => _isPaymentLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid payment response'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showSnackBar('Invalid payment response', isError: true, context: context);
         return;
       }
 
@@ -257,31 +247,16 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(confirmRes.message ?? 'Failed to confirm payment'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(confirmRes, context: context, failureFallback: 'Failed to confirm payment');
       }
     } on StripeException catch (e) {
       if (!mounted) return;
       setState(() => _isPaymentLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.error.message ?? 'Stripe error'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar(e.error.message ?? 'Payment was cancelled or failed.', isError: true, context: context);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isPaymentLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showFromException(e, context: context, fallback: 'Payment failed. Please try again.');
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/history_attempt_model.dart';
 import '../models/history_attempt_detail_model.dart';
@@ -38,7 +39,7 @@ class HistoryController extends GetxController {
       attempts.assignAll(response.data!.attempts);
       meta.value = response.data!.meta;
     } else {
-      errorMessage.value = response.message ?? 'Failed to load attempts';
+      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load attempts');
     }
 
     isLoading.value = false;
@@ -61,7 +62,7 @@ class HistoryController extends GetxController {
       attemptDetails[attemptId] = response.data!;
     } else {
       attemptDetailErrors[attemptId] =
-          response.message ?? 'Failed to load attempt details';
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load attempt details');
     }
 
     attemptDetailLoading[attemptId] = false;

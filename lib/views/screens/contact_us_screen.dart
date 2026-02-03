@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../../core/error/error_handler.dart';
 import '../../services/api_service.dart';
 
 class ContactUsScreen extends StatefulWidget {
@@ -38,12 +39,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error picking image.');
       }
     }
   }
@@ -128,11 +124,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       });
 
       if (response.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Your message has been sent successfully'),
-            backgroundColor: Colors.green,
-          ),
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(response, successFallback: 'Your message has been sent successfully'),
+          isError: false,
+          context: context,
         );
         _emailController.clear();
         _phoneController.clear();
@@ -142,24 +137,14 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           _selectedImage = null;
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Failed to send message'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to send message');
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error sending message.');
       }
     }
   }

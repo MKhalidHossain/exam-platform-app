@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
@@ -113,9 +114,7 @@ class HomeDashboard extends StatelessWidget {
   ) async {
     final examId = exam.id.trim();
     if (examId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Exam ID missing. Please try again.')),
-      );
+      ErrorHandler.showSnackBar('Exam ID missing. Please try again.', isError: true, context: context);
       return;
     }
 
@@ -144,12 +143,7 @@ class HomeDashboard extends StatelessWidget {
       hideLoading();
 
       if (!createRes.success || createRes.data == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(createRes.message ?? 'Failed to create payment'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(createRes, context: context, failureFallback: 'Failed to create payment');
         return;
       }
 
@@ -176,12 +170,7 @@ class HomeDashboard extends StatelessWidget {
       final clientSecret = createRes.data!['clientSecret'] as String?;
       final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
       if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid payment response'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showSnackBar('Invalid payment response', isError: true, context: context);
         return;
       }
 
@@ -219,31 +208,16 @@ class HomeDashboard extends StatelessWidget {
           },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(confirmRes.message ?? 'Failed to confirm payment'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromResponse(confirmRes, context: context, failureFallback: 'Failed to confirm payment');
       }
     } on StripeException catch (e) {
       if (!context.mounted) return;
       hideLoading();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.error.message ?? 'Stripe error'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar(e.error.message ?? 'Payment was cancelled or failed.', isError: true, context: context);
     } catch (e) {
       if (!context.mounted) return;
       hideLoading();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showFromException(e, context: context, fallback: 'Payment failed. Please try again.');
     }
   }
 

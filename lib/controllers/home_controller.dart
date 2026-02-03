@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/exam_model.dart';
 import '../services/api_service.dart';
@@ -39,7 +40,7 @@ class HomeController extends GetxController {
       exams.assignAll(response.data!.exams);
       meta.value = response.data!.meta;
     } else {
-      errorMessage.value = response.message ?? 'Failed to load exams';
+      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load exams');
     }
 
     isLoading.value = false;
