@@ -63,7 +63,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => context.pop(),
+                    onPressed: () => context.go('/home'),
                     icon: const Icon(Icons.arrow_back, size: 22),
                   ),
                   const SizedBox(width: 4),
