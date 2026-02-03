@@ -60,7 +60,6 @@ class HomeDashboard extends StatelessWidget {
 
   bool _isUnlocked(CourseItem course) {
     if (course.isUnlocked == true) return true;
-    if (course.isUnlocked == false) return false;
     final String rawId = (course.examId ?? course.id).trim();
     if (rawId.isEmpty) return false;
     if (unlockedCourseIds.contains(rawId)) return true;
@@ -386,7 +385,7 @@ class _HeaderSection extends StatelessWidget {
     final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
     final String? avatarDisplayUrl =
         avatarUrl != null && avatarUrl.isNotEmpty && avatarStamp != null
-            ? '${avatarUrl}${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
+            ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
             : avatarUrl;
     final primaryName = (user?.name ?? '').trim();
     final fallbackName =

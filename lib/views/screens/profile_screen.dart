@@ -63,7 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           : null;
       final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
       final String? avatarDisplayUrl = avatarUrl != null && avatarStamp != null
-          ? '${avatarUrl}${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
+          ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
           : avatarUrl;
 
       return Scaffold(
