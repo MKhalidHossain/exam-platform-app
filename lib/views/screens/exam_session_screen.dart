@@ -228,39 +228,33 @@ class ExamSessionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            _SessionCard(
+              title: 'Start Test',
+              description:
+                  'Begin your full exam simulation with timed closed-book and open-book sections.',
+              isPrimary: true,
+              onTap: () => _showInstructions(context, 'Full Exam', 'full_exam'),
+            ),
+            const SizedBox(height: 12),
             IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: _SessionCard(
-                      title: 'Open Book\nSession',
-                      description:
-                          'This session tests your ability to efficiently find and apply information from the official code documents under time pressure.',
-                      onTap: () =>
-                          _showInstructions(context, 'Open Book', 'open_book'),
+                    child: _InfoTile(
+                      title: 'Questions',
+                      value: '${questionCount ?? 1}',
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _SessionCard(
-                      title: 'Closed Book\nSession',
-                      description:
-                          'This session tests your foundational knowledge of concepts, definitions, and procedures that you must know from memory.',
-                      onTap: () =>
-                          _showInstructions(context, 'Closed Book', 'closed_book'),
+                  const Expanded(
+                    child: _InfoTile(
+                      title: 'Format',
+                      value: 'Full Exam',
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            _SessionCard(
-              title: 'Full Exam Simulation',
-              description:
-                  'Replicates the complete exam experience, starting with a timed closed-book session, followed by a timed open-book session.',
-              isPrimary: true,
-              onTap: () => _showInstructions(context, 'Full Exam', 'full_exam'),
             ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
@@ -353,6 +347,53 @@ class _SessionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  final String title;
+  final String value;
+
+  const _InfoTile({
+    required this.title,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF4FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD6E0F5), width: 1.1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF4B5563),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1E3C73),
+            ),
+          ),
+        ],
       ),
     );
   }
