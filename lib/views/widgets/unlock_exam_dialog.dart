@@ -353,12 +353,38 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: canConfirm
-                            ? () {
+                            ? () async {
                                 final selectedId = _selectedIds.first;
                                 final selectedExam = exams.firstWhere(
                                   (e) => e.id == selectedId,
                                   orElse: () => exams.first,
                                 );
+                                final bool? confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (dialogContext) {
+                                    return AlertDialog(
+                                      title: const Text('Confirm unlock'),
+                                      content: Text(
+                                        'Are you sure you want to unlock ${selectedExam.name} with your payment?',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(false),
+                                          child: const Text('No'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(true),
+                                          child: const Text('Yes'),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                                if (confirmed != true) return;
                                 Navigator.pop(
                                   context,
                                   UnlockExamDialogResult(
