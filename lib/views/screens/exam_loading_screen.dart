@@ -7,14 +7,16 @@ class ExamLoadingScreen extends StatefulWidget {
   final String courseTitle;
   final String? examId;
   final int? questionCount;
-  final String? examType;
+  final bool timedMode;
+  final bool regenerate;
 
   const ExamLoadingScreen({
     super.key,
     required this.courseTitle,
     this.examId,
     this.questionCount,
-    this.examType,
+    this.timedMode = true,
+    this.regenerate = false,
   });
 
   @override
@@ -25,6 +27,16 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
   final ExamService _examService = ExamService();
   bool _isLoading = true;
   String? _errorMessage;
+
+  bool _isLimitMessage(String? message) {
+    if (message == null) return false;
+    final lowered = message.toLowerCase();
+    return lowered.contains('monthly free questions limit') ||
+        lowered.contains('monthly free question limit') ||
+        lowered.contains('free questions limit') ||
+        lowered.contains('monthly limit') ||
+        lowered.contains('purchase to unlock');
+  }
 
   @override
   void initState() {
@@ -46,22 +58,34 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     final response = await _examService.startExam(
       examId: examId,
       questionCount: questionCount,
-      recreate: false,
-      examType: widget.examType,
+      regenerate: widget.regenerate,
     );
 
     if (!mounted) return;
 
     if (response.success && response.data != null) {
+      DateTime? startTime;
+      DateTime? endTime;
+      int? durationMinutes;
+      if (widget.timedMode) {
+        durationMinutes = response.data!.durationMinutes;
+        startTime = DateTime.now();
+        if (durationMinutes != null && durationMinutes > 0) {
+          endTime = startTime.add(Duration(minutes: durationMinutes));
+        }
+      }
+      final int sessionId = DateTime.now().millisecondsSinceEpoch;
       context.go(
         '/mcq',
         extra: {
           'courseTitle': widget.courseTitle,
           'examId': examId,
           'questions': response.data!.questions,
-          'startTime': response.data!.startTime,
-          'endTime': response.data!.endTime,
-          'durationMinutes': response.data!.durationMinutes,
+          'startTime': startTime,
+          'endTime': endTime,
+          'durationMinutes': durationMinutes,
+          'timedMode': widget.timedMode,
+          'sessionId': sessionId,
         },
       );
       return;
@@ -125,6 +149,10 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () {
+                      if (_isLimitMessage(_errorMessage)) {
+                        context.go('/subscribe');
+                        return;
+                      }
                       setState(() {
                         _isLoading = true;
                         _errorMessage = null;

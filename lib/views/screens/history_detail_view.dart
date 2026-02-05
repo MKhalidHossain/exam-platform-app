@@ -8,7 +8,9 @@ import 'history_testimonial_dialog.dart';
 import 'history_thank_you_dialog.dart';
 import '../widgets/app_shimmer.dart';
 import '../../controllers/history_controller.dart';
+import '../../controllers/user_controller.dart';
 import '../../models/history_attempt_detail_model.dart';
+import '../../models/plan_tier.dart';
 
 class HistoryDetailView extends StatefulWidget {
   const HistoryDetailView({
@@ -280,6 +282,11 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final UserController userController = Get.isRegistered<UserController>()
+          ? Get.find<UserController>()
+          : Get.put(UserController());
+      final bool isPro =
+          userController.planTier.value == PlanTier.professional;
       final attemptId = widget.entry.attemptId;
       final HistoryAttemptDetail? detail = attemptId == null
           ? null
@@ -761,13 +768,14 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 );
                                 return;
                               }
+                              final int regenerateCount = isPro ? 30 : 2;
                               context.push(
                                 '/exam-loading',
                                 extra: {
                                   'courseTitle': examName,
                                   'examId': examId,
-                                  'questionCount': 120,
-                                  'examType': 'full_exam',
+                                  'questionCount': regenerateCount,
+                                  'regenerate': true,
                                 },
                               );
                             },

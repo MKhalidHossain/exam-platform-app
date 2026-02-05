@@ -75,7 +75,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back),
-                        onPressed: () => context.pop(),
+                        onPressed: () => context.go('/home'),
                         color: const Color(0xFF2D4F88),
                       ),
                       const Expanded(

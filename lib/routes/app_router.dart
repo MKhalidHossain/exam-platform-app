@@ -214,12 +214,27 @@ GoRouter getRouter() {
           int? questionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
+          bool timedMode = true;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
             if (value is int) return value;
             if (value is num) return value.toInt();
             return int.tryParse(value.toString());
+          }
+
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
           }
 
           if (extra is Map) {
@@ -230,6 +245,7 @@ GoRouter getRouter() {
                 extra['effectivitySheetContent']?.toString();
             bodyOfKnowledgeContent =
                 extra['bodyOfKnowledgeContent']?.toString();
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
           }
           return ExamSessionScreen(
             courseTitle: title,
@@ -237,6 +253,7 @@ GoRouter getRouter() {
             questionCount: questionCount,
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
+            timedMode: timedMode,
           );
         },
       ),
@@ -248,7 +265,8 @@ GoRouter getRouter() {
           String title = 'API 570 - Piping Inspector';
           String? examId;
           int? questionCount;
-          String? examType;
+          bool timedMode = true;
+          bool regenerate = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -257,17 +275,33 @@ GoRouter getRouter() {
             return int.tryParse(value.toString());
           }
 
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
-            examType = extra['examType']?.toString();
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            regenerate = parseBool(extra['regenerate'], fallback: regenerate);
           }
           return ExamLoadingScreen(
             courseTitle: title,
             examId: examId,
             questionCount: questionCount,
-            examType: examType,
+            timedMode: timedMode,
+            regenerate: regenerate,
           );
         },
       ),
@@ -282,6 +316,8 @@ GoRouter getRouter() {
           DateTime? endTime;
           int? durationMinutes;
           String? examId;
+          bool timedMode = true;
+          int? sessionId;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -296,6 +332,20 @@ GoRouter getRouter() {
             return DateTime.tryParse(value.toString());
           }
 
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
@@ -306,14 +356,21 @@ GoRouter getRouter() {
             startTime = parseDate(extra['startTime']);
             endTime = parseDate(extra['endTime']);
             durationMinutes = parseInt(extra['durationMinutes']);
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            final rawSessionId = extra['sessionId'];
+            if (rawSessionId != null) {
+              sessionId = int.tryParse(rawSessionId.toString());
+            }
           }
           return McqScreen(
+            key: sessionId != null ? ValueKey(sessionId) : null,
             courseTitle: title,
             examId: examId,
             questions: questions,
             startTime: startTime,
             endTime: endTime,
             durationMinutes: durationMinutes,
+            timedMode: timedMode,
           );
         },
       ),
@@ -328,6 +385,20 @@ GoRouter getRouter() {
           Set<int> flagged = const {};
           String? examId;
           List<int>? timeSpentSec;
+          bool autoSubmit = false;
+          bool parseBool(dynamic value, {bool fallback = false}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
@@ -338,6 +409,7 @@ GoRouter getRouter() {
                   .map((e) => int.tryParse(e.toString()) ?? 0)
                   .toList();
             }
+            autoSubmit = parseBool(extra['autoSubmit'], fallback: autoSubmit);
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
               selected = rawSelected.map(
@@ -361,6 +433,7 @@ GoRouter getRouter() {
             flagged: flagged,
             examId: examId,
             timeSpentSec: timeSpentSec,
+            autoSubmit: autoSubmit,
           );
         },
       ),

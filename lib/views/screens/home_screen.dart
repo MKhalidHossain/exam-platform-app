@@ -241,11 +241,40 @@ class HomeDashboard extends StatelessWidget {
         children: [
           _HeaderSection(planTier: planTier, user: user),
           const SizedBox(height: 16),
-          _AnnouncementBanner(
-            text:
-                'Welcome to the new "Inspector\'s Path"\nNew content for API 570 has been added.',
-          ),
-          const SizedBox(height: 20),
+          Obx(() {
+            final bool loading =
+                controller.isAnnouncementLoading.value &&
+                controller.announcements.isEmpty;
+            final String? message = controller.announcements.isNotEmpty
+                ? controller.announcements.first.message.trim()
+                : null;
+
+            if (loading) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: AppShimmer(
+                  child: Container(
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            if (message == null || message.isEmpty) {
+              return const SizedBox(height: 20);
+            }
+
+            return Column(
+              children: [
+                _AnnouncementBanner(text: message),
+                const SizedBox(height: 20),
+              ],
+            );
+          }),
           Text(
             'Welcome back, $displayName!',
             style: const TextStyle(

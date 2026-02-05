@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'history_models.dart';
@@ -717,7 +718,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                   SizedBox(height: 16 * scale),
                   Center(
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => context.go('/home'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F3C8A),
                         padding: EdgeInsets.symmetric(
