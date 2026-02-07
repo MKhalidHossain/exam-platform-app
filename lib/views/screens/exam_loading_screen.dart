@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lottie/lottie.dart';
 import '../../core/error/error_handler.dart';
 import '../../services/exam_service.dart';
 
@@ -38,6 +39,12 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
         lowered.contains('purchase to unlock');
   }
 
+  bool _isTimeoutMessage(String? message) {
+    if (message == null) return false;
+    final lowered = message.toLowerCase();
+    return lowered.contains('timeout') || lowered.contains('took too long');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +69,11 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     );
 
     if (!mounted) return;
+
+    if (response.statusCode == 403) {
+      context.go('/subscribe');
+      return;
+    }
 
     if (response.success && response.data != null) {
       DateTime? startTime;
@@ -113,16 +125,16 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
               children: [
                 const SizedBox(height: 60),
                 if (_isLoading) ...[
-                  const SizedBox(
-                    width: 70,
-                    height: 70,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 8,
-                      color: Color(0xFF1E4C9A),
-                      backgroundColor: Color(0xFFD5D8DE),
+                  SizedBox(
+                    width: 250,
+                    height: 240,
+                    child: Lottie.asset(
+                      'assets/lottie/loading_run.json',
+                      fit: BoxFit.contain,
+                      repeat: true,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                   Text(
                     'Generating ${widget.questionCount ?? 1} questions for your ${widget.courseTitle} exam... This may take a minute.',
                     textAlign: TextAlign.center,
@@ -134,19 +146,56 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
                     ),
                   ),
                 ] else ...[
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Color(0xFFE24B4B)),
-                  const SizedBox(height: 16),
-                  Text(
-                    _errorMessage ?? 'Something went wrong.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF111827),
+                  if (_isTimeoutMessage(_errorMessage)) ...[
+                    SizedBox(
+                      width: 220,
+                      height: 120,
+                      child: Lottie.asset(
+                        'assets/lottie/timeout.json',
+                        fit: BoxFit.contain,
+                        repeat: true,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 10),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          const TextSpan(
+                            text: 'Timeout. ',
+                            style: TextStyle(color: Color(0xFFE24B4B)),
+                          ),
+                          const TextSpan(
+                            text: 'Try again',
+                            style: TextStyle(color: Color(0xFF1E4C9A)),
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ] else ...[
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Color(0xFFE24B4B),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage ?? 'Something went wrong.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   ElevatedButton(
                     onPressed: () {
                       if (_isLimitMessage(_errorMessage)) {

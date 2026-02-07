@@ -307,12 +307,14 @@ class ApiService {
           success: true,
           message: message,
           data: parsedData,
+          statusCode: response.statusCode,
         );
       } else {
         return ApiResponse<T>(
           success: false,
           message: message,
           error: jsonData['error'],
+          statusCode: response.statusCode,
         );
       }
     } catch (e, stackTrace) {
@@ -324,7 +326,11 @@ class ApiService {
         response.body,
         statusCode: response.statusCode,
       );
-      return ApiResponse<T>(success: false, message: userMessage);
+      return ApiResponse<T>(
+        success: false,
+        message: userMessage,
+        statusCode: response.statusCode,
+      );
     }
   }
 
