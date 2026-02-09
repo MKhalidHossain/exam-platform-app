@@ -18,6 +18,7 @@ class HomeController extends GetxController {
       Rx<AnnouncementsMeta?>(null);
   final RxBool isAnnouncementLoading = false.obs;
   final RxString announcementError = ''.obs;
+  final RxBool sessionExpired = false.obs;
 
   @override
   void onInit() {
@@ -35,6 +36,7 @@ class HomeController extends GetxController {
     announcementsMeta.value = null;
     isAnnouncementLoading.value = false;
     announcementError.value = '';
+    sessionExpired.value = false;
   }
 
   Future<void> fetchActiveExams() async {
@@ -46,6 +48,10 @@ class HomeController extends GetxController {
       ApiEndpoints.exams,
       fromJson: (json) => ActiveExamsData.fromJson(json),
     );
+
+    if (response.statusCode == 401) {
+      sessionExpired.value = true;
+    }
 
     if (response.success && response.data != null) {
       exams.assignAll(response.data!.exams);
@@ -66,6 +72,10 @@ class HomeController extends GetxController {
       ApiEndpoints.announcement,
       fromJson: (json) => AnnouncementsData.fromJson(json),
     );
+
+    if (response.statusCode == 401) {
+      sessionExpired.value = true;
+    }
 
     if (response.success && response.data != null) {
       announcements.assignAll(response.data!.announcements);

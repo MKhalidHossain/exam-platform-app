@@ -12,8 +12,9 @@ import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
 import '../widgets/unlock_exam_dialog.dart';
 import '../../services/exam_service.dart';
+import '../../services/storage_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final PlanTier planTier;
   final Set<String> unlockedCourseIds;
 
@@ -24,24 +25,105 @@ class HomeScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final UserController userController = Get.isRegistered<UserController>()
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  late final UserController _userController;
+  late final HomeController _homeController;
+  final StorageService _storageService = StorageService();
+  final List<Worker> _sessionWorkers = <Worker>[];
+  bool _sessionRedirected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
         : Get.put(UserController());
+    _homeController = Get.isRegistered<HomeController>()
+        ? Get.find<HomeController>()
+        : Get.put(HomeController());
 
+    _sessionWorkers.add(
+      ever<bool>(_userController.sessionExpired, (expired) {
+        if (expired) _handleSessionExpired();
+      }),
+    );
+    _sessionWorkers.add(
+      ever<bool>(_homeController.sessionExpired, (expired) {
+        if (expired) _handleSessionExpired();
+      }),
+    );
+
+    if (_userController.sessionExpired.value ||
+        _homeController.sessionExpired.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleSessionExpired();
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshAll();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    for (final worker in _sessionWorkers) {
+      worker.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshAll();
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    if (!_homeController.isLoading.value) {
+      await _homeController.fetchActiveExams();
+    }
+    if (!_homeController.isAnnouncementLoading.value) {
+      await _homeController.fetchAnnouncements();
+    }
+    if (!_userController.isLoading.value) {
+      await _userController.refreshProfile();
+    }
+  }
+
+  Future<void> _handleSessionExpired() async {
+    if (_sessionRedirected) return;
+    _sessionRedirected = true;
+
+    await _storageService.logout();
+    await _userController.clearState();
+    _homeController.clearState();
+
+    if (!mounted) return;
+    context.go('/login');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Obx(() {
-      final user = userController.user.value;
+      final user = _userController.user.value;
       final effectivePlan =
-          user == null ? planTier : userController.planTier.value;
-      final effectiveUnlocked = user == null &&
-              userController.unlockedExamIds.value.isEmpty
-          ? unlockedCourseIds
-          : userController.unlockedExamIds.value;
+          user == null ? widget.planTier : _userController.planTier.value;
+      final effectiveUnlocked =
+          user == null && _userController.unlockedExamIds.value.isEmpty
+              ? widget.unlockedCourseIds
+              : _userController.unlockedExamIds.value;
 
       return HomeDashboard(
         planTier: effectivePlan,
         unlockedCourseIds: effectiveUnlocked,
         user: user,
+        onRefresh: _refreshAll,
       );
     });
   }
@@ -51,12 +133,14 @@ class HomeDashboard extends StatelessWidget {
   final PlanTier planTier;
   final Set<String> unlockedCourseIds;
   final UserModel? user;
+  final Future<void> Function()? onRefresh;
 
   const HomeDashboard({
     super.key,
     required this.planTier,
     required this.unlockedCourseIds,
     this.user,
+    this.onRefresh,
   });
 
   bool _isUnlocked(CourseItem course) {
@@ -236,181 +320,193 @@ class HomeDashboard extends StatelessWidget {
         : (primaryName.isNotEmpty ? primaryName : planLabel);
 
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        children: [
-          _HeaderSection(planTier: planTier, user: user),
-          const SizedBox(height: 16),
-          Obx(() {
-            final bool loading =
-                controller.isAnnouncementLoading.value &&
-                controller.announcements.isEmpty;
-            final String? message = controller.announcements.isNotEmpty
-                ? controller.announcements.first.message.trim()
-                : null;
+      child: RefreshIndicator(
+        onRefresh: onRefresh ?? () async {},
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          children: [
+            _HeaderSection(planTier: planTier, user: user),
+            const SizedBox(height: 16),
+            Obx(() {
+              final bool loading =
+                  controller.isAnnouncementLoading.value &&
+                  controller.announcements.isEmpty;
+              final String? message = controller.announcements.isNotEmpty
+                  ? controller.announcements.first.message.trim()
+                  : null;
 
-            if (loading) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: AppShimmer(
-                  child: Container(
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+              if (loading) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: AppShimmer(
+                    child: Container(
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
-                ),
-              );
-            }
-
-            if (message == null || message.isEmpty) {
-              return const SizedBox(height: 20);
-            }
-
-            return Column(
-              children: [
-                _AnnouncementBanner(text: message),
-                const SizedBox(height: 20),
-              ],
-            );
-          }),
-          Text(
-            'Welcome back, $displayName!',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF111827),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Select a Certification to start practicing',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF4B5563),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Obx(() {
-            final bool isLoading = controller.isLoading.value;
-            final List<CourseItem> items = controller.exams.isNotEmpty
-                ? controller.exams
-                    .map(
-                      (exam) => CourseItem(
-                        id: exam.id ?? exam.name ?? '',
-                        title: exam.name ?? 'Certification Exam',
-                        subtitle: 'Master your certification exam',
-                        imageUrl: exam.image?.url,
-                        imageAsset: 'assets/images/onboarding1.png',
-                        examId: exam.id,
-                        questionCount: exam.questionCount,
-                        effectivitySheetContent: exam.effectivitySheetContent,
-                        bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
-                        isUnlocked: exam.unlocked,
-                        unlockPrice: exam.unlockPrice,
-                        currency: exam.currency,
-                      ),
-                    )
-                    .toList()
-                : _courses;
-            final unlockedItems = <CourseItem>[];
-            final lockedItems = <CourseItem>[];
-            for (final course in items) {
-              if (_isUnlocked(course)) {
-                unlockedItems.add(course);
-              } else {
-                lockedItems.add(course);
+                );
               }
-            }
-            final orderedItems = [...unlockedItems, ...lockedItems];
 
-            if (isLoading && controller.exams.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: AppShimmer(
-                  child: Column(
-                    children: List.generate(3, (index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          height: 110,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
+              if (message == null || message.isEmpty) {
+                return const SizedBox(height: 20);
+              }
+
+              return Column(
+                children: [
+                  _AnnouncementBanner(text: message),
+                  const SizedBox(height: 20),
+                ],
               );
-            }
-
-            return Column(
-              children: orderedItems.map((course) {
-                final isUnlocked = _isUnlocked(course);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: CourseCard(
-                    course: course,
-                    isUnlocked: isUnlocked,
-                    showPriceUnlock: planTier == PlanTier.professional,
-                    onTap: () {
-                      if (isUnlocked || planTier == PlanTier.starter) {
-                        context.push(
-                          '/quiz-settings',
-                          extra: {
-                            'courseTitle': course.title,
-                            'examId': course.examId ?? course.id,
-                            'questionCount': course.questionCount,
-                            'effectivitySheetContent':
-                                course.effectivitySheetContent,
-                            'bodyOfKnowledgeContent':
-                                course.bodyOfKnowledgeContent,
-                          },
-                        );
-                        return;
-                      }
-
-                      showDialog<UnlockExamDialogResult>(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (dialogContext) => UnlockExamDialog(
-                          examService: ExamService(),
-                          maxSelect: 1,
-                          initialSelectedId: course.examId ?? course.id,
-                          unlockedIds: unlockedCourseIds,
+            }),
+            Text(
+              'Welcome back, $displayName!',
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Select a Certification to start practicing',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF4B5563),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Obx(() {
+              final bool isLoading = controller.isLoading.value;
+              final List<CourseItem> items = controller.exams.isNotEmpty
+                  ? controller.exams
+                      .map(
+                        (exam) => CourseItem(
+                          id: exam.id ?? exam.name ?? '',
+                          title: exam.name ?? 'Certification Exam',
+                          subtitle: 'Master your certification exam',
+                          imageUrl: exam.image?.url,
+                          imageAsset: 'assets/images/onboarding1.png',
+                          examId: exam.id,
+                          questionCount: exam.questionCount,
+                          effectivitySheetContent:
+                              exam.effectivitySheetContent,
+                          bodyOfKnowledgeContent:
+                              exam.bodyOfKnowledgeContent,
+                          isUnlocked: exam.unlocked,
+                          unlockPrice: exam.unlockPrice,
+                          currency: exam.currency,
                         ),
-                      ).then((result) {
-                        if (result == null) return;
-                        if (result.alreadyUnlocked) {
+                      )
+                      .toList()
+                  : <CourseItem>[];
+              final unlockedItems = <CourseItem>[];
+              final lockedItems = <CourseItem>[];
+              for (final course in items) {
+                if (_isUnlocked(course)) {
+                  unlockedItems.add(course);
+                } else {
+                  lockedItems.add(course);
+                }
+              }
+              final orderedItems = [...unlockedItems, ...lockedItems];
+
+              if (isLoading && controller.exams.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: AppShimmer(
+                    child: Column(
+                      children: List.generate(3, (index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            height: 110,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                );
+              }
+
+              if (!isLoading && controller.exams.isEmpty) {
+                return const _EmptyState(
+                  message: 'No certifications available yet. Pull to refresh.',
+                );
+              }
+
+              return Column(
+                children: orderedItems.map((course) {
+                  final isUnlocked = _isUnlocked(course);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: CourseCard(
+                      course: course,
+                      isUnlocked: isUnlocked,
+                      showPriceUnlock: planTier == PlanTier.professional,
+                      onTap: () {
+                        if (isUnlocked || planTier == PlanTier.starter) {
                           context.push(
                             '/quiz-settings',
                             extra: {
-                              'courseTitle': result.exam.name,
-                              'examId': result.exam.id,
-                              'questionCount': result.exam.questionCount,
+                              'courseTitle': course.title,
+                              'examId': course.examId ?? course.id,
+                              'questionCount': course.questionCount,
                               'effectivitySheetContent':
-                                  result.exam.effectivitySheetContent,
+                                  course.effectivitySheetContent,
                               'bodyOfKnowledgeContent':
-                                  result.exam.bodyOfKnowledgeContent,
+                                  course.bodyOfKnowledgeContent,
                             },
                           );
                           return;
                         }
-                        _unlockExam(context, result.exam);
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
-            );
-          }),
-          const SizedBox(height: 12),
-          const _DisclaimerSection(),
-        ],
+
+                        showDialog<UnlockExamDialogResult>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (dialogContext) => UnlockExamDialog(
+                            examService: ExamService(),
+                            maxSelect: 1,
+                            initialSelectedId: course.examId ?? course.id,
+                            unlockedIds: unlockedCourseIds,
+                          ),
+                        ).then((result) {
+                          if (result == null) return;
+                          if (result.alreadyUnlocked) {
+                            context.push(
+                              '/quiz-settings',
+                              extra: {
+                                'courseTitle': result.exam.name,
+                                'examId': result.exam.id,
+                                'questionCount': result.exam.questionCount,
+                                'effectivitySheetContent':
+                                    result.exam.effectivitySheetContent,
+                                'bodyOfKnowledgeContent':
+                                    result.exam.bodyOfKnowledgeContent,
+                              },
+                            );
+                            return;
+                          }
+                          _unlockExam(context, result.exam);
+                        });
+                      },
+                    ),
+                  );
+                }).toList(),
+              );
+            }),
+            const SizedBox(height: 12),
+            const _DisclaimerSection(),
+          ],
+        ),
       ),
     );
   }
@@ -810,53 +906,37 @@ class CourseItem {
   });
 }
 
-const List<CourseItem> _courses = [
-  CourseItem(
-    id: 'api510',
-    title: 'API 510 - Pressure vessel Inspector',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding1.png',
-  ),
-  CourseItem(
-    id: 'api570',
-    title: 'API 570 - Piping Inspector',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding2.png',
-  ),
-  CourseItem(
-    id: 'api653',
-    title: 'API 653 - Aboveground Storage Tanks Inspector',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding3.png',
-  ),
-  CourseItem(
-    id: 'api1169',
-    title: 'API 1169 - Pipeline Construction Inspector',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding4.png',
-  ),
-  CourseItem(
-    id: 'api936',
-    title: 'API 936 - Refractory Personnel',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding1.png',
-  ),
-  CourseItem(
-    id: 'sife',
-    title: 'SIFE - Source Inspector Fixed Equipment',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding2.png',
-  ),
-  CourseItem(
-    id: 'sire',
-    title: 'SIRE - Source Inspector Rotating Equipment',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding3.png',
-  ),
-  CourseItem(
-    id: 'siee',
-    title: 'SIEE - Source Inspector Electrical Equipment',
-    subtitle: 'Master your certification exam',
-    imageAsset: 'assets/images/onboarding4.png',
-  ),
-];
+class _EmptyState extends StatelessWidget {
+  final String message;
+
+  const _EmptyState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 56,
+              color: Colors.grey.shade500,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

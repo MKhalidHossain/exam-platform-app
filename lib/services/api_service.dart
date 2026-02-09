@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ import 'storage_service.dart';
 
 class ApiService {
   final StorageService _storageService = StorageService();
+  static Completer<bool>? _refreshCompleter;
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storageService.getToken();
@@ -23,10 +25,65 @@ class ApiService {
     };
   }
 
+  Future<bool> _refreshToken() async {
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
+
+    try {
+      final refreshToken = await _storageService.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        completer.complete(false);
+        return false;
+      }
+
+      final uri = Uri.parse('${AppConstants.baseUrl}${ApiEndpoints.refreshToken}');
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'refreshToken': refreshToken}),
+          )
+          .timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final jsonData = jsonDecode(response.body);
+        final data = jsonData is Map<String, dynamic> ? jsonData['data'] : null;
+        final accessToken = data is Map ? data['accessToken'] : null;
+        final newRefreshToken = data is Map ? data['refreshToken'] : null;
+
+        if (accessToken is String && accessToken.isNotEmpty) {
+          await _storageService.saveToken(accessToken);
+          await _storageService.setLoggedIn(true);
+          if (newRefreshToken is String && newRefreshToken.isNotEmpty) {
+            await _storageService.saveRefreshToken(newRefreshToken);
+          }
+          completer.complete(true);
+          return true;
+        }
+      }
+    } catch (_) {
+      // Ignore refresh errors; caller will handle auth failure.
+    } finally {
+      if (_refreshCompleter == completer) {
+        _refreshCompleter = null;
+      }
+    }
+
+    completer.complete(false);
+    return false;
+  } 
+
   Future<ApiResponse<T>> get<T>(
     String endpoint, {
     Map<String, String>? queryParams,
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint')
@@ -35,6 +92,18 @@ class ApiService {
       final response = await http
           .get(uri, headers: await _getHeaders())
           .timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return get<T>(
+            endpoint,
+            queryParams: queryParams,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
 
       return _handleResponse<T>(response, fromJson);
     } on SocketException catch (e) {
@@ -56,6 +125,7 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? body,
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -79,6 +149,18 @@ class ApiService {
       debugPrint('   Status Code: ${response.statusCode}');
       debugPrint('   Response Body: ${response.body}');
       debugPrint('   Response Headers: ${response.headers}');
+
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return post<T>(
+            endpoint,
+            body: body,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
 
       return _handleResponse<T>(response, fromJson);
     } on SocketException catch (e) {
@@ -110,6 +192,7 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? body,
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -121,6 +204,18 @@ class ApiService {
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return put<T>(
+            endpoint,
+            body: body,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
 
       return _handleResponse<T>(response, fromJson);
     } catch (e) {
@@ -137,6 +232,7 @@ class ApiService {
     File? file,
     String fileField = 'avatar',
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -181,7 +277,21 @@ class ApiService {
       debugPrint('📡 HTTP PUT Multipart Response:');
       debugPrint('   Status Code: ${response.statusCode}');
       debugPrint('   Response Body: ${response.body}');
-      
+
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return putMultipart<T>(
+            endpoint,
+            fields: fields,
+            file: file,
+            fileField: fileField,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
+
       return _handleResponse<T>(response, fromJson);
     } catch (e) {
       debugPrint('❌ HTTP PUT Multipart Error:');
@@ -199,6 +309,7 @@ class ApiService {
     File? file,
     String fileField = 'attachment',
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -232,6 +343,20 @@ class ApiService {
       final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
       final response = await http.Response.fromStream(streamedResponse);
 
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return postMultipart<T>(
+            endpoint,
+            fields: fields,
+            file: file,
+            fileField: fileField,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
+
       return _handleResponse<T>(response, fromJson);
     } catch (e) {
       debugPrint('❌ HTTP POST Multipart Error: $e');
@@ -245,6 +370,7 @@ class ApiService {
   Future<ApiResponse<T>> delete<T>(
     String endpoint, {
     T Function(dynamic)? fromJson,
+    bool allowRefresh = true,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -252,6 +378,17 @@ class ApiService {
       final response = await http
           .delete(uri, headers: await _getHeaders())
           .timeout(AppConstants.apiTimeout);
+
+      if (response.statusCode == 401 && allowRefresh) {
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          return delete<T>(
+            endpoint,
+            fromJson: fromJson,
+            allowRefresh: false,
+          );
+        }
+      }
 
       return _handleResponse<T>(response, fromJson);
     } catch (e) {
@@ -364,6 +501,7 @@ class ApiService {
       ApiEndpoints.register,
       body: body,
       fromJson: (json) => AuthResponse.fromJson(json),
+      allowRefresh: false,
     );
 
     debugPrint('🌐 API Service - Register Response:');
@@ -415,6 +553,7 @@ class ApiService {
       ApiEndpoints.forgetPassword,
       body: body,
       fromJson: (json) => OtpResponse.fromJson(json),
+      allowRefresh: false,
     );
 
     debugPrint('🌐 API Service - Forgot Password Response:');
@@ -451,6 +590,7 @@ class ApiService {
       ApiEndpoints.resetPassword,
       body: body,
       fromJson: (json) => json as Map<String, dynamic>,
+      allowRefresh: false,
     );
 
     debugPrint('🌐 API Service - Verify OTP & Reset Password Response:');
@@ -485,6 +625,7 @@ class ApiService {
       ApiEndpoints.login,
       body: body,
       fromJson: (json) => AuthResponse.fromJson(json),
+      allowRefresh: false,
     );
 
     debugPrint('🌐 API Service - Login Response:');
