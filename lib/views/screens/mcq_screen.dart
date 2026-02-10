@@ -26,6 +26,8 @@ class McqScreen extends StatefulWidget {
 }
 
 class _McqScreenState extends State<McqScreen> {
+  static const int _defaultDurationMinutes = 130;
+
   late final List<_Question> _questions;
   late final FlutterTts _tts;
   int _currentIndex = 0;
@@ -73,27 +75,25 @@ class _McqScreenState extends State<McqScreen> {
 
   DateTime? _resolveEndTime() {
     final now = DateTime.now();
-    final int? durationMinutes = widget.durationMinutes;
-    final Duration? duration = (durationMinutes != null && durationMinutes > 0)
-        ? Duration(minutes: durationMinutes)
-        : null;
+    final int durationMinutes =
+        (widget.durationMinutes != null && widget.durationMinutes! > 0)
+            ? widget.durationMinutes!
+            : _defaultDurationMinutes;
+    final Duration duration = Duration(minutes: durationMinutes);
     DateTime? endTime = widget.endTime;
 
-    if (endTime == null && widget.startTime != null && duration != null) {
+    if (endTime == null && widget.startTime != null) {
       endTime = widget.startTime!.add(duration);
     }
-    if (endTime == null && duration != null) {
+    if (endTime == null) {
       endTime = now.add(duration);
     }
-    if (endTime == null) return null;
 
-    if (duration != null) {
-      if (endTime.isBefore(now)) {
-        endTime = now.add(duration);
-      }
-      if (widget.startTime != null && widget.startTime!.isAfter(now)) {
-        endTime = now.add(duration);
-      }
+    if (endTime.isBefore(now)) {
+      endTime = now.add(duration);
+    }
+    if (widget.startTime != null && widget.startTime!.isAfter(now)) {
+      endTime = now.add(duration);
     }
 
     return endTime;
@@ -757,7 +757,7 @@ class _DropdownHeader extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'View Explanation \$ Reference',
+              'View Explanation & Reference',
               style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w600,
