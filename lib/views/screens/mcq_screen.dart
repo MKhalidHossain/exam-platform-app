@@ -10,6 +10,7 @@ class McqScreen extends StatefulWidget {
   final DateTime? startTime;
   final DateTime? endTime;
   final int? durationMinutes;
+  final bool timedMode;
 
   const McqScreen({
     super.key,
@@ -19,6 +20,7 @@ class McqScreen extends StatefulWidget {
     this.startTime,
     this.endTime,
     this.durationMinutes,
+    this.timedMode = true,
   });
 
   @override
@@ -38,6 +40,8 @@ class _McqScreenState extends State<McqScreen> {
   bool _isSpeaking = false;
   Timer? _timer;
   Duration? _remaining;
+  bool _hasAutoSubmitted = false;
+  bool _isAutoSubmitting = false;
 
   @override
   void initState() {
@@ -45,7 +49,9 @@ class _McqScreenState extends State<McqScreen> {
     _questions = _buildQuestions(widget.questions);
     _tts = FlutterTts();
     _configureTts();
-    _setupTimer();
+    if (widget.timedMode) {
+      _setupTimer();
+    }
   }
 
   @override
@@ -101,6 +107,10 @@ class _McqScreenState extends State<McqScreen> {
 
   void _setupTimer() {
     _timer?.cancel();
+    if (!widget.timedMode) {
+      _remaining = null;
+      return;
+    }
     final DateTime? endTime = _resolveEndTime();
     if (endTime == null) return;
 
@@ -110,15 +120,41 @@ class _McqScreenState extends State<McqScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final remaining = endTime.difference(DateTime.now());
       if (!mounted) return;
-      setState(() {
-        if (remaining <= Duration.zero) {
-          _remaining = Duration.zero;
-          _timer?.cancel();
-        } else {
-          _remaining = remaining;
-        }
-      });
+      if (remaining <= Duration.zero) {
+        setState(() => _remaining = Duration.zero);
+        _timer?.cancel();
+        _handleTimeExpired();
+        return;
+      }
+      setState(() => _remaining = remaining);
     });
+  }
+
+  void _handleTimeExpired() {
+    if (_hasAutoSubmitted) return;
+    _hasAutoSubmitted = true;
+    unawaited(_tts.stop());
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isAutoSubmitting = true;
+    });
+
+    final List<dynamic> reviewQuestions =
+        (widget.questions != null && widget.questions!.isNotEmpty)
+            ? widget.questions!
+            : _questions;
+    context.go(
+      '/exam-review',
+      extra: {
+        'courseTitle': widget.courseTitle,
+        'examId': widget.examId,
+        'questions': reviewQuestions,
+        'selected': _selectedIndex,
+        'flagged': _flaggedQuestions,
+        'autoSubmit': true,
+      },
+    );
   }
 
   List<_Question> _buildQuestions(List<dynamic>? rawQuestions) {
@@ -294,12 +330,16 @@ class _McqScreenState extends State<McqScreen> {
     }
 
     unawaited(_tts.stop());
+    final List<dynamic> reviewQuestions =
+        (widget.questions != null && widget.questions!.isNotEmpty)
+            ? widget.questions!
+            : _questions;
     final result = await context.push<Object?>(
       '/exam-review',
       extra: {
         'courseTitle': widget.courseTitle,
         'examId': widget.examId,
-        'questions': _questions,
+        'questions': reviewQuestions,
         'selected': _selectedIndex,
         'flagged': _flaggedQuestions,
       },
@@ -365,9 +405,11 @@ class _McqScreenState extends State<McqScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Stack(
           children: [
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
             Row(
               children: [
                 IconButton(
@@ -402,8 +444,10 @@ class _McqScreenState extends State<McqScreen> {
                   label:
                       '${_selectedIndex.length}/${_questions.length} Question Answered',
                 ),
-                const SizedBox(width: 8),
-                _InfoPill(icon: Icons.timer, label: timerLabel),
+                if (widget.timedMode) ...[
+                  const SizedBox(width: 8),
+                  _InfoPill(icon: Icons.timer, label: timerLabel),
+                ],
                 const Spacer(),
                 IconButton(
                   onPressed: _toggleSpeak,
@@ -627,7 +671,40 @@ class _McqScreenState extends State<McqScreen> {
               ),
             ],
             const SizedBox(height: 18),
-            const _DisclaimerSection(),
+                const _DisclaimerSection(),
+              ],
+            ),
+            if (_isAutoSubmitting)
+              Positioned.fill(
+                child: Container(
+                  color: const Color(0xAAFFFFFF),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 6,
+                            color: Color(0xFF1E4C9A),
+                            backgroundColor: Color(0xFFD5D8DE),
+                          ),
+                        ),
+                        SizedBox(height: 14),
+                        Text(
+                          "Time is up. Submitting...",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

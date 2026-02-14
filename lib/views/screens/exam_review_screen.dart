@@ -14,6 +14,7 @@ class ExamReviewScreen extends StatefulWidget {
   final Set<int> flagged;
   final String? examId;
   final List<int>? timeSpentSec;
+  final bool autoSubmit;
 
   const ExamReviewScreen({
     super.key,
@@ -23,6 +24,7 @@ class ExamReviewScreen extends StatefulWidget {
     required this.flagged,
     this.examId,
     this.timeSpentSec,
+    this.autoSubmit = false,
   });
 
   @override
@@ -32,6 +34,18 @@ class ExamReviewScreen extends StatefulWidget {
 class _ExamReviewScreenState extends State<ExamReviewScreen> {
   final ExamService _examService = ExamService();
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoSubmit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _submitFinalAnswers();
+        }
+      });
+    }
+  }
 
   double _toDouble(dynamic value) {
     if (value == null) return 0;
@@ -273,6 +287,42 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.autoSubmit && _isSubmitting) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF2F5FF),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 6,
+                      color: Color(0xFF1E4C9A),
+                      backgroundColor: Color(0xFFD5D8DE),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    "Time is up. Submitting your answers...",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final int total = widget.questions.length;
     final List<int> answered = List<int>.generate(total, (i) => i)
         .where((i) => widget.selected[i] != null)
@@ -367,13 +417,35 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      'Submit Final Answers',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: _isSubmitting
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Submitting...',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Text(
+                            'Submit Final Answers',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
               ],

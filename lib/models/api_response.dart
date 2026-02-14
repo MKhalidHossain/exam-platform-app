@@ -3,12 +3,14 @@ class ApiResponse<T> {
   final String? message;
   final T? data;
   final dynamic error;
+  final int? statusCode;
 
   ApiResponse({
     required this.success,
     this.message,
     this.data,
     this.error,
+    this.statusCode,
   });
 
   factory ApiResponse.fromJson(
@@ -22,6 +24,7 @@ class ApiResponse<T> {
           ? fromJsonT(json['data'])
           : json['data'] as T?,
       error: json['error'],
+      statusCode: json['statusCode'] as int?,
     );
   }
 
@@ -31,6 +34,7 @@ class ApiResponse<T> {
       'message': message,
       'data': data,
       'error': error,
+      'statusCode': statusCode,
     };
   }
 }
