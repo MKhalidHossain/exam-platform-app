@@ -7,7 +7,8 @@ class AppConstants {
 
   // API Constants
   // static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
-  static const String baseUrl = 'https://back-end-ej7696.onrender.com/api/v1';
+  static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
+  // static const String baseUrl = 'https://back-end-ej7696.onrender.com/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
   // Stripe (use env or build config in production)

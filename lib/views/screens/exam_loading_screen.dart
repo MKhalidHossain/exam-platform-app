@@ -45,13 +45,24 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     return lowered.contains('timeout') || lowered.contains('took too long');
   }
 
+  bool _isQuestionServiceError(String? message) {
+    if (message == null) return false;
+    final lowered = message.toLowerCase();
+    return lowered.contains('question service') ||
+        lowered.contains('question generation') ||
+        lowered.contains('temporarily unavailable');
+  }
+
   @override
   void initState() {
     super.initState();
     _startExam();
   }
 
-  Future<void> _startExam() async {
+  static const int _maxRetriesFor502 = 2;
+  static const Duration _retryDelay502 = Duration(seconds: 12);
+
+  Future<void> _startExam({int retryCount = 0}) async {
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {
       setState(() {
@@ -73,6 +84,16 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     if (response.statusCode == 403) {
       context.go('/subscribe');
       return;
+    }
+
+    // 502 often means question service (e.g. Render) is cold-starting.
+    // Auto-retry after a short delay.
+    if (!response.success &&
+        response.statusCode == 502 &&
+        retryCount < _maxRetriesFor502) {
+      await Future<void>.delayed(_retryDelay502);
+      if (!mounted) return;
+      return _startExam(retryCount: retryCount + 1);
     }
 
     if (response.success && response.data != null) {
@@ -146,7 +167,8 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
                     ),
                   ),
                 ] else ...[
-                  if (_isTimeoutMessage(_errorMessage)) ...[
+                  if (_isQuestionServiceError(_errorMessage) ||
+                      _isTimeoutMessage(_errorMessage)) ...[
                     SizedBox(
                       width: 220,
                       height: 120,
