@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
+import 'package:get/get.dart';
 import '../../core/error/error_handler.dart';
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
 import '../../services/exam_service.dart';
 
 class ExamLoadingScreen extends StatefulWidget {
@@ -73,6 +76,11 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     }
 
     final int questionCount = widget.questionCount ?? 1;
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    final bool isPro = userController.planTier.value == PlanTier.professional;
+    final bool effectiveTimedMode = widget.timedMode && isPro;
     final response = await _examService.startExam(
       examId: examId,
       questionCount: questionCount,
@@ -100,7 +108,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
       DateTime? startTime;
       DateTime? endTime;
       int? durationMinutes;
-      if (widget.timedMode) {
+      if (effectiveTimedMode) {
         durationMinutes = response.data!.durationMinutes;
         startTime = DateTime.now();
         if (durationMinutes != null && durationMinutes > 0) {
@@ -117,7 +125,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
           'startTime': startTime,
           'endTime': endTime,
           'durationMinutes': durationMinutes,
-          'timedMode': widget.timedMode,
+          'timedMode': effectiveTimedMode,
           'sessionId': sessionId,
         },
       );

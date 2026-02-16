@@ -54,6 +54,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
       final double effectiveQuestionCount = _questionCount
           .clamp(1, maxSelectable)
           .toDouble();
+      final bool effectiveTimedMode = isPro ? _timedMode : false;
 
       return Scaffold(
         backgroundColor: const Color(0xFFF2F5FF),
@@ -195,27 +196,30 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
               //   ),
               // ),
               const SizedBox(height: 16),
-              _InfoCard(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Enable Timed Mode',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+              if (isPro) ...[
+                _InfoCard(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Enable Timed Mode',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    Switch(
-                      value: _timedMode,
-                      activeThumbColor: const Color(0xFF2F6DE0),
-                      onChanged: (value) => setState(() => _timedMode = value),
-                    ),
-                  ],
+                      Switch(
+                        value: _timedMode,
+                        activeThumbColor: const Color(0xFF2F6DE0),
+                        onChanged: (value) =>
+                            setState(() => _timedMode = value),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
               _PrimaryButton(
                 label: 'Start Quiz',
                 onTap: () {
@@ -236,7 +240,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                       'questionCount': effectiveQuestionCount.toInt(),
                       'effectivitySheetContent': widget.effectivitySheetContent,
                       'bodyOfKnowledgeContent': widget.bodyOfKnowledgeContent,
-                      'timedMode': _timedMode,
+                      'timedMode': effectiveTimedMode,
                     },
                   );
                 },

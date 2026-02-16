@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:get/get.dart';
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -32,6 +35,7 @@ class _McqScreenState extends State<McqScreen> {
 
   late final List<_Question> _questions;
   late final FlutterTts _tts;
+  late final bool _isTimedSession;
   int _currentIndex = 0;
   final Map<int, int> _selectedIndex = {};
   final Set<int> _lockedQuestions = {};
@@ -49,8 +53,15 @@ class _McqScreenState extends State<McqScreen> {
     _questions = _buildQuestions(widget.questions);
     _tts = FlutterTts();
     _configureTts();
-    if (widget.timedMode) {
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    final bool isPro = userController.planTier.value == PlanTier.professional;
+    _isTimedSession = widget.timedMode && isPro;
+    if (_isTimedSession) {
       _setupTimer();
+    } else {
+      _remaining = null;
     }
   }
 
@@ -107,7 +118,7 @@ class _McqScreenState extends State<McqScreen> {
 
   void _setupTimer() {
     _timer?.cancel();
-    if (!widget.timedMode) {
+    if (!_isTimedSession) {
       _remaining = null;
       return;
     }
@@ -444,7 +455,7 @@ class _McqScreenState extends State<McqScreen> {
                   label:
                       '${_selectedIndex.length}/${_questions.length} Question Answered',
                 ),
-                if (widget.timedMode) ...[
+                if (_isTimedSession) ...[
                   const SizedBox(width: 8),
                   _InfoPill(icon: Icons.timer, label: timerLabel),
                 ],
