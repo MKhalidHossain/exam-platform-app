@@ -7,8 +7,10 @@ class AppConstants {
 
   // API Constants
   // static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
-  static const String baseUrl = 'https://back-end-ej7696.onrender.com/api/v1';
+  static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
+  // null = no timeout (wait indefinitely).
+  static const Duration? examGenerationTimeout = null;
 
   // Stripe (use env or build config in production)
   static const String stripePublishableKey =

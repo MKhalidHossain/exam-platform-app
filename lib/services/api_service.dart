@@ -126,6 +126,7 @@ class ApiService {
     Map<String, dynamic>? body,
     T Function(dynamic)? fromJson,
     bool allowRefresh = true,
+    Duration? timeout = AppConstants.apiTimeout,
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
@@ -137,13 +138,14 @@ class ApiService {
       debugPrint('   Headers: $headers');
       debugPrint('   Body: $bodyJson');
       
-      final response = await http
-          .post(
-            uri,
-            headers: headers,
-            body: bodyJson,
-          )
-          .timeout(AppConstants.apiTimeout);
+      final responseFuture = http.post(
+        uri,
+        headers: headers,
+        body: bodyJson,
+      );
+      final response = timeout == null
+          ? await responseFuture
+          : await responseFuture.timeout(timeout);
 
       debugPrint('📡 HTTP POST Response:');
       debugPrint('   Status Code: ${response.statusCode}');

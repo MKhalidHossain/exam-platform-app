@@ -2,6 +2,7 @@ import '../models/api_response.dart';
 import '../models/exam_model.dart';
 import '../models/start_exam_model.dart';
 import '../utils/api_endpoints.dart';
+import '../utils/app_constants.dart';
 import 'api_service.dart';
 
 class ExamService {
@@ -56,6 +57,7 @@ class ExamService {
         }
         return StartExamData.fromJson(const <String, dynamic>{});
       },
+      timeout: AppConstants.examGenerationTimeout,
     );
   }
 
