@@ -112,12 +112,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Obx(() {
       final user = _userController.user.value;
-      final effectivePlan =
-          user == null ? widget.planTier : _userController.planTier.value;
+      final effectivePlan = user == null
+          ? widget.planTier
+          : _userController.planTier.value;
       final effectiveUnlocked =
           user == null && _userController.unlockedExamIds.value.isEmpty
-              ? widget.unlockedCourseIds
-              : _userController.unlockedExamIds.value;
+          ? widget.unlockedCourseIds
+          : _userController.unlockedExamIds.value;
 
       return HomeDashboard(
         planTier: effectivePlan,
@@ -149,9 +150,7 @@ class HomeDashboard extends StatelessWidget {
     if (rawId.isEmpty) return false;
     if (unlockedCourseIds.contains(rawId)) return true;
     final String normalized = rawId.toLowerCase();
-    return unlockedCourseIds.any(
-      (id) => id.trim().toLowerCase() == normalized,
-    );
+    return unlockedCourseIds.any((id) => id.trim().toLowerCase() == normalized);
   }
 
   void _showLoading(BuildContext context, String message) {
@@ -160,7 +159,9 @@ class HomeDashboard extends StatelessWidget {
       barrierDismissible: false,
       builder: (_) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             child: Row(
@@ -174,7 +175,10 @@ class HomeDashboard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     message,
-                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -192,13 +196,14 @@ class HomeDashboard extends StatelessWidget {
     }
   }
 
-  Future<void> _unlockExam(
-    BuildContext context,
-    ExamModel exam,
-  ) async {
+  Future<void> _unlockExam(BuildContext context, ExamModel exam) async {
     final examId = exam.id.trim();
     if (examId.isEmpty) {
-      ErrorHandler.showSnackBar('Exam ID missing. Please try again.', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Exam ID missing. Please try again.',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
@@ -227,7 +232,11 @@ class HomeDashboard extends StatelessWidget {
       hideLoading();
 
       if (!createRes.success || createRes.data == null) {
-        ErrorHandler.showFromResponse(createRes, context: context, failureFallback: 'Failed to create payment');
+        ErrorHandler.showFromResponse(
+          createRes,
+          context: context,
+          failureFallback: 'Failed to create payment',
+        );
         return;
       }
 
@@ -253,8 +262,14 @@ class HomeDashboard extends StatelessWidget {
 
       final clientSecret = createRes.data!['clientSecret'] as String?;
       final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
-      if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
-        ErrorHandler.showSnackBar('Invalid payment response', isError: true, context: context);
+      if (clientSecret == null ||
+          clientSecret.isEmpty ||
+          paymentIntentId == null) {
+        ErrorHandler.showSnackBar(
+          'Invalid payment response',
+          isError: true,
+          context: context,
+        );
         return;
       }
 
@@ -271,8 +286,10 @@ class HomeDashboard extends StatelessWidget {
       if (!context.mounted) return;
 
       showLoading('Confirming payment...');
-      final confirmRes =
-          await apiService.confirmExamStripePayment(examId, paymentIntentId);
+      final confirmRes = await apiService.confirmExamStripePayment(
+        examId,
+        paymentIntentId,
+      );
       if (!context.mounted) return;
       hideLoading();
 
@@ -292,16 +309,28 @@ class HomeDashboard extends StatelessWidget {
           },
         );
       } else {
-        ErrorHandler.showFromResponse(confirmRes, context: context, failureFallback: 'Failed to confirm payment');
+        ErrorHandler.showFromResponse(
+          confirmRes,
+          context: context,
+          failureFallback: 'Failed to confirm payment',
+        );
       }
     } on StripeException catch (e) {
       if (!context.mounted) return;
       hideLoading();
-      ErrorHandler.showSnackBar(e.error.message ?? 'Payment was cancelled or failed.', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        e.error.message ?? 'Payment was cancelled or failed.',
+        isError: true,
+        context: context,
+      );
     } catch (e) {
       if (!context.mounted) return;
       hideLoading();
-      ErrorHandler.showFromException(e, context: context, fallback: 'Payment failed. Please try again.');
+      ErrorHandler.showFromException(
+        e,
+        context: context,
+        fallback: 'Payment failed. Please try again.',
+      );
     }
   }
 
@@ -384,25 +413,24 @@ class HomeDashboard extends StatelessWidget {
               final bool isLoading = controller.isLoading.value;
               final List<CourseItem> items = controller.exams.isNotEmpty
                   ? controller.exams
-                      .map(
-                        (exam) => CourseItem(
-                          id: exam.id ?? exam.name ?? '',
-                          title: exam.name ?? 'Certification Exam',
-                          subtitle: 'Master your certification exam',
-                          imageUrl: exam.image?.url,
-                          imageAsset: 'assets/images/onboarding1.png',
-                          examId: exam.id,
-                          questionCount: exam.questionCount,
-                          effectivitySheetContent:
-                              exam.effectivitySheetContent,
-                          bodyOfKnowledgeContent:
-                              exam.bodyOfKnowledgeContent,
-                          isUnlocked: exam.unlocked,
-                          unlockPrice: exam.unlockPrice,
-                          currency: exam.currency,
-                        ),
-                      )
-                      .toList()
+                        .map(
+                          (exam) => CourseItem(
+                            id: exam.id ?? exam.name ?? '',
+                            title: exam.name ?? 'Certification Exam',
+                            subtitle: 'Master your certification exam',
+                            imageUrl: exam.image?.url,
+                            imageAsset: 'assets/images/onboarding1.png',
+                            examId: exam.id,
+                            questionCount: exam.questionCount,
+                            effectivitySheetContent:
+                                exam.effectivitySheetContent,
+                            bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
+                            isUnlocked: exam.unlocked,
+                            unlockPrice: exam.unlockPrice,
+                            currency: exam.currency,
+                          ),
+                        )
+                        .toList()
                   : <CourseItem>[];
               final unlockedItems = <CourseItem>[];
               final lockedItems = <CourseItem>[];
@@ -524,11 +552,11 @@ class _HeaderSection extends StatelessWidget {
     final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
     final String? avatarDisplayUrl =
         avatarUrl != null && avatarUrl.isNotEmpty && avatarStamp != null
-            ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
-            : avatarUrl;
+        ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
+        : avatarUrl;
     final primaryName = (user?.name ?? '').trim();
-    final fallbackName =
-        '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
+    final fallbackName = '${user?.firstName ?? ''} ${user?.lastName ?? ''}'
+        .trim();
     final userName = fallbackName.isNotEmpty
         ? fallbackName
         : (primaryName.isNotEmpty ? primaryName : 'User');
@@ -538,10 +566,11 @@ class _HeaderSection extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 26,
-          backgroundImage: avatarDisplayUrl != null && avatarDisplayUrl.isNotEmpty
+          backgroundImage:
+              avatarDisplayUrl != null && avatarDisplayUrl.isNotEmpty
               ? NetworkImage(avatarDisplayUrl)
               : const AssetImage('assets/images/onboarding1.png')
-                  as ImageProvider,
+                    as ImageProvider,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -582,9 +611,12 @@ class _PlanChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isPro = planTier == PlanTier.professional;
-    final Color bgColor = isPro ? const Color(0xFFE8F7EC) : const Color(0xFF2D4F88);
-    final Color borderColor =
-        isPro ? const Color(0xFF2DBD67) : const Color(0xFF2D4F88);
+    final Color bgColor = isPro
+        ? const Color(0xFFE8F7EC)
+        : const Color(0xFF2D4F88);
+    final Color borderColor = isPro
+        ? const Color(0xFF2DBD67)
+        : const Color(0xFF2D4F88);
     final Color textColor = isPro ? const Color(0xFF1D7A44) : Colors.white;
 
     return Container(
@@ -597,11 +629,7 @@ class _PlanChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.auto_awesome,
-            size: 16,
-            color: textColor,
-          ),
+          Icon(Icons.auto_awesome, size: 16, color: textColor),
           const SizedBox(width: 6),
           Text(
             isPro ? 'Professional' : 'Starter',
@@ -738,9 +766,12 @@ class CourseCard extends StatelessWidget {
 String _formatUnlockLabel(double? price, String? currency) {
   if (price == null) return 'Unlock for \$150';
   final trimmedCurrency = currency?.trim().toUpperCase();
-  final formatted =
-      price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
-  if (trimmedCurrency == null || trimmedCurrency.isEmpty || trimmedCurrency == 'USD') {
+  final formatted = price % 1 == 0
+      ? price.toStringAsFixed(0)
+      : price.toStringAsFixed(2);
+  if (trimmedCurrency == null ||
+      trimmedCurrency.isEmpty ||
+      trimmedCurrency == 'USD') {
     return 'Unlock for \$$formatted';
   }
   return 'Unlock for $trimmedCurrency $formatted';
@@ -765,10 +796,7 @@ class _CourseStatus extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: const [
-          _StatusDot(
-            color: Color(0xFF2DBD67),
-            icon: Icons.check,
-          ),
+          _StatusDot(color: Color(0xFF2DBD67), icon: Icons.check),
           SizedBox(width: 6),
           Text(
             'Unlocked',
@@ -804,10 +832,7 @@ class _CourseStatus extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: const [
-        _StatusDot(
-          color: Color(0xFFE24B4B),
-          icon: Icons.lock,
-        ),
+        _StatusDot(color: Color(0xFFE24B4B), icon: Icons.lock),
         SizedBox(width: 6),
         Text(
           'Locked',
@@ -837,11 +862,7 @@ class _StatusDot extends StatelessWidget {
         color: color.withOpacity(0.15),
         shape: BoxShape.circle,
       ),
-      child: Icon(
-        icon,
-        color: color,
-        size: 14,
-      ),
+      child: Icon(icon, color: color, size: 14),
     );
   }
 }
@@ -852,25 +873,31 @@ class _DisclaimerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text.rich(
             TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
+              text: 'Not affiliated with or endorsed by API. ',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
               ),
+              children: const [
+                TextSpan(
+                  text: 'See full disclaimer.',
+                  style: TextStyle(
+                    color: Color(0xFF2F6DE0),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 100),
+        ],
       ),
     );
   }

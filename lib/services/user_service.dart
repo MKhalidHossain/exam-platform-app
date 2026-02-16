@@ -40,19 +40,19 @@ class UserService {
     );
   }
 
-  /// Update profile with firstName, lastName, and avatar
+  /// Update profile with name, phone, and avatar
   Future<ApiResponse<UserModel>> updateProfile({
-    String? firstName,
-    String? lastName,
+    String? name,
+    String? phone,
     File? avatarFile,
   }) async {
     // Prepare fields
     final fields = <String, String>{};
-    if (firstName != null && firstName.isNotEmpty) {
-      fields['firstName'] = firstName;
+    if (name != null && name.isNotEmpty) {
+      fields['name'] = name;
     }
-    if (lastName != null && lastName.isNotEmpty) {
-      fields['lastName'] = lastName;
+    if (phone != null && phone.isNotEmpty) {
+      fields['phone'] = phone;
     }
 
     // Use multipart request if file is provided, otherwise use regular PUT

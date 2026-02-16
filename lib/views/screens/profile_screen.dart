@@ -62,6 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final String? avatarUrl = user?.avatar != null && user!.avatar!.isNotEmpty
           ? user.avatar
           : null;
+      final String email = (user?.email ?? '').trim();
       final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
       final String? avatarDisplayUrl = avatarUrl != null && avatarStamp != null
           ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
@@ -120,6 +121,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: Color(0xFF111827),
                                 ),
                               ),
+                              if (email.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  email,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 4),
                               Text(
                                 _getGreeting(),
