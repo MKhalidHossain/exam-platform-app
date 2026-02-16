@@ -83,7 +83,16 @@ class ErrorHandler {
       }
       final message = json['message'];
       if (message is String && message.trim().isNotEmpty) {
-        return _sanitizeForUi(message) ?? getMessageFromStatusCode(statusCode ?? 0);
+        final sanitized = _sanitizeForUi(message);
+        // 502 "Failed to reach question service" often means the AI question
+        // service (e.g. Render) is cold-starting; give a more actionable message
+        if (sanitized != null &&
+            (statusCode == 502 || statusCode == 503) &&
+            (message.toLowerCase().contains('question service') ||
+                message.toLowerCase().contains('failed to reach'))) {
+          return 'Question generation is temporarily unavailable. The service may be starting up—please try again in a moment.';
+        }
+        return sanitized ?? getMessageFromStatusCode(statusCode ?? 0);
       }
       final error = json['error'];
       if (error is String && error.trim().isNotEmpty) {
