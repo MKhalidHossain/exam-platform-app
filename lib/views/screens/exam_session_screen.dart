@@ -7,6 +7,7 @@ class ExamSessionScreen extends StatelessWidget {
   final int? questionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
+  final bool timedMode;
 
   const ExamSessionScreen({
     super.key,
@@ -15,12 +16,12 @@ class ExamSessionScreen extends StatelessWidget {
     this.questionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
+    this.timedMode = true,
   });
 
   void _showInstructions(
     BuildContext context,
     String sessionLabel,
-    String examType,
   ) {
     showDialog<void>(
       context: context,
@@ -149,7 +150,7 @@ class ExamSessionScreen extends StatelessWidget {
                               'courseTitle': courseTitle,
                               'examId': id,
                               'questionCount': questionCount ?? 1,
-                              'examType': examType,
+                              'timedMode': timedMode,
                             },
                           );
                         },
@@ -233,7 +234,7 @@ class ExamSessionScreen extends StatelessWidget {
               description:
                   'Begin your full exam simulation with timed closed-book and open-book sections.',
               isPrimary: true,
-              onTap: () => _showInstructions(context, 'Full Exam', 'full_exam'),
+              onTap: () => _showInstructions(context, 'Full Exam'),
             ),
             const SizedBox(height: 12),
             IntrinsicHeight(

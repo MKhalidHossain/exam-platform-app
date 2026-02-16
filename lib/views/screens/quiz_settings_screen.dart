@@ -51,8 +51,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
       final int totalQuestions = rawTotalQuestions > 0 ? rawTotalQuestions : 1;
       final int freeLimit = totalQuestions < 2 ? totalQuestions : 2;
       final int maxSelectable = isPro ? totalQuestions : freeLimit;
-      final double effectiveQuestionCount =
-          _questionCount.clamp(1, maxSelectable).toDouble();
+      final double effectiveQuestionCount = _questionCount
+          .clamp(1, maxSelectable)
+          .toDouble();
+      final bool effectiveTimedMode = isPro ? _timedMode : false;
 
       return Scaffold(
         backgroundColor: const Color(0xFFF2F5FF),
@@ -151,69 +153,73 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _InfoCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Focus on Specific Topics (Optional)',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      enabled: false,
-                      decoration: InputDecoration(
-                        hintText: 'e.g., welding, NDE, corrosion',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFF9CA3AF),
-                          fontWeight: FontWeight.w500,
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFF),
-                        disabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFC8D3E7)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Upgrade to a paid plan to use this feature.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF6B7280),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+              // _InfoCard(
+              //   child: Column(
+              //     crossAxisAlignment: CrossAxisAlignment.start,
+              //     children: [
+              //       const Text(
+              //         'Focus on Specific Topics (Optional)',
+              //         style: TextStyle(
+              //           fontSize: 20,
+              //           fontWeight: FontWeight.w700,
+              //           color: Color(0xFF111827),
+              //         ),
+              //       ),
+              //       const SizedBox(height: 8),
+              //       TextField(
+              //         enabled: false,
+              //         decoration: InputDecoration(
+              //           hintText: 'e.g., welding, NDE, corrosion',
+              //           hintStyle: const TextStyle(
+              //             color: Color(0xFF9CA3AF),
+              //             fontWeight: FontWeight.w500,
+              //           ),
+              //           filled: true,
+              //           fillColor: const Color(0xFFF8FAFF),
+              //           disabledBorder: OutlineInputBorder(
+              //             borderRadius: BorderRadius.circular(14),
+              //             borderSide: const BorderSide(color: Color(0xFFC8D3E7)),
+              //           ),
+              //         ),
+              //       ),
+              //       const SizedBox(height: 8),
+              //       const Text(
+              //         'Upgrade to a paid plan to use this feature.',
+              //         style: TextStyle(
+              //           fontSize: 13,
+              //           fontWeight: FontWeight.w500,
+              //           color: Color(0xFF6B7280),
+              //         ),
+              //       ),
+              //     ],
+              //   ),
+              // ),
               const SizedBox(height: 16),
-              _InfoCard(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Enable Timed Mode',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+              if (isPro) ...[
+                _InfoCard(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Enable Timed Mode',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    Switch(
-                      value: _timedMode,
-                      activeThumbColor: const Color(0xFF2F6DE0),
-                      onChanged: (value) => setState(() => _timedMode = value),
-                    ),
-                  ],
+                      Switch(
+                        value: _timedMode,
+                        activeThumbColor: const Color(0xFF2F6DE0),
+                        onChanged: (value) =>
+                            setState(() => _timedMode = value),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
               _PrimaryButton(
                 label: 'Start Quiz',
                 onTap: () {
@@ -232,10 +238,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                       'courseTitle': widget.courseTitle,
                       'examId': examId,
                       'questionCount': effectiveQuestionCount.toInt(),
-                      'effectivitySheetContent':
-                          widget.effectivitySheetContent,
-                      'bodyOfKnowledgeContent':
-                          widget.bodyOfKnowledgeContent,
+                      'effectivitySheetContent': widget.effectivitySheetContent,
+                      'bodyOfKnowledgeContent': widget.bodyOfKnowledgeContent,
+                      'timedMode': effectiveTimedMode,
                     },
                   );
                 },

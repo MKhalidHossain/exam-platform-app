@@ -38,6 +38,7 @@ class ApiEndpoints {
 
   // Support Endpoints
   static const String support = '/support';
+  static const String announcement = '/announcement';
 
   // Payment Endpoints (payments base is /payments)
   static const String payments = '/payments';

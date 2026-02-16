@@ -16,6 +16,7 @@ class UserController extends GetxController {
   final Rx<Set<String>> unlockedExamIds = Rx<Set<String>>(<String>{});
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
+  final RxBool sessionExpired = false.obs;
 
   @override
   void onInit() {
@@ -77,6 +78,9 @@ class UserController extends GetxController {
     errorMessage.value = '';
 
     final response = await _userService.getProfile();
+    if (response.statusCode == 401) {
+      sessionExpired.value = true;
+    }
     if (response.success && response.data != null) {
       await applyProfile(response.data!);
     } else {
@@ -120,5 +124,6 @@ class UserController extends GetxController {
     unlockedExamIds.value = <String>{};
     isLoading.value = false;
     errorMessage.value = '';
+    sessionExpired.value = false;
   }
 }

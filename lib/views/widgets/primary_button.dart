@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
-import 'app_shimmer.dart';
 
 class PrimaryButton extends StatelessWidget {
   final String text;
@@ -48,7 +47,14 @@ class PrimaryButton extends StatelessWidget {
                   padding: padding ?? const EdgeInsets.symmetric(horizontal: 24),
                 ),
                 child: isLoading
-                    ? const AppShimmerCircle(size: 20)
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: Colors.white,
+                        ),
+                      )
                     : Text(
                         text,
                         style: const TextStyle(
@@ -78,7 +84,14 @@ class PrimaryButton extends StatelessWidget {
                   padding: padding ?? const EdgeInsets.symmetric(horizontal: 24),
                 ),
                 child: isLoading
-                    ? const AppShimmerCircle(size: 20)
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: Colors.white,
+                        ),
+                      )
                     : Text(
                         text,
                         style: const TextStyle(

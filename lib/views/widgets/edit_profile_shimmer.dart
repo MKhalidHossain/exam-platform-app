@@ -28,7 +28,7 @@ class EditProfileShimmer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 40),
-            // First name field placeholder
+            // Name field placeholder
             Container(
               height: 56,
               decoration: BoxDecoration(
@@ -37,7 +37,7 @@ class EditProfileShimmer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            // Last name field placeholder
+            // Phone field placeholder
             Container(
               height: 56,
               decoration: BoxDecoration(
