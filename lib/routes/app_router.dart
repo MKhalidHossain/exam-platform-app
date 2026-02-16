@@ -57,7 +57,6 @@ GoRouter getRouter() {
         builder: (context, state) => const LoginScreen(),
       ),
      
-
       GoRoute(
         path: '/sign-up',
         name: 'sign-up',
@@ -501,7 +500,7 @@ GoRouter getRouter() {
                 extra['bodyOfKnowledgeContent']?.toString();
             amountPaid = parseInt(extra['amountPaid']) ?? amountPaid;
           }
-
+          
           return ExamUnlockSuccessScreen(
             courseTitle: title,
             examId: examId,
