@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../views/screens/splash_screen.dart';
 import '../views/screens/login_screen.dart';
 import '../views/screens/navbar_screen.dart';
-
 import '../views/screens/onboarding_screen.dart';
 import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';
@@ -57,7 +56,6 @@ GoRouter getRouter() {
         builder: (context, state) => const LoginScreen(),
       ),
      
-
       GoRoute(
         path: '/sign-up',
         name: 'sign-up',
@@ -501,7 +499,7 @@ GoRouter getRouter() {
                 extra['bodyOfKnowledgeContent']?.toString();
             amountPaid = parseInt(extra['amountPaid']) ?? amountPaid;
           }
-
+          
           return ExamUnlockSuccessScreen(
             courseTitle: title,
             examId: examId,
