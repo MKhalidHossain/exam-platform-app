@@ -39,7 +39,9 @@ class ApiService {
         return false;
       }
 
-      final uri = Uri.parse('${AppConstants.baseUrl}${ApiEndpoints.refreshToken}');
+      final uri = Uri.parse(
+        '${AppConstants.baseUrl}${ApiEndpoints.refreshToken}',
+      );
       final response = await http
           .post(
             uri,
@@ -77,7 +79,7 @@ class ApiService {
 
     completer.complete(false);
     return false;
-  } 
+  }
 
   Future<ApiResponse<T>> get<T>(
     String endpoint, {
@@ -86,9 +88,10 @@ class ApiService {
     bool allowRefresh = true,
   }) async {
     try {
-      final uri = Uri.parse('${AppConstants.baseUrl}$endpoint')
-          .replace(queryParameters: queryParams);
-      
+      final uri = Uri.parse(
+        '${AppConstants.baseUrl}$endpoint',
+      ).replace(queryParameters: queryParams);
+
       final response = await http
           .get(uri, headers: await _getHeaders())
           .timeout(AppConstants.apiTimeout);
@@ -132,17 +135,13 @@ class ApiService {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final headers = await _getHeaders();
       final bodyJson = body != null ? jsonEncode(body) : null;
-      
+
       debugPrint('📡 HTTP POST Request:');
       debugPrint('   URL: $uri');
       debugPrint('   Headers: $headers');
       debugPrint('   Body: $bodyJson');
-      
-      final responseFuture = http.post(
-        uri,
-        headers: headers,
-        body: bodyJson,
-      );
+
+      final responseFuture = http.post(uri, headers: headers, body: bodyJson);
       final response = timeout == null
           ? await responseFuture
           : await responseFuture.timeout(timeout);
@@ -198,7 +197,7 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
-      
+
       final response = await http
           .put(
             uri,
@@ -239,26 +238,26 @@ class ApiService {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final token = await _storageService.getToken();
-      
+
       final request = http.MultipartRequest('PUT', uri);
-      
+
       // Add headers
       request.headers['Accept'] = 'application/json';
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
-      
+
       // Add fields
       if (fields != null) {
         request.fields.addAll(fields);
       }
-      
+
       // Add file if provided
       if (file != null && await file.exists()) {
         final fileStream = http.ByteStream(file.openRead());
         final fileLength = await file.length();
         final fileName = file.path.split('/').last;
-        
+
         final multipartFile = http.MultipartFile(
           fileField,
           fileStream,
@@ -267,15 +266,17 @@ class ApiService {
         );
         request.files.add(multipartFile);
       }
-      
+
       debugPrint('📡 HTTP PUT Multipart Request:');
       debugPrint('   URL: $uri');
       debugPrint('   Fields: $fields');
       debugPrint('   File: ${file?.path}');
-      
-      final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
+
+      final streamedResponse = await request.send().timeout(
+        AppConstants.apiTimeout,
+      );
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       debugPrint('📡 HTTP PUT Multipart Response:');
       debugPrint('   Status Code: ${response.statusCode}');
       debugPrint('   Response Body: ${response.body}');
@@ -342,7 +343,9 @@ class ApiService {
         request.files.add(multipartFile);
       }
 
-      final streamedResponse = await request.send().timeout(AppConstants.apiTimeout);
+      final streamedResponse = await request.send().timeout(
+        AppConstants.apiTimeout,
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 401 && allowRefresh) {
@@ -376,7 +379,7 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
-      
+
       final response = await http
           .delete(uri, headers: await _getHeaders())
           .timeout(AppConstants.apiTimeout);
@@ -384,11 +387,7 @@ class ApiService {
       if (response.statusCode == 401 && allowRefresh) {
         final refreshed = await _refreshToken();
         if (refreshed) {
-          return delete<T>(
-            endpoint,
-            fromJson: fromJson,
-            allowRefresh: false,
-          );
+          return delete<T>(endpoint, fromJson: fromJson, allowRefresh: false);
         }
       }
 
@@ -407,18 +406,20 @@ class ApiService {
   ) {
     try {
       final jsonData = jsonDecode(response.body);
-      
+
       debugPrint('🔍 Parsing Response:');
       debugPrint('   Status Code: ${response.statusCode}');
       debugPrint('   Response Structure: $jsonData');
-      
+
       // Handle response structure: {success: true, message: "...", data: {...}}
-      final success = jsonData['success'] ?? (response.statusCode >= 200 && response.statusCode < 300);
-      final message = jsonData['message'] is String 
-          ? jsonData['message'] 
+      final success =
+          jsonData['success'] ??
+          (response.statusCode >= 200 && response.statusCode < 300);
+      final message = jsonData['message'] is String
+          ? jsonData['message']
           : jsonData['message']?.toString() ?? 'Request completed';
       final responseData = jsonData['data'];
-      
+
       if (success) {
         T? parsedData;
         if (responseData != null && fromJson != null) {
@@ -427,7 +428,9 @@ class ApiService {
             if (responseData is Map<String, dynamic>) {
               parsedData = fromJson(responseData);
             } else {
-              debugPrint('⚠️ Response data is not a Map: ${responseData.runtimeType}');
+              debugPrint(
+                '⚠️ Response data is not a Map: ${responseData.runtimeType}',
+              );
               parsedData = fromJson(responseData);
             }
           } catch (e, stackTrace) {
@@ -441,7 +444,7 @@ class ApiService {
         } else {
           parsedData = responseData as T?;
         }
-        
+
         return ApiResponse<T>(
           success: true,
           message: message,
@@ -491,7 +494,7 @@ class ApiService {
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
-    
+
     debugPrint('🌐 API Service - Register Request:');
     debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.register}');
     debugPrint('   Method: POST');
@@ -537,15 +540,15 @@ class ApiService {
   Future<ApiResponse<OtpResponse>> forgotPassword({
     required String email,
   }) async {
-    final body = {
-      'email': email,
-    };
+    final body = {'email': email};
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
-    
+
     debugPrint('🌐 API Service - Forgot Password Request:');
-    debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.forgetPassword}');
+    debugPrint(
+      '   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.forgetPassword}',
+    );
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
     debugPrint('   Body (JSON): $bodyJson');
@@ -572,17 +575,15 @@ class ApiService {
     required String otp,
     required String password,
   }) async {
-    final body = {
-      'email': email,
-      'otp': otp,
-      'password': password,
-    };
+    final body = {'email': email, 'otp': otp, 'password': password};
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
-    
+
     debugPrint('🌐 API Service - Verify OTP & Reset Password Request:');
-    debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.resetPassword}');
+    debugPrint(
+      '   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.resetPassword}',
+    );
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
     debugPrint('   Body (JSON): $bodyJson');
@@ -608,14 +609,11 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final body = {
-      'email': email,
-      'password': password,
-    };
+    final body = {'email': email, 'password': password};
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
-    
+
     debugPrint('🌐 API Service - Login Request:');
     debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.login}');
     debugPrint('   Method: POST');
@@ -638,22 +636,22 @@ class ApiService {
     // Store tokens and user data if login is successful
     if (response.success && response.data != null) {
       debugPrint('💾 Storing authentication data...');
-      
+
       if (response.data!.accessToken != null) {
         await _storageService.saveToken(response.data!.accessToken!);
         debugPrint('   ✅ Access token saved');
       }
-      
+
       if (response.data!.refreshToken != null) {
         await _storageService.saveRefreshToken(response.data!.refreshToken!);
         debugPrint('   ✅ Refresh token saved');
       }
-      
+
       if (response.data!.userId != null) {
         await _storageService.saveUserId(response.data!.userId!);
         debugPrint('   ✅ User ID saved: ${response.data!.userId}');
       }
-      
+
       // Store role if available
       if (response.data!.role != null) {
         await _storageService.saveString(
@@ -662,14 +660,14 @@ class ApiService {
         );
         debugPrint('   ✅ Role saved: ${response.data!.role}');
       }
-      
+
       // Store user data as JSON string
       if (response.data!.user != null) {
         final userJson = jsonEncode(response.data!.user!.toJson());
         await _storageService.saveString(AppConstants.userDataKey, userJson);
         debugPrint('   ✅ User data saved');
       }
-      
+
       // Set logged in status
       await _storageService.setLoggedIn(true);
       debugPrint('   ✅ Login status set to true');
@@ -697,14 +695,41 @@ class ApiService {
     );
   }
 
+  /// Create Stripe Payment Intent for professional plan + first exam unlock.
+  /// POST {{base_url}}/api/v1/payments/plan/professional/stripe/create
+  Future<ApiResponse<Map<String, dynamic>>>
+  createProfessionalPlanStripePaymentIntent(String examId) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.professionalPlanStripeCreate(),
+      body: {'examId': examId},
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  /// Confirm Stripe payment after PaymentSheet success.
+  /// POST {{base_url}}/api/v1/payments/plan/professional/stripe/confirm
+  Future<ApiResponse<Map<String, dynamic>>>
+  confirmProfessionalPlanStripePayment(String paymentIntentId) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.professionalPlanStripeConfirm(),
+      body: {'paymentIntentId': paymentIntentId},
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
   /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
   Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
     String examId,
   ) async {
     return post<Map<String, dynamic>>(
       ApiEndpoints.examStripeCreate(examId),
-      fromJson: (json) =>
-          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
     );
   }
 
@@ -716,8 +741,9 @@ class ApiService {
     return post<Map<String, dynamic>>(
       ApiEndpoints.examStripeConfirm(examId),
       body: {'paymentIntentId': paymentIntentId},
-      fromJson: (json) =>
-          json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
     );
   }
 
@@ -743,7 +769,9 @@ class ApiService {
       fields: fields,
       file: attachment,
       fileField: 'attachment',
-      fromJson: (json) => json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json as Map),
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
     );
   }
 }
