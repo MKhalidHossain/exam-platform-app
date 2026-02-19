@@ -308,6 +308,99 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     }
   }
 
+  Widget _buildReturnButton() {
+    return OutlinedButton(
+      onPressed: () => context.pop(0),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFF2D4F88)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: const Text(
+        'Return to Question',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF2D4F88)),
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return ElevatedButton(
+      onPressed: _isSubmitting ? null : _submitFinalAnswers,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0F3A7D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      child: _isSubmitting
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Submitting...',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            )
+          : const Text(
+              'Submit Final Answers',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildResponsiveActionButtons(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    return Align(
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth;
+            final useStackedLayout = availableWidth < 580 || textScale > 1.15;
+            final gap = availableWidth >= 760 ? 16.0 : 12.0;
+
+            if (useStackedLayout) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildReturnButton(),
+                  SizedBox(height: gap),
+                  _buildSubmitButton(),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: _buildReturnButton()),
+                SizedBox(width: gap),
+                Expanded(child: _buildSubmitButton()),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.autoSubmit && _isSubmitting) {
@@ -411,73 +504,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
               onTap: (index) => context.pop(index),
             ),
             const SizedBox(height: 26),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => context.pop(0),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF2D4F88)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text(
-                      'Return to Question',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2D4F88),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitFinalAnswers,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F3A7D),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: _isSubmitting
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              SizedBox(width: 10),
-                              Text(
-                                'Submitting...',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Center(
-                            child: const Text(
-                              'Submit Final Answers',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+            _buildResponsiveActionButtons(context),
             const SizedBox(height: 18),
             const ApiDisclaimerSection(),
           ],
