@@ -577,7 +577,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   }) {
     if (isStarter) {
       return [
-        _buildFeatureItem('15 free practice questions per month'),
+        _buildFeatureItem('16 free practice questions per month'),
         _buildFeatureItem('Explore all certifications'),
         _buildFeatureItem('Up to 2 practice questions per certification'),
         _buildFeatureItem('Upgrade anytime for full access'),

@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../services/api_service.dart';
+import '../../utils/api_endpoints.dart';
 import '../widgets/api_disclaimer_section.dart';
 
 class QuizSettingsScreen extends StatefulWidget {
@@ -26,10 +28,12 @@ class QuizSettingsScreen extends StatefulWidget {
 }
 
 class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
+  final ApiService _apiService = ApiService();
   double _questionCount = 2;
   bool _timedMode = true;
   final int _monthlyLimit = 16;
-  final int _usedForExam = 0;
+  bool _isStarterUsageLoading = false;
+  bool _hasStarterSubmittedThisExam = false;
 
   @override
   void initState() {
@@ -38,6 +42,42 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
     if (initialCount > 0) {
       _questionCount = initialCount.toDouble();
     }
+    _loadStarterExamUsage();
+  }
+
+  Future<void> _loadStarterExamUsage() async {
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    final bool isPro = userController.planTier.value == PlanTier.professional;
+    final String? examId = widget.examId?.trim();
+    if (isPro || examId == null || examId.isEmpty) return;
+
+    setState(() => _isStarterUsageLoading = true);
+    final response = await _apiService.get<Map<String, dynamic>>(
+      ApiEndpoints.historyAttempts,
+      queryParams: {
+        'page': '1',
+        'limit': '1',
+        'examId': examId,
+        'status': 'SUBMITTED',
+      },
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+    if (!mounted) return;
+
+    bool hasSubmitted = false;
+    if (response.success && response.data != null) {
+      final attemptsRaw = response.data!['attempts'];
+      hasSubmitted = attemptsRaw is List && attemptsRaw.isNotEmpty;
+    }
+
+    setState(() {
+      _hasStarterSubmittedThisExam = hasSubmitted;
+      _isStarterUsageLoading = false;
+    });
   }
 
   @override
@@ -52,6 +92,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
       final int totalQuestions = rawTotalQuestions > 0 ? rawTotalQuestions : 1;
       final int freeLimit = totalQuestions < 2 ? totalQuestions : 2;
       final int maxSelectable = isPro ? totalQuestions : freeLimit;
+      final int usedForExam = (!isPro && _hasStarterSubmittedThisExam)
+          ? maxSelectable
+          : 0;
       final double effectiveQuestionCount = _questionCount
           .clamp(1, maxSelectable)
           .toDouble();
@@ -106,13 +149,18 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Questions used for "${widget.courseTitle}": $_usedForExam/$maxSelectable',
+                      'Questions used for "${widget.courseTitle}": $usedForExam/$maxSelectable',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF111827),
                       ),
                     ),
+                    if (!isPro && _isStarterUsageLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
                   ],
                 ),
               ),
@@ -224,6 +272,11 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
               _PrimaryButton(
                 label: 'Start Quiz',
                 onTap: () {
+                  if (!isPro && _hasStarterSubmittedThisExam) {
+                    context.go('/subscribe');
+                    return;
+                  }
+
                   final examId = widget.examId?.trim();
                   if (examId == null || examId.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
