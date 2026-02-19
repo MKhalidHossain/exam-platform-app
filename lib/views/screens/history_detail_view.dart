@@ -525,6 +525,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 width: questionColCategory,
                                 child: Text(
                                   'Q${index + 1}',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: rowSize),
                                 ),
                               ),
