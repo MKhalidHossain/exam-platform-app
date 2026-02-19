@@ -28,7 +28,7 @@ class QuizSettingsScreen extends StatefulWidget {
 class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
   double _questionCount = 2;
   bool _timedMode = true;
-  final int _monthlyLimit = 15;
+  final int _monthlyLimit = 16;
   final int _usedForExam = 0;
 
   @override

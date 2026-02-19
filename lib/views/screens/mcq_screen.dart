@@ -361,6 +361,7 @@ class _McqScreenState extends State<McqScreen> {
       unawaited(_tts.stop());
       setState(() {
         _currentIndex = result.clamp(0, _questions.length - 1);
+        _showExplanation = false;
         _isSpeaking = false;
       });
     }
@@ -373,6 +374,24 @@ class _McqScreenState extends State<McqScreen> {
       } else {
         _flaggedQuestions.add(_currentIndex);
       }
+    });
+  }
+
+  void _toggleExplanation() {
+    final bool canViewExplanation = _selectedIndex[_currentIndex] != null;
+    if (!canViewExplanation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select an answer first to view explanation and reference.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _showExplanation = !_showExplanation;
     });
   }
 
@@ -408,6 +427,7 @@ class _McqScreenState extends State<McqScreen> {
   Widget build(BuildContext context) {
     final _Question question = _questions[_currentIndex];
     final int? selected = _selectedIndex[_currentIndex];
+    final bool canViewExplanation = selected != null;
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
     final bool canGoNext = selected != null || isFlagged;
     final String timerLabel = _remaining == null
@@ -520,6 +540,7 @@ class _McqScreenState extends State<McqScreen> {
                           unawaited(_tts.stop());
                           setState(() {
                             _currentIndex = index;
+                            _showExplanation = false;
                             _isSpeaking = false;
                           });
                         },
@@ -668,11 +689,11 @@ class _McqScreenState extends State<McqScreen> {
                 ),
                 const SizedBox(height: 14),
                 _DropdownHeader(
-                  isExpanded: _showExplanation,
-                  onTap: () =>
-                      setState(() => _showExplanation = !_showExplanation),
+                  isExpanded: _showExplanation && canViewExplanation,
+                  isEnabled: canViewExplanation,
+                  onTap: _toggleExplanation,
                 ),
-                if (_showExplanation) ...[
+                if (_showExplanation && canViewExplanation) ...[
                   const SizedBox(height: 12),
                   _ReferenceSection(
                     reference: question.codeReference.isNotEmpty
@@ -831,35 +852,44 @@ class _PrimaryButton extends StatelessWidget {
 
 class _DropdownHeader extends StatelessWidget {
   final bool isExpanded;
+  final bool isEnabled;
   final VoidCallback onTap;
 
-  const _DropdownHeader({required this.isExpanded, required this.onTap});
+  const _DropdownHeader({
+    required this.isExpanded,
+    required this.isEnabled,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final Color accentColor = isEnabled
+        ? const Color(0xFF2F6DE0)
+        : const Color(0xFF9CA3AF);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFF2F6DE0), width: 1.5),
+          border: Border.all(color: accentColor, width: 1.5),
           color: Colors.white,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'View Explanation & Reference',
               style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF2F6DE0),
+                color: accentColor,
               ),
             ),
             Icon(
               isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-              color: const Color(0xFF2F6DE0),
+              color: accentColor,
             ),
           ],
         ),

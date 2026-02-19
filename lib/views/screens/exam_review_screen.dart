@@ -465,11 +465,13 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
                               ),
                             ],
                           )
-                        : const Text(
-                            'Submit Final Answers',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                        : Center(
+                            child: const Text(
+                              'Submit Final Answers',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                   ),

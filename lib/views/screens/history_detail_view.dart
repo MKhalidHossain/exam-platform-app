@@ -9,7 +9,9 @@ import 'history_thank_you_dialog.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../../controllers/history_controller.dart';
+import '../../controllers/user_controller.dart';
 import '../../models/history_attempt_detail_model.dart';
+import '../../models/plan_tier.dart';
 
 class HistoryDetailView extends StatefulWidget {
   const HistoryDetailView({
@@ -272,6 +274,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final UserController userController = Get.isRegistered<UserController>()
+          ? Get.find<UserController>()
+          : Get.put(UserController());
+      final bool isPro = userController.planTier.value == PlanTier.professional;
       final attemptId = widget.entry.attemptId;
       final HistoryAttemptDetail? detail = attemptId == null
           ? null
@@ -752,49 +758,50 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                               ],
                             ),
                             SizedBox(height: 10 * scale),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                final examId = widget.entry.examId?.trim();
-                                if (examId == null || examId.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Exam ID missing. Please try again.',
+                            if (isPro)
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  final examId = widget.entry.examId?.trim();
+                                  if (examId == null || examId.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Exam ID missing. Please try again.',
+                                        ),
                                       ),
-                                    ),
+                                    );
+                                    return;
+                                  }
+                                  context.push(
+                                    '/exam-loading',
+                                    extra: {
+                                      'courseTitle': examName,
+                                      'examId': examId,
+                                      'questionCount': 30,
+                                      'regenerate': true,
+                                      'examType': 'full_exam',
+                                    },
                                   );
-                                  return;
-                                }
-                                context.push(
-                                  '/exam-loading',
-                                  extra: {
-                                    'courseTitle': examName,
-                                    'examId': examId,
-                                    'questionCount': 30,
-                                    'regenerate': true,
-                                    'examType': 'full_exam',
-                                  },
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF1E4AA8),
-                                side: const BorderSide(
-                                  color: Color(0xFF9FB4E9),
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF1E4AA8),
+                                  side: const BorderSide(
+                                    color: Color(0xFF9FB4E9),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 11 * scale,
+                                    horizontal: 14 * scale,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
                                 ),
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 11 * scale,
-                                  horizontal: 14 * scale,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: Text(
+                                  'Regenerate Exam (30 New Questions)',
+                                  style: TextStyle(fontSize: buttonSize),
                                 ),
                               ),
-                              icon: const Icon(Icons.refresh, size: 16),
-                              label: Text(
-                                'Regenerate Exam (30 New Questions)',
-                                style: TextStyle(fontSize: buttonSize),
-                              ),
-                            ),
                             SizedBox(height: 18 * scale),
                             Text(
                               'Topic Breakdown',
