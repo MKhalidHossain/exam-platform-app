@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class HistoryTestimonialDialog extends StatefulWidget {
   const HistoryTestimonialDialog({
@@ -90,8 +91,7 @@ class _HistoryTestimonialDialogState extends State<HistoryTestimonialDialog> {
                           ? const Color(0xFFFFB233)
                           : const Color(0xFFB8BDC8),
                     ),
-                    onPressed: () =>
-                        setState(() => _selectedStars = index + 1),
+                    onPressed: () => setState(() => _selectedStars = index + 1),
                   ),
                 );
               }),
@@ -116,8 +116,10 @@ class _HistoryTestimonialDialogState extends State<HistoryTestimonialDialog> {
                   fontSize: 11,
                   color: Color(0xFF9AA3B2),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: Color(0xFFD5DAE6)),
@@ -141,8 +143,10 @@ class _HistoryTestimonialDialogState extends State<HistoryTestimonialDialog> {
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: Color(0xFF2F5BD5)),
@@ -193,41 +197,12 @@ class _HistoryTestimonialDialogState extends State<HistoryTestimonialDialog> {
               ],
             ),
             const SizedBox(height: 10),
-            Center(
-              child: GestureDetector(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Disclaimer tapped.')),
-                  );
-                },
-                child: const Text.rich(
-                  TextSpan(
-                    text: 'Not affiliated with or endorsed by API. ',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFF6C7685),
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'See full\n',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF1E6CF3),
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                      TextSpan(
-                        text: 'disclaimer.',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF1E6CF3),
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+            const ApiDisclaimerSection(
+              baseStyle: TextStyle(fontSize: 10, color: Color(0xFF6C7685)),
+              linkStyle: TextStyle(
+                fontSize: 10,
+                color: Color(0xFF1E6CF3),
+                decoration: TextDecoration.underline,
               ),
             ),
           ],

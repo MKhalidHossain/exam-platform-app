@@ -5,16 +5,14 @@ import 'package:shimmer/shimmer.dart';
 
 import 'history_models.dart';
 import 'history_list_screen.dart';
+import '../widgets/api_disclaimer_section.dart';
 import '../../controllers/history_controller.dart';
 import '../../controllers/performance_controller.dart';
 import '../../models/history_attempt_model.dart';
 import '../../models/performance_model.dart';
 
 class PerformanceArgs {
-  const PerformanceArgs({
-    required this.entry,
-    required this.history,
-  });
+  const PerformanceArgs({required this.entry, required this.history});
 
   final HistoryEntry entry;
   final List<HistoryEntry> history;
@@ -50,8 +48,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     if (widget.isProfileFlow) {
       _historyController =
           Get.isRegistered<HistoryController>(tag: _profileHistoryTag)
-              ? Get.find<HistoryController>(tag: _profileHistoryTag)
-              : Get.put(HistoryController(), tag: _profileHistoryTag);
+          ? Get.find<HistoryController>(tag: _profileHistoryTag)
+          : Get.put(HistoryController(), tag: _profileHistoryTag);
       _controller.fetchOverview();
       _historyController?.fetchAttempts(limit: 4);
     } else {
@@ -73,10 +71,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         '$hour:$minute:$second $ampm';
   }
 
-  HistoryEntry _mapAttemptToEntry(
-    PerformanceAttempt attempt,
-    String examName,
-  ) {
+  HistoryEntry _mapAttemptToEntry(PerformanceAttempt attempt, String examName) {
     final total =
         attempt.correctCount + attempt.wrongCount + attempt.unansweredCount;
     final scoreDetail = total > 0
@@ -177,7 +172,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
   Widget _buildMasteryShimmerCard(double scale) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 12 * scale),
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 12 * scale,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFECF2FF),
         borderRadius: BorderRadius.circular(10),
@@ -362,72 +360,73 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 Expanded(child: _buildMasteryShimmerCard(scale)),
               ]
             : useOverviewCards
-                ? [
-                    Expanded(
-                      child: _MasteryCard(
-                        label: 'Average Score',
-                        percent: overviewAverageScore,
-                        scale: scale,
-                        titleSize: cardTitle,
-                      ),
-                    ),
-                    SizedBox(width: 10 * scale),
-                    Expanded(
-                      child: _MasteryCard(
-                        label: 'Best Score',
-                        percent: overviewBestScore,
-                        scale: scale,
-                        titleSize: cardTitle,
-                      ),
-                    ),
-                  ]
-                : scores.isNotEmpty
-                    ? [
-                        Expanded(
-                          child: _MasteryCard(
-                            label: '$examLabel\nLatest Score',
-                            percent: latestScore,
-                            scale: scale,
-                            titleSize: cardTitle,
-                          ),
-                        ),
-                        SizedBox(width: 10 * scale),
-                        Expanded(
-                          child: _MasteryCard(
-                            label: 'Average Score',
-                            percent: averageScore,
-                            scale: scale,
-                            titleSize: cardTitle,
-                          ),
-                        ),
-                      ]
-                    : [
-                        Expanded(
-                          child: _MasteryCard(
-                            label: '$examLabel\nLatest Score',
-                            percent: widget.entry.scorePercent.round(),
-                            scale: scale,
-                            titleSize: cardTitle,
-                          ),
-                        ),
-                        SizedBox(width: 10 * scale),
-                        Expanded(
-                          child: _MasteryCard(
-                            label: 'Best Score',
-                            percent: bestScore == 0 ? null : bestScore,
-                            scale: scale,
-                            titleSize: cardTitle,
-                          ),
-                        ),
-                      ];
+            ? [
+                Expanded(
+                  child: _MasteryCard(
+                    label: 'Average Score',
+                    percent: overviewAverageScore,
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+                SizedBox(width: 10 * scale),
+                Expanded(
+                  child: _MasteryCard(
+                    label: 'Best Score',
+                    percent: overviewBestScore,
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+              ]
+            : scores.isNotEmpty
+            ? [
+                Expanded(
+                  child: _MasteryCard(
+                    label: '$examLabel\nLatest Score',
+                    percent: latestScore,
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+                SizedBox(width: 10 * scale),
+                Expanded(
+                  child: _MasteryCard(
+                    label: 'Average Score',
+                    percent: averageScore,
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+              ]
+            : [
+                Expanded(
+                  child: _MasteryCard(
+                    label: '$examLabel\nLatest Score',
+                    percent: widget.entry.scorePercent.round(),
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+                SizedBox(width: 10 * scale),
+                Expanded(
+                  child: _MasteryCard(
+                    label: 'Best Score',
+                    percent: bestScore == 0 ? null : bestScore,
+                    scale: scale,
+                    titleSize: cardTitle,
+                  ),
+                ),
+              ];
 
         final int attemptsCount = attemptsCountOverride ?? scores.length;
 
-        final VoidCallback handleSeeMore = onSeeMore ??
+        final VoidCallback handleSeeMore =
+            onSeeMore ??
             () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('See more tapped.')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('See more tapped.')));
             };
 
         return Scaffold(
@@ -507,8 +506,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFFEAF1FF),
                               borderRadius: BorderRadius.circular(10),
-                              border:
-                                  Border.all(color: const Color(0xFFE0E5F1)),
+                              border: Border.all(
+                                color: const Color(0xFFE0E5F1),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -645,8 +645,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                             final Color scoreColor = entry.scorePercent <= 20
                                 ? const Color(0xFFE53935)
                                 : entry.scorePercent <= 30
-                                    ? const Color(0xFFFF8A00)
-                                    : const Color(0xFFFF4D4D);
+                                ? const Color(0xFFFF8A00)
+                                : const Color(0xFFFF4D4D);
                             return Column(
                               children: [
                                 const Divider(
@@ -654,16 +654,18 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                                   color: Color(0xFFE4E8F2),
                                 ),
                                 Padding(
-                                  padding:
-                                      EdgeInsets.symmetric(vertical: 8 * scale),
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 8 * scale,
+                                  ),
                                   child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
                                       Expanded(
-                                        flex: 3,
+                                        flex: 2,
                                         child: Text(
                                           entry.examName,
+                                          textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontSize: 9.8 * scale,
                                             fontWeight: FontWeight.w600,
@@ -683,13 +685,14 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                                         ),
                                       ),
                                       Expanded(
-                                        flex: 1,
+                                        flex: 2,
                                         child: Column(
                                           crossAxisAlignment:
-                                              CrossAxisAlignment.end,
+                                              CrossAxisAlignment.center,
                                           children: [
                                             Text(
                                               '${entry.scorePercent.toStringAsFixed(1)}%',
+                                              textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 fontSize: 9.8 * scale,
                                                 fontWeight: FontWeight.w700,
@@ -737,43 +740,15 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                     ),
                   ),
                   SizedBox(height: 12 * scale),
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Disclaimer tapped.'),
-                          ),
-                        );
-                      },
-                      child: Text.rich(
-                        TextSpan(
-                          text: 'Not affiliated with or endorsed by API. ',
-                          style: TextStyle(
-                            fontSize: 9.5 * scale,
-                            color: const Color(0xFF6C7685),
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'See full\n',
-                              style: TextStyle(
-                                fontSize: 9.5 * scale,
-                                color: const Color(0xFF1E6CF3),
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'disclaimer.',
-                              style: TextStyle(
-                                fontSize: 9.5 * scale,
-                                color: const Color(0xFF1E6CF3),
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ],
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                  ApiDisclaimerSection(
+                    baseStyle: TextStyle(
+                      fontSize: 9.5 * scale,
+                      color: const Color(0xFF6C7685),
+                    ),
+                    linkStyle: TextStyle(
+                      fontSize: 9.5 * scale,
+                      color: const Color(0xFF1E6CF3),
+                      decoration: TextDecoration.underline,
                     ),
                   ),
                 ],
@@ -796,17 +771,19 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             _controller.performanceByExam[PerformanceController.overviewKey];
         final bool overviewLoading =
             _controller.loadingByExam[PerformanceController.overviewKey] ??
-                false;
+            false;
         final historyController = _historyController;
         final List<HistoryAttempt> attempts =
             historyController?.attempts.toList() ?? const [];
-        final List<HistoryAttempt> sortedAttempts =
-            _sortedHistoryAttempts(attempts);
+        final List<HistoryAttempt> sortedAttempts = _sortedHistoryAttempts(
+          attempts,
+        );
         final List<HistoryEntry> history = sortedAttempts
             .map(_mapHistoryAttemptToEntry)
             .toList();
-        final List<int> scores =
-            history.map((entry) => entry.scorePercent.round()).toList();
+        final List<int> scores = history
+            .map((entry) => entry.scorePercent.round())
+            .toList();
         final int latestScore = scores.isNotEmpty ? scores.first : 0;
         final int averageScore = _averageScore(scores);
         final int bestScore = _bestScore(scores);
@@ -822,7 +799,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         final String recommendationText = !hasAttempts
             ? 'No attempts yet.\nTake a quiz to see recommendations.'
             : 'Average score is $displayAverage%.\n'
-                'Best score is $displayBest%.';
+                  'Best score is $displayBest%.';
 
         return _buildContent(
           context: context,
@@ -855,8 +832,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
     if (examId == null || examId.trim().isEmpty) {
       final List<HistoryEntry> history = widget.history;
-      final List<int> scores =
-          history.map((entry) => entry.scorePercent.round()).toList();
+      final List<int> scores = history
+          .map((entry) => entry.scorePercent.round())
+          .toList();
       final int latestScore = history.isNotEmpty
           ? history.first.scorePercent.round()
           : widget.entry.scorePercent.round();
@@ -864,9 +842,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       final int bestScore = _bestScore(scores);
       final String recommendationText = scores.isEmpty
           ? 'No attempts yet for $examLabel.\n'
-              'Take a quiz to see recommendations.'
+                'Take a quiz to see recommendations.'
           : 'Latest score for $examLabel is $latestScore%.\n'
-              'Practice weak areas to improve.';
+                'Practice weak areas to improve.';
 
       return _buildContent(
         context: context,
@@ -883,35 +861,36 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     }
 
     return Obx(() {
-      final PerformanceData? performance = _controller.performanceByExam[examId];
+      final PerformanceData? performance =
+          _controller.performanceByExam[examId];
       final bool isLoading = _controller.loadingByExam[examId] ?? false;
       final String? errorMessage = _controller.errorByExam[examId];
 
       final List<PerformanceAttempt> attempts =
           performance?.attempts ?? const [];
-      final List<PerformanceAttempt> sortedAttempts =
-          _sortedAttempts(attempts);
+      final List<PerformanceAttempt> sortedAttempts = _sortedAttempts(attempts);
       final List<HistoryEntry> apiHistory = sortedAttempts
           .map((attempt) => _mapAttemptToEntry(attempt, examLabel))
           .toList();
-      final List<HistoryEntry> history =
-          apiHistory.isNotEmpty ? apiHistory : widget.history;
+      final List<HistoryEntry> history = apiHistory.isNotEmpty
+          ? apiHistory
+          : widget.history;
       final List<int> scores = attempts.isNotEmpty
           ? attempts.map((attempt) => attempt.score).toList()
           : history.map((entry) => entry.scorePercent.round()).toList();
       final int latestScore = attempts.isNotEmpty
           ? sortedAttempts.first.score
           : (history.isNotEmpty
-              ? history.first.scorePercent.round()
-              : widget.entry.scorePercent.round());
+                ? history.first.scorePercent.round()
+                : widget.entry.scorePercent.round());
       final int averageScore = _averageScore(scores);
       final int bestScore = _bestScore(scores);
 
       final String recommendationText = scores.isEmpty
           ? 'No attempts yet for $examLabel.\n'
-              'Take a quiz to see recommendations.'
+                'Take a quiz to see recommendations.'
           : 'Latest score for $examLabel is $latestScore%.\n'
-              'Practice weak areas to improve.';
+                'Practice weak areas to improve.';
 
       return _buildContent(
         context: context,
@@ -945,7 +924,10 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 12 * scale),
+      padding: EdgeInsets.symmetric(
+        horizontal: 12 * scale,
+        vertical: 12 * scale,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -992,7 +974,10 @@ class _MasteryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10 * scale, vertical: 12 * scale),
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 12 * scale,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFECF2FF),
         borderRadius: BorderRadius.circular(10),
@@ -1019,10 +1004,7 @@ class _MasteryCard extends StatelessWidget {
 }
 
 class _PercentRing extends StatelessWidget {
-  const _PercentRing({
-    required this.percent,
-    required this.scale,
-  });
+  const _PercentRing({required this.percent, required this.scale});
 
   final int? percent;
   final double scale;

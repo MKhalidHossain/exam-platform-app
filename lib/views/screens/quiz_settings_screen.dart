@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class QuizSettingsScreen extends StatefulWidget {
   final String courseTitle;
@@ -246,7 +247,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                 },
               ),
               const SizedBox(height: 18),
-              const _DisclaimerSection(),
+              const ApiDisclaimerSection(),
             ],
           ),
         ),
@@ -321,36 +322,6 @@ class _PrimaryButton extends StatelessWidget {
             const Icon(Icons.arrow_forward, color: Colors.white),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        textAlign: TextAlign.center,
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -94,8 +95,8 @@ class _McqScreenState extends State<McqScreen> {
     final now = DateTime.now();
     final int durationMinutes =
         (widget.durationMinutes != null && widget.durationMinutes! > 0)
-            ? widget.durationMinutes!
-            : _defaultDurationMinutes;
+        ? widget.durationMinutes!
+        : _defaultDurationMinutes;
     final Duration duration = Duration(minutes: durationMinutes);
     DateTime? endTime = widget.endTime;
 
@@ -153,8 +154,8 @@ class _McqScreenState extends State<McqScreen> {
 
     final List<dynamic> reviewQuestions =
         (widget.questions != null && widget.questions!.isNotEmpty)
-            ? widget.questions!
-            : _questions;
+        ? widget.questions!
+        : _questions;
     context.go(
       '/exam-review',
       extra: {
@@ -343,8 +344,8 @@ class _McqScreenState extends State<McqScreen> {
     unawaited(_tts.stop());
     final List<dynamic> reviewQuestions =
         (widget.questions != null && widget.questions!.isNotEmpty)
-            ? widget.questions!
-            : _questions;
+        ? widget.questions!
+        : _questions;
     final result = await context.push<Object?>(
       '/exam-review',
       extra: {
@@ -421,268 +422,272 @@ class _McqScreenState extends State<McqScreen> {
             ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    context.push(
-                      '/quiz-settings',
-                      extra: {
-                        'courseTitle': widget.courseTitle,
-                        'examId': widget.examId,
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        context.push(
+                          '/quiz-settings',
+                          extra: {
+                            'courseTitle': widget.courseTitle,
+                            'examId': widget.examId,
+                          },
+                        );
                       },
-                    );
-                  },
-                  icon: const Icon(Icons.arrow_back, size: 22),
-                ),
-                Expanded(
-                  child: Text(
-                    widget.courseTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF111827),
+                      icon: const Icon(Icons.arrow_back, size: 22),
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    Expanded(
+                      child: Text(
+                        widget.courseTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _InfoPill(
+                      label:
+                          '${_selectedIndex.length}/${_questions.length} Question Answered',
+                    ),
+                    if (_isTimedSession) ...[
+                      const SizedBox(width: 8),
+                      _InfoPill(icon: Icons.timer, label: timerLabel),
+                    ],
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _toggleSpeak,
+                      icon: Icon(
+                        _isSpeaking ? Icons.volume_up : Icons.volume_off,
+                        color: const Color(0xFF274B8A),
+                      ),
+                      tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _questions.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final int? selected = _selectedIndex[index];
+                      final bool isAnswered = selected != null;
+                      final bool isFlag = _flaggedQuestions.contains(index);
+                      final bool isCurrent = index == _currentIndex;
+                      Color border = const Color(0xFF2D4F88);
+                      Color fill = Colors.white;
+                      Color textColor = const Color(0xFF111827);
+
+                      if (isAnswered) {
+                        final int? correctIndex =
+                            _questions[index].correctIndex;
+                        if (correctIndex != null) {
+                          final bool isCorrect = selected == correctIndex;
+                          if (isCorrect) {
+                            fill = const Color(0xFFD8F5D8);
+                            border = const Color(0xFF2DBD67);
+                            textColor = const Color(0xFF1B6C3E);
+                          } else {
+                            fill = const Color(0xFFFFD6D6);
+                            border = const Color(0xFFE24B4B);
+                            textColor = const Color(0xFFB42323);
+                          }
+                        } else {
+                          fill = const Color(0xFFE7F0FF);
+                          border = const Color(0xFF2F6DE0);
+                          textColor = const Color(0xFF1E4C9A);
+                        }
+                      } else if (isFlag) {
+                        fill = const Color(0xFFFFF4D6);
+                        border = const Color(0xFFFFB020);
+                        textColor = const Color(0xFFB76A00);
+                      }
+                      if (isCurrent) {
+                        border = const Color(0xFF111827);
+                      }
+
+                      return GestureDetector(
+                        onTap: () {
+                          unawaited(_tts.stop());
+                          setState(() {
+                            _currentIndex = index;
+                            _isSpeaking = false;
+                          });
+                        },
+                        child: Container(
+                          width: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: fill,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border, width: 1.2),
+                          ),
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _InfoPill(
-                  label:
-                      '${_selectedIndex.length}/${_questions.length} Question Answered',
-                ),
-                if (_isTimedSession) ...[
-                  const SizedBox(width: 8),
-                  _InfoPill(icon: Icons.timer, label: timerLabel),
-                ],
-                const Spacer(),
-                IconButton(
-                  onPressed: _toggleSpeak,
-                  icon: Icon(
-                    _isSpeaking ? Icons.volume_up : Icons.volume_off,
-                    color: const Color(0xFF274B8A),
+                const SizedBox(height: 16),
+                Text(
+                  question.text,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
                   ),
-                  tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _questions.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, index) {
-                  final int? selected = _selectedIndex[index];
-                  final bool isAnswered = selected != null;
-                  final bool isFlag = _flaggedQuestions.contains(index);
-                  final bool isCurrent = index == _currentIndex;
-                  Color border = const Color(0xFF2D4F88);
-                  Color fill = Colors.white;
+                const SizedBox(height: 14),
+                ...List.generate(question.options.length, (index) {
+                  final String option = question.options[index];
+                  final bool isSelected = selected == index;
+                  final bool isCorrect =
+                      question.correctIndex != null &&
+                      index == question.correctIndex;
+                  final bool locked = _lockedQuestions.contains(_currentIndex);
+
+                  Color borderColor = const Color(0xFFE5E7EB);
+                  Color fillColor = const Color(0xFFF3F4F6);
                   Color textColor = const Color(0xFF111827);
 
-                  if (isAnswered) {
-                    final int? correctIndex = _questions[index].correctIndex;
-                    if (correctIndex != null) {
-                      final bool isCorrect = selected == correctIndex;
+                  if (selected != null) {
+                    if (question.correctIndex != null) {
                       if (isCorrect) {
-                        fill = const Color(0xFFD8F5D8);
-                        border = const Color(0xFF2DBD67);
+                        borderColor = const Color(0xFF2DBD67);
+                        fillColor = const Color(0xFFD8F5D8);
                         textColor = const Color(0xFF1B6C3E);
-                      } else {
-                        fill = const Color(0xFFFFD6D6);
-                        border = const Color(0xFFE24B4B);
+                      }
+                      if (isSelected && !isCorrect) {
+                        borderColor = const Color(0xFFE24B4B);
+                        fillColor = const Color(0xFFFFD6D6);
                         textColor = const Color(0xFFB42323);
                       }
-                    } else {
-                      fill = const Color(0xFFE7F0FF);
-                      border = const Color(0xFF2F6DE0);
+                    } else if (isSelected) {
+                      borderColor = const Color(0xFF2F6DE0);
+                      fillColor = const Color(0xFFE7F0FF);
                       textColor = const Color(0xFF1E4C9A);
                     }
-                  } else if (isFlag) {
-                    fill = const Color(0xFFFFF4D6);
-                    border = const Color(0xFFFFB020);
-                    textColor = const Color(0xFFB76A00);
-                  }
-                  if (isCurrent) {
-                    border = const Color(0xFF111827);
                   }
 
                   return GestureDetector(
-                    onTap: () {
-                      unawaited(_tts.stop());
-                      setState(() {
-                        _currentIndex = index;
-                        _isSpeaking = false;
-                      });
-                    },
+                    onTap: locked ? null : () => _onSelect(index),
                     child: Container(
-                      width: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: fill,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: border, width: 1.2),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
                       ),
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                        ),
+                      decoration: BoxDecoration(
+                        color: fillColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: borderColor, width: 1.4),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Text(
+                              String.fromCharCode(65 + index),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              option,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              question.text,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF111827),
-              ),
-            ),
-            const SizedBox(height: 14),
-            ...List.generate(question.options.length, (index) {
-              final String option = question.options[index];
-              final bool isSelected = selected == index;
-              final bool isCorrect =
-                  question.correctIndex != null &&
-                  index == question.correctIndex;
-              final bool locked = _lockedQuestions.contains(_currentIndex);
-
-              Color borderColor = const Color(0xFFE5E7EB);
-              Color fillColor = const Color(0xFFF3F4F6);
-              Color textColor = const Color(0xFF111827);
-
-              if (selected != null) {
-                if (question.correctIndex != null) {
-                  if (isCorrect) {
-                    borderColor = const Color(0xFF2DBD67);
-                    fillColor = const Color(0xFFD8F5D8);
-                    textColor = const Color(0xFF1B6C3E);
-                  }
-                  if (isSelected && !isCorrect) {
-                    borderColor = const Color(0xFFE24B4B);
-                    fillColor = const Color(0xFFFFD6D6);
-                    textColor = const Color(0xFFB42323);
-                  }
-                } else if (isSelected) {
-                  borderColor = const Color(0xFF2F6DE0);
-                  fillColor = const Color(0xFFE7F0FF);
-                  textColor = const Color(0xFF1E4C9A);
-                }
-              }
-
-              return GestureDetector(
-                onTap: locked ? null : () => _onSelect(index),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: fillColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: borderColor, width: 1.4),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: Text(
-                          String.fromCharCode(65 + index),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: textColor,
-                          ),
-                        ),
+                }),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _toggleFlag,
+                    icon: Icon(
+                      Icons.flag,
+                      color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
+                    ),
+                    label: Text(
+                      'Flag',
+                      style: TextStyle(
+                        color: isFlagged
+                            ? const Color(0xFFB76A00)
+                            : Colors.black,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          option,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
-                          ),
-                        ),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
                       ),
-                    ],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ),
-              );
-            }),
-            Center(
-              child: TextButton.icon(
-                onPressed: _toggleFlag,
-                icon: Icon(
-                  Icons.flag,
-                  color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
+                const SizedBox(height: 14),
+                _PrimaryButton(
+                  label: 'Next',
+                  isEnabled: canGoNext,
+                  onTap: _onNext,
                 ),
-                label: Text(
-                  'Flag',
-                  style: TextStyle(
-                    color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
-                    fontWeight: FontWeight.w600,
-                  ),
+                const SizedBox(height: 14),
+                _DropdownHeader(
+                  isExpanded: _showExplanation,
+                  onTap: () =>
+                      setState(() => _showExplanation = !_showExplanation),
                 ),
-                style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFE5E7EB),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
+                if (_showExplanation) ...[
+                  const SizedBox(height: 12),
+                  _ReferenceSection(
+                    reference: question.codeReference.isNotEmpty
+                        ? question.codeReference
+                        : 'No code reference available.',
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 16),
+                  _ExplanationSection(
+                    text: question.explanation.isNotEmpty
+                        ? question.explanation
+                        : 'No explanation available.',
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            _PrimaryButton(
-              label: 'Next',
-              isEnabled: canGoNext,
-              onTap: _onNext,
-            ),
-            const SizedBox(height: 14),
-            _DropdownHeader(
-              isExpanded: _showExplanation,
-              onTap: () => setState(() => _showExplanation = !_showExplanation),
-            ),
-            if (_showExplanation) ...[
-              const SizedBox(height: 12),
-              _ReferenceSection(
-                reference: question.codeReference.isNotEmpty
-                    ? question.codeReference
-                    : 'No code reference available.',
-              ),
-              const SizedBox(height: 16),
-              _ExplanationSection(
-                text: question.explanation.isNotEmpty
-                    ? question.explanation
-                    : 'No explanation available.',
-              ),
-            ],
-            const SizedBox(height: 18),
-                const _DisclaimerSection(),
+                ],
+                const SizedBox(height: 18),
+                const ApiDisclaimerSection(),
               ],
             ),
             if (_isAutoSubmitting)
@@ -936,36 +941,6 @@ class _ExplanationSection extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        textAlign: TextAlign.center,
-      ),
     );
   }
 }

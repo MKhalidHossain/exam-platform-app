@@ -6,6 +6,7 @@ import '../../services/exam_service.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_model.dart';
 import 'history_models.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class ExamReviewScreen extends StatefulWidget {
   final String courseTitle;
@@ -81,8 +82,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
   HistoryEntry _mapAttemptToEntry(HistoryAttempt attempt) {
     final total =
         attempt.correctCount + attempt.wrongCount + attempt.unansweredCount;
-    final scoreDetail =
-        total > 0 ? '${attempt.correctCount}/$total' : '${attempt.correctCount}/0';
+    final scoreDetail = total > 0
+        ? '${attempt.correctCount}/$total'
+        : '${attempt.correctCount}/0';
     return HistoryEntry(
       examName: attempt.examName,
       date: _formatAttemptDate(attempt),
@@ -99,8 +101,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     String? examId,
   ) {
     final score = data?['score'];
-    final Map<String, dynamic> scoreMap =
-        score is Map ? Map<String, dynamic>.from(score) : const {};
+    final Map<String, dynamic> scoreMap = score is Map
+        ? Map<String, dynamic>.from(score)
+        : const {};
     final percent = _toDouble(scoreMap['percent']);
     final correct = _toInt(scoreMap['correct']);
     final total = _toInt(scoreMap['total']);
@@ -142,7 +145,8 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     if (rawOptions != null) {
       for (final option in rawOptions) {
         if (option is Map) {
-          final value = option['option'] ??
+          final value =
+              option['option'] ??
               option['text'] ??
               option['label'] ??
               option['value'] ??
@@ -216,7 +220,11 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     if (_isSubmitting) return;
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {
-      ErrorHandler.showSnackBar('Exam ID missing. Please try again.', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Exam ID missing. Please try again.',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
@@ -233,15 +241,19 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
 
       if (!mounted) return;
       if (response.success) {
-        final data =
-            response.data is Map ? Map<String, dynamic>.from(response.data!) : null;
+        final data = response.data is Map
+            ? Map<String, dynamic>.from(response.data!)
+            : null;
         final HistoryController historyController =
             Get.isRegistered<HistoryController>()
-                ? Get.find<HistoryController>()
-                : Get.put(HistoryController());
+            ? Get.find<HistoryController>()
+            : Get.put(HistoryController());
 
-        HistoryEntry entry =
-            _entryFromSubmitResponse(data, widget.courseTitle, examId);
+        HistoryEntry entry = _entryFromSubmitResponse(
+          data,
+          widget.courseTitle,
+          examId,
+        );
         List<HistoryEntry> historyEntries = const [];
         try {
           await historyController.fetchAttempts(page: 1, limit: 10);
@@ -260,7 +272,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
 
         if (!mounted) return;
         ErrorHandler.showSnackBar(
-          ErrorHandler.getMessageFromResponse(response, successFallback: 'Final answers submitted.'),
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Final answers submitted.',
+          ),
           isError: false,
           context: context,
         );
@@ -273,11 +288,19 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
           },
         );
       } else {
-        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to submit answers.');
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Failed to submit answers.',
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ErrorHandler.showFromException(e, context: context, fallback: 'Submit failed. Please try again.');
+      ErrorHandler.showFromException(
+        e,
+        context: context,
+        fallback: 'Submit failed. Please try again.',
+      );
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -324,15 +347,18 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       );
     }
     final int total = widget.questions.length;
-    final List<int> answered = List<int>.generate(total, (i) => i)
-        .where((i) => widget.selected[i] != null)
-        .toList();
-    final List<int> unanswered = List<int>.generate(total, (i) => i)
-        .where((i) => widget.selected[i] == null)
-        .toList();
-    final List<int> flaggedList = List<int>.generate(total, (i) => i)
-        .where((i) => widget.flagged.contains(i))
-        .toList();
+    final List<int> answered = List<int>.generate(
+      total,
+      (i) => i,
+    ).where((i) => widget.selected[i] != null).toList();
+    final List<int> unanswered = List<int>.generate(
+      total,
+      (i) => i,
+    ).where((i) => widget.selected[i] == null).toList();
+    final List<int> flaggedList = List<int>.generate(
+      total,
+      (i) => i,
+    ).where((i) => widget.flagged.contains(i)).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
@@ -451,7 +477,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
               ],
             ),
             const SizedBox(height: 18),
-            const _DisclaimerSection(),
+            const ApiDisclaimerSection(),
           ],
         ),
       ),
@@ -519,36 +545,6 @@ class _ReviewSection extends StatelessWidget {
               .toList(),
         ),
       ],
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        textAlign: TextAlign.center,
-      ),
     );
   }
 }

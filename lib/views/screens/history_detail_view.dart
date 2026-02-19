@@ -7,6 +7,7 @@ import 'performance_screen.dart';
 import 'history_testimonial_dialog.dart';
 import 'history_thank_you_dialog.dart';
 import '../widgets/app_shimmer.dart';
+import '../widgets/api_disclaimer_section.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_detail_model.dart';
 
@@ -841,46 +842,15 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                   ),
                                   SizedBox(height: 10 * scale),
                                   reviewContent,
-                                  GestureDetector(
-                                    onTap: () {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Disclaimer tapped.'),
-                                        ),
-                                      );
-                                    },
-                                    child: Text.rich(
-                                      TextSpan(
-                                        text:
-                                            'Not affiliated with or endorsed by API. ',
-                                        style: TextStyle(
-                                          fontSize: 10 * scale,
-                                          color: const Color(0xFF6C7685),
-                                        ),
-                                        children: [
-                                          TextSpan(
-                                            text: 'See full\n',
-                                            style: TextStyle(
-                                              fontSize: 10 * scale,
-                                              color: Color(0xFF1E6CF3),
-                                              decoration:
-                                                  TextDecoration.underline,
-                                            ),
-                                          ),
-                                          TextSpan(
-                                            text: 'disclaimer.',
-                                            style: TextStyle(
-                                              fontSize: 10 * scale,
-                                              color: Color(0xFF1E6CF3),
-                                              decoration:
-                                                  TextDecoration.underline,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      textAlign: TextAlign.center,
+                                  ApiDisclaimerSection(
+                                    baseStyle: TextStyle(
+                                      fontSize: 10 * scale,
+                                      color: const Color(0xFF6C7685),
+                                    ),
+                                    linkStyle: TextStyle(
+                                      fontSize: 10 * scale,
+                                      color: const Color(0xFF1E6CF3),
+                                      decoration: TextDecoration.underline,
                                     ),
                                   ),
                                   SizedBox(height: 12 * scale),

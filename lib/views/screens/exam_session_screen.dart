@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class ExamSessionScreen extends StatelessWidget {
   final String courseTitle;
@@ -19,10 +20,7 @@ class ExamSessionScreen extends StatelessWidget {
     this.timedMode = true,
   });
 
-  void _showInstructions(
-    BuildContext context,
-    String sessionLabel,
-  ) {
+  void _showInstructions(BuildContext context, String sessionLabel) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -32,8 +30,13 @@ class ExamSessionScreen extends StatelessWidget {
 
         return Dialog(
           backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
             child: Column(
@@ -171,7 +174,7 @@ class ExamSessionScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                const _DisclaimerSection(),
+                const ApiDisclaimerSection(),
               ],
             ),
           ),
@@ -249,10 +252,7 @@ class ExamSessionScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: _InfoTile(
-                      title: 'Format',
-                      value: 'Full Exam',
-                    ),
+                    child: _InfoTile(title: 'Format', value: 'Full Exam'),
                   ),
                 ],
               ),
@@ -278,7 +278,7 @@ class ExamSessionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            const _DisclaimerSection(),
+            const ApiDisclaimerSection(),
           ],
         ),
       ),
@@ -302,9 +302,13 @@ class _SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color bgColor = isPrimary ? const Color(0xFF274B8A) : Colors.white;
-    final Color borderColor = isPrimary ? const Color(0xFF1E3C73) : const Color(0xFFE5E7EB);
+    final Color borderColor = isPrimary
+        ? const Color(0xFF1E3C73)
+        : const Color(0xFFE5E7EB);
     final Color titleColor = isPrimary ? Colors.white : const Color(0xFF111827);
-    final Color bodyColor = isPrimary ? Colors.white70 : const Color(0xFF4B5563);
+    final Color bodyColor = isPrimary
+        ? Colors.white70
+        : const Color(0xFF4B5563);
 
     return InkWell(
       onTap: onTap,
@@ -357,10 +361,7 @@ class _InfoTile extends StatelessWidget {
   final String title;
   final String value;
 
-  const _InfoTile({
-    required this.title,
-    required this.value,
-  });
+  const _InfoTile({required this.title, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -395,36 +396,6 @@ class _InfoTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        textAlign: TextAlign.center,
       ),
     );
   }

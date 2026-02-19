@@ -41,10 +41,12 @@ class HistoryListView extends StatelessWidget {
         final double topPad = 8 * scale;
         final double bottomPad = 12 * scale;
 
-        final List<String> options =
-            filterOptions.isNotEmpty ? filterOptions : const ['All Exams'];
-        final String activeFilter =
-            options.contains(filterValue) ? filterValue : options.first;
+        final List<String> options = filterOptions.isNotEmpty
+            ? filterOptions
+            : const ['All Exams'];
+        final String activeFilter = options.contains(filterValue)
+            ? filterValue
+            : options.first;
 
         return Column(
           children: [
@@ -57,7 +59,7 @@ class HistoryListView extends StatelessWidget {
                     icon: const Icon(Icons.arrow_back_ios_new, size: 18),
                     color: const Color(0xFF27407C),
                   ),
-                //  
+                  //
                   Text(
                     'History',
                     style: TextStyle(
@@ -74,8 +76,10 @@ class HistoryListView extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, headerConstraints) {
                   final double maxButtonWidth =
-                      (headerConstraints.maxWidth * 0.55)
-                          .clamp(0.0, headerConstraints.maxWidth);
+                      (headerConstraints.maxWidth * 0.55).clamp(
+                        0.0,
+                        headerConstraints.maxWidth,
+                      );
                   return Row(
                     children: [
                       Expanded(
@@ -204,15 +208,17 @@ class HistoryListView extends StatelessWidget {
                             }
 
                             return ListView.separated(
-                              padding:
-                                  EdgeInsets.symmetric(horizontal: 12 * scale),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12 * scale,
+                              ),
                               itemBuilder: (context, index) {
                                 final entry = entries[index];
-                                final Color scoreColor = entry.scorePercent <= 20
+                                final Color scoreColor =
+                                    entry.scorePercent <= 20
                                     ? const Color(0xFFE53935)
                                     : entry.scorePercent <= 30
-                                        ? const Color(0xFFFF8A00)
-                                        : const Color(0xFFFF4D4D);
+                                    ? const Color(0xFFFF8A00)
+                                    : const Color(0xFFFF4D4D);
                                 return InkWell(
                                   onTap: () => onSelect(entry),
                                   child: Padding(
@@ -220,12 +226,15 @@ class HistoryListView extends StatelessWidget {
                                       vertical: 10 * scale,
                                     ),
                                     child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
-                                          flex: 3,
+                                          flex: 2,
                                           child: Text(
                                             entry.examName,
+                                            textAlign: TextAlign.center,
+                                            softWrap: true,
                                             style: TextStyle(
                                               fontSize: rowTitleSize,
                                               fontWeight: FontWeight.w600,
@@ -236,7 +245,10 @@ class HistoryListView extends StatelessWidget {
                                         Expanded(
                                           flex: 2,
                                           child: Text(
-                                            entry.date.replaceFirst(', ', ',\n'),
+                                            entry.date.replaceFirst(
+                                              ', ',
+                                              ',\n',
+                                            ),
                                             textAlign: TextAlign.center,
                                             softWrap: true,
                                             style: TextStyle(
@@ -246,13 +258,14 @@ class HistoryListView extends StatelessWidget {
                                           ),
                                         ),
                                         Expanded(
-                                          flex: 1,
+                                          flex: 2,
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.end,
+                                                CrossAxisAlignment.center,
                                             children: [
                                               Text(
                                                 '${entry.scorePercent.toStringAsFixed(1)}%',
+                                                textAlign: TextAlign.left,
                                                 style: TextStyle(
                                                   fontSize: rowScoreSize,
                                                   fontWeight: FontWeight.w700,
@@ -263,7 +276,9 @@ class HistoryListView extends StatelessWidget {
                                                 entry.scoreDetail,
                                                 style: TextStyle(
                                                   fontSize: rowDateSize,
-                                                  color: const Color(0xFF6C7685),
+                                                  color: const Color(
+                                                    0xFF6C7685,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -274,10 +289,11 @@ class HistoryListView extends StatelessWidget {
                                   ),
                                 );
                               },
-                              separatorBuilder: (context, index) => const Divider(
-                                height: 1,
-                                color: Color(0xFFE4E8F2),
-                              ),
+                              separatorBuilder: (context, index) =>
+                                  const Divider(
+                                    height: 1,
+                                    color: Color(0xFFE4E8F2),
+                                  ),
                               itemCount: entries.length,
                             );
                           },
@@ -424,10 +440,7 @@ class _HistoryListShimmer extends StatelessWidget {
             children: [
               Expanded(
                 flex: 3,
-                child: AppShimmerBox(
-                  height: 10 * scale,
-                  radius: 4 * scale,
-                ),
+                child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
               ),
               Expanded(
                 flex: 2,

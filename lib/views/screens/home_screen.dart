@@ -10,6 +10,7 @@ import '../../models/plan_tier.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
+import '../widgets/api_disclaimer_section.dart';
 import '../widgets/unlock_exam_dialog.dart';
 import '../../services/exam_service.dart';
 import '../../services/storage_service.dart';
@@ -532,7 +533,7 @@ class HomeDashboard extends StatelessWidget {
               );
             }),
             const SizedBox(height: 12),
-            const _DisclaimerSection(),
+            const ApiDisclaimerSection(bottomSpacing: 100),
           ],
         ),
       ),
@@ -863,42 +864,6 @@ class _StatusDot extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 14),
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text.rich(
-            TextSpan(
-              text: 'Not affiliated with or endorsed by API. ',
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: Color(0xFF6B7280),
-                fontWeight: FontWeight.w500,
-              ),
-              children: const [
-                TextSpan(
-                  text: 'See full disclaimer.',
-                  style: TextStyle(
-                    color: Color(0xFF2F6DE0),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 100),
-        ],
-      ),
     );
   }
 }
