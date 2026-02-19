@@ -240,11 +240,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       barrierColor: const Color(0xFF8B909B),
       builder: (dialogContext) {
         return HistoryTestimonialDialog(
+          examId: (widget.entry.examId ?? '').trim(),
           onSkip: () => Navigator.of(dialogContext).pop(),
-          onSubmit: () {
-            Navigator.of(dialogContext).pop();
-            _showThankYouDialog(context);
-          },
+          onSubmitted: () => _showThankYouDialog(context),
         );
       },
     );
@@ -332,7 +330,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           final TopicBreakdown? accuracyRow = _buildAccuracyRow(topics);
           final List<TopicBreakdown> topicRows = [
             ...topics,
-            if (accuracyRow != null) accuracyRow,
+            ...?((accuracyRow == null) ? null : <TopicBreakdown>[accuracyRow]),
           ];
           final double topicTableWidth =
               topicColCategory +
