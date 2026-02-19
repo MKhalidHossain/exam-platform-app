@@ -20,7 +20,7 @@ class ApiEndpoints {
   static const String updateUserPassword = '$user/password';
   static String getUserDetails(String id) => '$user/$id';
   static String updateUserStatus(String id) => '$user/$id/status';
-  
+
   static String deleteUser(String id) => '$user/$id';
 
   // Exam Endpoints
@@ -28,6 +28,7 @@ class ApiEndpoints {
   static String examStart(String examId) => '$exams/$examId/start';
   static String examProgress(String examId) => '$exams/$examId/progress';
   static String examSubmit(String examId) => '$exams/$examId/submit';
+  static String examReview(String examId) => '$exams/$examId/review';
 
   // Analytics Endpoints
   static const String historyAttempts = '/analytics/history/attempts';
@@ -43,8 +44,12 @@ class ApiEndpoints {
   // Payment Endpoints (payments base is /payments)
   static const String payments = '/payments';
   static const String professionalPlan = '$payments/plan/professional';
-  static String examStripeCreate(String examId) => '$payments/exam/$examId/stripe/create';
-  static String examStripeConfirm(String examId) => '$payments/exam/$examId/stripe/confirm';
-  static String professionalPlanStripeCreate() => '$payments/plan/professional/stripe/create';
-  static String professionalPlanStripeConfirm() => '$payments/plan/professional/stripe/confirm';
+  static String examStripeCreate(String examId) =>
+      '$payments/exam/$examId/stripe/create';
+  static String examStripeConfirm(String examId) =>
+      '$payments/exam/$examId/stripe/confirm';
+  static String professionalPlanStripeCreate() =>
+      '$payments/plan/professional/stripe/create';
+  static String professionalPlanStripeConfirm() =>
+      '$payments/plan/professional/stripe/confirm';
 }

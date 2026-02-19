@@ -32,11 +32,6 @@ GoRouter getRouter() {
     redirect: (context, state) {
 
 
-     
- 
-
-  
-
       return null;
     },
     routes: [
