@@ -56,16 +56,25 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
         lowered.contains('temporarily unavailable');
   }
 
+  bool _shouldKeepWaiting({
+    required int? statusCode,
+    required String? message,
+  }) {
+    if (statusCode == 502 || statusCode == 504 || statusCode == 408) {
+      return true;
+    }
+    return _isTimeoutMessage(message) || _isQuestionServiceError(message);
+  }
+
   @override
   void initState() {
     super.initState();
     _startExam();
   }
 
-  static const int _maxRetriesFor502 = 2;
-  static const Duration _retryDelay502 = Duration(seconds: 12);
+  static const Duration _retryDelayWhileGenerating = Duration(seconds: 12);
 
-  Future<void> _startExam({int retryCount = 0}) async {
+  Future<void> _startExam() async {
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {
       setState(() {
@@ -81,64 +90,67 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
         : Get.put(UserController());
     final bool isPro = userController.planTier.value == PlanTier.professional;
     final bool effectiveTimedMode = widget.timedMode && isPro;
-    final response = await _examService.startExam(
-      examId: examId,
-      questionCount: questionCount,
-      regenerate: widget.regenerate,
-    );
 
-    if (!mounted) return;
-
-    if (response.statusCode == 403) {
-      context.go('/subscribe');
-      return;
-    }
-
-    // 502 often means question service (e.g. Render) is cold-starting.
-    // Auto-retry after a short delay.
-    if (!response.success &&
-        response.statusCode == 502 &&
-        retryCount < _maxRetriesFor502) {
-      await Future<void>.delayed(_retryDelay502);
-      if (!mounted) return;
-      return _startExam(retryCount: retryCount + 1);
-    }
-
-    if (response.success && response.data != null) {
-      DateTime? startTime;
-      DateTime? endTime;
-      int? durationMinutes;
-      if (effectiveTimedMode) {
-        durationMinutes = response.data!.durationMinutes;
-        startTime = DateTime.now();
-        if (durationMinutes != null && durationMinutes > 0) {
-          endTime = startTime.add(Duration(minutes: durationMinutes));
-        }
-      }
-      final int sessionId = DateTime.now().millisecondsSinceEpoch;
-      context.go(
-        '/mcq',
-        extra: {
-          'courseTitle': widget.courseTitle,
-          'examId': examId,
-          'questions': response.data!.questions,
-          'startTime': startTime,
-          'endTime': endTime,
-          'durationMinutes': durationMinutes,
-          'timedMode': effectiveTimedMode,
-          'sessionId': sessionId,
-        },
+    while (mounted) {
+      final response = await _examService.startExam(
+        examId: examId,
+        questionCount: questionCount,
+        regenerate: widget.regenerate,
       );
-      return;
-    }
 
-    setState(() {
-      _isLoading = false;
-      _errorMessage = ErrorHandler.getMessageFromResponse(
+      if (!mounted) return;
+
+      if (response.statusCode == 403) {
+        context.go('/subscribe');
+        return;
+      }
+
+      if (response.success && response.data != null) {
+        DateTime? startTime;
+        DateTime? endTime;
+        int? durationMinutes;
+        if (effectiveTimedMode) {
+          durationMinutes = response.data!.durationMinutes;
+          startTime = DateTime.now();
+          if (durationMinutes != null && durationMinutes > 0) {
+            endTime = startTime.add(Duration(minutes: durationMinutes));
+          }
+        }
+        final int sessionId = DateTime.now().millisecondsSinceEpoch;
+        context.go(
+          '/mcq',
+          extra: {
+            'courseTitle': widget.courseTitle,
+            'examId': examId,
+            'questions': response.data!.questions,
+            'startTime': startTime,
+            'endTime': endTime,
+            'durationMinutes': durationMinutes,
+            'timedMode': effectiveTimedMode,
+            'sessionId': sessionId,
+          },
+        );
+        return;
+      }
+
+      final failureMessage = ErrorHandler.getMessageFromResponse(
         response,
         failureFallback: 'Failed to start the exam. Please try again.',
       );
-    });
+      if (_shouldKeepWaiting(
+        statusCode: response.statusCode,
+        message: failureMessage,
+      )) {
+        await Future<void>.delayed(_retryDelayWhileGenerating);
+        continue;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = failureMessage;
+      });
+      return;
+    }
   }
 
   @override

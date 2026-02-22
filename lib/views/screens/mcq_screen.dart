@@ -382,9 +382,7 @@ class _McqScreenState extends State<McqScreen> {
     if (!canViewExplanation) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Select an answer first to view explanation and reference.',
-          ),
+          content: Text('Select an answer first to view explanation.'),
         ),
       );
       return;
@@ -695,12 +693,6 @@ class _McqScreenState extends State<McqScreen> {
                 ),
                 if (_showExplanation && canViewExplanation) ...[
                   const SizedBox(height: 12),
-                  _ReferenceSection(
-                    reference: question.codeReference.isNotEmpty
-                        ? question.codeReference
-                        : 'No code reference available.',
-                  ),
-                  const SizedBox(height: 16),
                   _ExplanationSection(
                     text: question.explanation.isNotEmpty
                         ? question.explanation
@@ -880,7 +872,7 @@ class _DropdownHeader extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'View Explanation & Reference',
+              'View Explanation',
               style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w600,
@@ -894,45 +886,6 @@ class _DropdownHeader extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ReferenceSection extends StatelessWidget {
-  final String reference;
-
-  const _ReferenceSection({required this.reference});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: const [
-            Icon(Icons.menu_book, color: Color(0xFF2D4F88)),
-            SizedBox(width: 8),
-            Text(
-              'Code reference',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF111827),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          reference,
-          style: const TextStyle(
-            fontSize: 14.5,
-            color: Color(0xFF111827),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const Divider(height: 20, thickness: 1),
-      ],
     );
   }
 }

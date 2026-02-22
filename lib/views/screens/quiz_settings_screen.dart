@@ -124,46 +124,48 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              _InfoCard(
-                backgroundColor: const Color(0xFFE7F0FF),
-                borderColor: const Color(0xFFD4E2F7),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isPro ? 'Professional Plan' : 'Starter Plan Limits',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827),
+              if (!isPro)
+                _InfoCard(
+                  backgroundColor: const Color(0xFFE7F0FF),
+                  borderColor: const Color(0xFFD4E2F7),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Starter Plan Limits',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Questions remaining this month: $_monthlyLimit/$_monthlyLimit',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF111827),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Questions remaining this month: $_monthlyLimit/$_monthlyLimit',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Questions used for "${widget.courseTitle}": $usedForExam/$maxSelectable',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF111827),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Questions used for "${widget.courseTitle}": $usedForExam/$maxSelectable',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF111827),
+                        ),
                       ),
-                    ),
-                    if (!isPro && _isStarterUsageLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                  ],
+                      if (_isStarterUsageLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+
               const SizedBox(height: 16),
               _InfoCard(
                 child: Column(

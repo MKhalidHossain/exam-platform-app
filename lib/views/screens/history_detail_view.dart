@@ -164,6 +164,12 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     return ((correct / total) * 100).round();
   }
 
+  int? _extractTotalQuestions(String scoreDetail) {
+    final parts = scoreDetail.split('/');
+    if (parts.length < 2) return null;
+    return int.tryParse(parts.last.trim());
+  }
+
   TopicBreakdown? _buildAccuracyRow(List<TopicBreakdown> topics) {
     if (topics.isEmpty) return null;
     final int totalCorrect = topics.fold(
@@ -295,6 +301,15 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       final double scorePercent = detail != null
           ? detail.score.toDouble()
           : widget.entry.scorePercent;
+      final int? fallbackQuestionCount = _extractTotalQuestions(
+        widget.entry.scoreDetail,
+      );
+      final int regenerateQuestionCount = detail != null
+          ? detail.correctCount + detail.wrongCount + detail.unansweredCount
+          : (fallbackQuestionCount ?? 1);
+      final int safeRegenerateQuestionCount = regenerateQuestionCount > 0
+          ? regenerateQuestionCount
+          : 1;
 
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -776,7 +791,8 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                     extra: {
                                       'courseTitle': examName,
                                       'examId': examId,
-                                      'questionCount': 30,
+                                      'questionCount':
+                                          safeRegenerateQuestionCount,
                                       'regenerate': true,
                                       'examType': 'full_exam',
                                     },
@@ -797,7 +813,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 ),
                                 icon: const Icon(Icons.refresh, size: 16),
                                 label: Text(
-                                  'Regenerate Exam (30 New Questions)',
+                                  'Regenerate New Exam Questions',
                                   style: TextStyle(fontSize: buttonSize),
                                 ),
                               ),
