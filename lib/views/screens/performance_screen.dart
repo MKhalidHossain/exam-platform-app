@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
@@ -36,8 +38,12 @@ class PerformanceScreen extends StatefulWidget {
 
 class _PerformanceScreenState extends State<PerformanceScreen> {
   static const String _profileHistoryTag = 'profileHistory';
+  static const Duration _historyRevealDelay = Duration(milliseconds: 700);
   late final PerformanceController _controller;
   HistoryController? _historyController;
+  Timer? _historyRevealTimer;
+  bool _showHistoryDelayLoader = false;
+  bool _wasHistoryLoading = false;
 
   @override
   void initState() {
@@ -57,6 +63,58 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       if (examId != null && examId.trim().isNotEmpty) {
         _controller.fetchPerformance(examId);
       }
+    }
+  }
+
+  @override
+  void dispose() {
+    _historyRevealTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncHistoryRevealDelay({
+    required bool isLoading,
+    required List<HistoryEntry> history,
+    required String? errorMessage,
+  }) {
+    final bool hasError =
+        errorMessage != null && errorMessage.trim().isNotEmpty;
+
+    if (isLoading) {
+      _wasHistoryLoading = true;
+      _historyRevealTimer?.cancel();
+      if (_showHistoryDelayLoader) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _showHistoryDelayLoader = false);
+        });
+      }
+      return;
+    }
+
+    if (_wasHistoryLoading && history.isNotEmpty && !hasError) {
+      _wasHistoryLoading = false;
+      _historyRevealTimer?.cancel();
+      if (!_showHistoryDelayLoader) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _showHistoryDelayLoader = true);
+        });
+      }
+      _historyRevealTimer = Timer(_historyRevealDelay, () {
+        if (!mounted) return;
+        setState(() => _showHistoryDelayLoader = false);
+      });
+      return;
+    }
+
+    _wasHistoryLoading = false;
+    if ((hasError || history.isEmpty) && _showHistoryDelayLoader) {
+      _historyRevealTimer?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _showHistoryDelayLoader = false);
+      });
     }
   }
 
@@ -341,6 +399,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     int? attemptsCountOverride,
     VoidCallback? onSeeMore,
   }) {
+    _syncHistoryRevealDelay(
+      isLoading: isLoading,
+      history: history,
+      errorMessage: errorMessage,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final double scale = (constraints.maxWidth / 375).clamp(0.85, 1.15);
@@ -352,6 +416,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
         final bool showOverviewShimmer =
             useShimmerLoading && showOverviewLoading;
+        final bool showHistoryShimmer =
+            isLoading || _showHistoryDelayLoader;
 
         final List<Widget> masteryCards = showOverviewShimmer
             ? [
@@ -420,6 +486,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               ];
 
         final int attemptsCount = attemptsCountOverride ?? scores.length;
+        final String screenTitle = widget.isProfileFlow
+            ? 'Overall Performace'
+            : 'Exam Performace';
 
         final VoidCallback handleSeeMore =
             onSeeMore ??
@@ -447,7 +516,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                       Expanded(
                         child: Center(
                           child: Text(
-                            'Performance',
+                            screenTitle,
                             style: TextStyle(
                               fontSize: titleSize,
                               fontWeight: FontWeight.w700,
@@ -594,7 +663,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                           ],
                         ),
                         SizedBox(height: 6 * scale),
-                        if (isLoading && history.isEmpty)
+                        if (showHistoryShimmer)
                           Padding(
                             padding: EdgeInsets.symmetric(vertical: 8 * scale),
                             child: _buildShimmer(
@@ -715,6 +784,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                               ],
                             );
                           }),
+                      
+                      
                       ],
                     ),
                   ),
