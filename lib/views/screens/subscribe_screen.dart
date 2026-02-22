@@ -52,7 +52,10 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         professionalPlan = res.data;
         planError = null;
       } else {
-        planError = ErrorHandler.getMessageFromResponse(res, failureFallback: 'Failed to load plan');
+        planError = ErrorHandler.getMessageFromResponse(
+          res,
+          failureFallback: 'Failed to load plan',
+        );
       }
     });
   }
@@ -96,8 +99,10 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 // Content
                 Expanded(
                   child: SingleChildScrollView(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                     child: Column(
                       children: [
                         // Starter Plan Card
@@ -116,12 +121,14 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         _buildPlanCard(
                           planTier: PlanTier.professional,
                           isActive: currentPlan == PlanTier.professional,
+                          professionalPlan: professionalPlan,
                           onUpgrade:
-                              (currentPlan == PlanTier.starter && !_isPaymentLoading)
-                                  ? () {
-                                      _openUnlockExamDialog();
-                                    }
-                                  : null,
+                              (currentPlan == PlanTier.starter &&
+                                  !_isPaymentLoading)
+                              ? () {
+                                  _openUnlockExamDialog();
+                                }
+                              : null,
                         ),
                         if (_isPaymentLoading)
                           Padding(
@@ -197,21 +204,36 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
     try {
       // 1. Create Payment Intent on backend
-      final createRes = await _apiService.createExamStripePaymentIntent(examId);
+      final createRes = await _apiService
+          .createProfessionalPlanStripePaymentIntent(examId);
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
-        ErrorHandler.showFromResponse(createRes, context: context, failureFallback: 'Failed to create payment');
+        ErrorHandler.showFromResponse(
+          createRes,
+          context: context,
+          failureFallback: 'Failed to create payment',
+        );
         return;
       }
 
       final clientSecret = createRes.data!['clientSecret'] as String?;
       final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
-      if (clientSecret == null || clientSecret.isEmpty || paymentIntentId == null) {
+      if (clientSecret == null ||
+          clientSecret.isEmpty ||
+          paymentIntentId == null) {
         setState(() => _isPaymentLoading = false);
-        ErrorHandler.showSnackBar('Invalid payment response', isError: true, context: context);
+        ErrorHandler.showSnackBar(
+          'Invalid payment response',
+          isError: true,
+          context: context,
+        );
         return;
       }
+      final amountFromApi = createRes.data!['amount'];
+      final int amountPaid = amountFromApi is num
+          ? amountFromApi.round()
+          : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
 
       // 2. Init and present Stripe Payment Sheet
       await Stripe.instance.initPaymentSheet(
@@ -227,8 +249,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted) return;
 
       // 3. User completed payment in sheet → confirm on backend
-      final confirmRes =
-          await _apiService.confirmExamStripePayment(examId, paymentIntentId);
+      final confirmRes = await _apiService.confirmProfessionalPlanStripePayment(
+        paymentIntentId,
+      );
       if (!mounted) return;
       setState(() => _isPaymentLoading = false);
 
@@ -244,20 +267,32 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': 150,
+            'amountPaid': amountPaid,
           },
         );
       } else {
-        ErrorHandler.showFromResponse(confirmRes, context: context, failureFallback: 'Failed to confirm payment');
+        ErrorHandler.showFromResponse(
+          confirmRes,
+          context: context,
+          failureFallback: 'Failed to confirm payment',
+        );
       }
     } on StripeException catch (e) {
       if (!mounted) return;
       setState(() => _isPaymentLoading = false);
-      ErrorHandler.showSnackBar(e.error.message ?? 'Payment was cancelled or failed.', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        e.error.message ?? 'Payment was cancelled or failed.',
+        isError: true,
+        context: context,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isPaymentLoading = false);
-      ErrorHandler.showFromException(e, context: context, fallback: 'Payment failed. Please try again.');
+      ErrorHandler.showFromException(
+        e,
+        context: context,
+        fallback: 'Payment failed. Please try again.',
+      );
     }
   }
 
@@ -276,10 +311,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: isActive
-            ? Border.all(
-                color: const Color(0xFF2D4F88),
-                width: 2,
-              )
+            ? Border.all(color: const Color(0xFF2D4F88), width: 2)
             : null,
         boxShadow: [
           BoxShadow(
@@ -330,7 +362,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            isStarter ? 'Starter Plan' : (plan?.name ?? 'Professional Plan'),
+                            isStarter
+                                ? 'Starter Plan'
+                                : (plan?.name ?? 'Professional Plan'),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -404,10 +438,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '/forever',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -426,19 +457,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '/${plan?.interval.label ?? '3 months'}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
             ),
           ],
           const SizedBox(height: 20),
-          Container(
-            height: 1,
-            color: Colors.grey[200],
-          ),
+          Container(height: 1, color: Colors.grey[200]),
           const SizedBox(height: 20),
           Text(
             isStarter
@@ -467,10 +492,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
                         ),
-                        side: BorderSide(
-                          color: Colors.grey[300]!,
-                          width: 1,
-                        ),
+                        side: BorderSide(color: Colors.grey[300]!, width: 1),
                       ),
                       child: const Text(
                         'Your Current Plan',
@@ -513,10 +535,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
                         ),
-                        side: BorderSide(
-                          color: Colors.grey[300]!,
-                          width: 1,
-                        ),
+                        side: BorderSide(color: Colors.grey[300]!, width: 1),
                       ),
                       child: const Text(
                         'Your Current Plan',
@@ -537,7 +556,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         elevation: 0,
                       ),
                       child: Text(
-                        plan != null ? 'Subscribe - ${plan.priceFormatted}' : 'Subscribe - \$180.00',
+                        plan != null
+                            ? 'Subscribe - ${plan.priceFormatted}'
+                            : 'Subscribe - \$180.00',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -550,10 +571,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     );
   }
 
-  List<Widget> _buildFeaturesList(bool isStarter, {ProfessionalPlanModel? professionalPlan}) {
+  List<Widget> _buildFeaturesList(
+    bool isStarter, {
+    ProfessionalPlanModel? professionalPlan,
+  }) {
     if (isStarter) {
       return [
-        _buildFeatureItem('15 free practice questions per month'),
+        _buildFeatureItem('16 free practice questions per month'),
         _buildFeatureItem('Explore all certifications'),
         _buildFeatureItem('Up to 2 practice questions per certification'),
         _buildFeatureItem('Upgrade anytime for full access'),
@@ -570,7 +594,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       _buildFeatureItem('Timed & Full Simulation Modes'),
       _buildFeatureItem('Interactive study mode'),
       _buildFeatureItem(
-          'Progress tracking, Performance Dashboard & exam history'),
+        'Progress tracking, Performance Dashboard & exam history',
+      ),
       _buildFeatureItem('Detailed explanations with code references'),
       _buildFeatureItem('All Smart Study Tools'),
     ];
@@ -582,11 +607,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.check,
-            color: Color(0xFF111827),
-            size: 20,
-          ),
+          const Icon(Icons.check, color: Color(0xFF111827), size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
