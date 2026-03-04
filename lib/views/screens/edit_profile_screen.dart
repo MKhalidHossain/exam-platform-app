@@ -4,6 +4,9 @@ import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/edit_profile_shimmer.dart';
+import '../widgets/app_shimmer.dart';
+import '../../core/error/error_handler.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
@@ -16,8 +19,8 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final UserService _userService = UserService();
   File? _selectedImage;
@@ -42,27 +45,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (response.success && response.data != null) {
         setState(() {
           _user = response.data;
-          _firstNameController.text = _user?.firstName ?? '';
-          _lastNameController.text = _user?.lastName ?? '';
+          _nameController.text = _user?.name ?? '';
+          _phoneController.text = _user?.phone ?? '';
         });
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to load profile'),
-              backgroundColor: Colors.red,
-            ),
+          ErrorHandler.showSnackBar(
+            ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile'),
+            isError: true,
+            context: context,
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading profile: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error loading profile.');
       }
     } finally {
       if (mounted) {
@@ -89,12 +86,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error picking image.');
       }
     }
   }
@@ -130,16 +122,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
-    final firstName = _firstNameController.text.trim();
-    final lastName = _lastNameController.text.trim();
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
 
-    if (firstName.isEmpty && lastName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter at least first name or last name'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (name.isEmpty) {
+      ErrorHandler.showSnackBar('Please enter your name', isError: true, context: context);
       return;
     }
 
@@ -149,41 +136,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final response = await _userService.updateProfile(
-        firstName: firstName.isNotEmpty ? firstName : null,
-        lastName: lastName.isNotEmpty ? lastName : null,
+        name: name,
+        phone: phone.isNotEmpty ? phone : null,
         avatarFile: _selectedImage,
       );
 
       if (mounted) {
         if (response.success && response.data != null) {
-          // Refresh UserController so Profile and Home screens show updated name and image
+          // Update UserController so Profile and Home screens show updated name and image
           if (Get.isRegistered<UserController>()) {
-            await Get.find<UserController>().refreshProfile();
+            await Get.find<UserController>().applyProfile(response.data!);
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Profile updated successfully'),
-              backgroundColor: Colors.green,
-            ),
+          ErrorHandler.showSnackBar(
+            ErrorHandler.getMessageFromResponse(response, successFallback: 'Profile updated successfully'),
+            isError: false,
+            context: context,
           );
           context.pop();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to update profile'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to update profile');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating profile: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error updating profile.');
       }
     } finally {
       if (mounted) {
@@ -196,8 +172,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -236,9 +212,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               Expanded(
                 child: _isLoadingProfile
-                    ? const Center(
-                        child: CircularProgressIndicator(),
-                      )
+                    ? const EditProfileShimmer()
                     : SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Column(
@@ -302,7 +276,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               ],
                             ),
                             const SizedBox(height: 40),
-                            // First Name Input Field
+                            // Name Input Field
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -313,9 +287,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 ),
                               ),
                               child: TextField(
-                                controller: _firstNameController,
+                                controller: _nameController,
                                 decoration: InputDecoration(
-                                  hintText: 'First Name: Enter your First Name',
+                                  hintText: 'Name: Enter your name',
                                   hintStyle: TextStyle(
                                     color: Colors.grey[500],
                                     fontSize: 16,
@@ -338,7 +312,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: 20),
-                            // Last Name Input Field
+                            // Phone Input Field
                             Container(
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -349,9 +323,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 ),
                               ),
                               child: TextField(
-                                controller: _lastNameController,
+                                controller: _phoneController,
+                                keyboardType: TextInputType.phone,
                                 decoration: InputDecoration(
-                                  hintText: 'Last Name: Enter your Last Name',
+                                  hintText: 'Phone: Enter your phone number',
                                   hintStyle: TextStyle(
                                     color: Colors.grey[500],
                                     fontSize: 16,
@@ -389,16 +364,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Next',
                                   style: TextStyle(

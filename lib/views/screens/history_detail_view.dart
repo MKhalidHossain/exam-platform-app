@@ -6,8 +6,12 @@ import 'history_models.dart';
 import 'performance_screen.dart';
 import 'history_testimonial_dialog.dart';
 import 'history_thank_you_dialog.dart';
+import '../widgets/app_shimmer.dart';
+import '../widgets/api_disclaimer_section.dart';
 import '../../controllers/history_controller.dart';
+import '../../controllers/user_controller.dart';
 import '../../models/history_attempt_detail_model.dart';
+import '../../models/plan_tier.dart';
 
 class HistoryDetailView extends StatefulWidget {
   const HistoryDetailView({
@@ -71,9 +75,115 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   }
 
   String _joinAnswers(List<String> values) {
-    final cleaned =
-        values.map((value) => value.trim()).where((value) => value.isNotEmpty);
+    final cleaned = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty);
     return cleaned.isEmpty ? '-' : cleaned.join(', ');
+  }
+
+  Widget _buildTopicLoadingShimmer(double scale) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8 * scale),
+      child: Column(
+        children: List.generate(5, (index) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: 8 * scale),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+                ),
+                SizedBox(width: 8 * scale),
+                Expanded(
+                  flex: 1,
+                  child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildReviewLoadingShimmer(double scale) {
+    return Column(
+      children: List.generate(3, (index) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: 12 * scale),
+          child: Container(
+            padding: EdgeInsets.all(12 * scale),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE3E7F2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppShimmerBox(
+                  width: 120 * scale,
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+                SizedBox(height: 10 * scale),
+                AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+                SizedBox(height: 6 * scale),
+                AppShimmerBox(
+                  width: 180 * scale,
+                  height: 10 * scale,
+                  radius: 4 * scale,
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  int _ensureAccuracy({
+    required int accuracy,
+    required int correct,
+    required int incorrect,
+  }) {
+    if (accuracy > 0) return accuracy;
+    final total = correct + incorrect;
+    if (total == 0) return 0;
+    return ((correct / total) * 100).round();
+  }
+
+  TopicBreakdown? _buildAccuracyRow(List<TopicBreakdown> topics) {
+    if (topics.isEmpty) return null;
+    final int totalCorrect = topics.fold(
+      0,
+      (sum, topic) => sum + topic.correct,
+    );
+    final int totalIncorrect = topics.fold(
+      0,
+      (sum, topic) => sum + topic.incorrect,
+    );
+    final int total = totalCorrect + totalIncorrect;
+    final int accuracy = total == 0
+        ? 0
+        : ((totalCorrect / total) * 100).round();
+    return TopicBreakdown(
+      category: 'Accuracy',
+      correct: totalCorrect,
+      incorrect: totalIncorrect,
+      accuracy: accuracy,
+    );
   }
 
   List<TopicBreakdown> _mapTopicBreakdown(HistoryAttemptDetail? detail) {
@@ -85,7 +195,11 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             category: topic.category,
             correct: topic.correct,
             incorrect: topic.incorrect,
-            accuracy: topic.accuracy,
+            accuracy: _ensureAccuracy(
+              accuracy: topic.accuracy,
+              correct: topic.correct,
+              incorrect: topic.incorrect,
+            ),
           ),
         )
         .toList();
@@ -97,7 +211,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     VoidCallback? onRetry,
   }) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 12 * scale, horizontal: 8 * scale),
+      padding: EdgeInsets.symmetric(
+        vertical: 12 * scale,
+        horizontal: 8 * scale,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -111,10 +228,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           ),
           if (onRetry != null) ...[
             SizedBox(height: 8 * scale),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ],
       ),
@@ -128,11 +242,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
       barrierColor: const Color(0xFF8B909B),
       builder: (dialogContext) {
         return HistoryTestimonialDialog(
+          examId: (widget.entry.examId ?? '').trim(),
           onSkip: () => Navigator.of(dialogContext).pop(),
-          onSubmit: () {
-            Navigator.of(dialogContext).pop();
-            _showThankYouDialog(context);
-          },
+          onSubmitted: () => _showThankYouDialog(context),
         );
       },
     );
@@ -160,22 +272,29 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final UserController userController = Get.isRegistered<UserController>()
+          ? Get.find<UserController>()
+          : Get.put(UserController());
+      final bool isPro = userController.planTier.value == PlanTier.professional;
       final attemptId = widget.entry.attemptId;
       final HistoryAttemptDetail? detail = attemptId == null
           ? null
           : _controller.attemptDetails[attemptId];
-      final bool isDetailLoading = attemptId != null &&
+      final bool isDetailLoading =
+          attemptId != null &&
           (_controller.attemptDetailLoading[attemptId] ?? false);
-      final String? detailError =
-          attemptId == null ? null : _controller.attemptDetailErrors[attemptId];
+      final String? detailError = attemptId == null
+          ? null
+          : _controller.attemptDetailErrors[attemptId];
       final List<TopicBreakdown> detailTopics = _mapTopicBreakdown(detail);
       final List<AttemptReviewAnswer> reviewAnswers =
           detail?.review?.answers ?? const [];
       final String examName = (detail?.exam?.name ?? '').trim().isNotEmpty
           ? detail!.exam!.name
           : widget.entry.examName;
-      final double scorePercent =
-          detail != null ? detail.score.toDouble() : widget.entry.scorePercent;
+      final double scorePercent = detail != null
+          ? detail.score.toDouble()
+          : widget.entry.scorePercent;
 
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -190,25 +309,50 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           final double rowSize = 10 * scale;
           final double cardTitle = 11 * scale;
           final double cardBody = 10 * scale;
-          final double colCategory = 150 * scale;
-          final double colCorrect = 62 * scale;
-          final double colIncorrect = 70 * scale;
-          final double colAccuracy = 70 * scale;
-          final double colStatus = 60 * scale;
+          final double contentWidth = (constraints.maxWidth - (hPad * 2)).clamp(
+            0.0,
+            420.0,
+          );
+          final double topicColCorrect = contentWidth * 0.14;
+          final double topicColIncorrect = contentWidth * 0.14;
+          final double topicColAccuracy = contentWidth * 0.16;
+          final double topicColStatus = contentWidth * 0.12;
+          final double topicColCategory =
+              contentWidth -
+              (topicColCorrect +
+                  topicColIncorrect +
+                  topicColAccuracy +
+                  topicColStatus);
+          final double questionColCorrect = contentWidth * 0.16;
+          final double questionColIncorrect = contentWidth * 0.16;
+          final double questionColStatus = contentWidth * 0.16;
+          final double questionColCategory =
+              contentWidth -
+              (questionColCorrect + questionColIncorrect + questionColStatus);
           final bool useFallbackTopics = attemptId == null;
-          final List<TopicBreakdown> topics =
-              useFallbackTopics ? widget.topics : detailTopics;
-          final double topicTableWidth = colCategory +
-              colCorrect +
-              colIncorrect +
-              colAccuracy +
-              colStatus;
+          final List<TopicBreakdown> topics = useFallbackTopics
+              ? widget.topics
+              : detailTopics;
+          final TopicBreakdown? accuracyRow = _buildAccuracyRow(topics);
+          final List<TopicBreakdown> topicRows = [
+            ...topics,
+            ...?((accuracyRow == null) ? null : <TopicBreakdown>[accuracyRow]),
+          ];
+          final double topicTableWidth =
+              topicColCategory +
+              topicColCorrect +
+              topicColIncorrect +
+              topicColAccuracy +
+              topicColStatus;
           final double questionTableWidth =
-              colCategory + colCorrect + colIncorrect + colStatus;
+              questionColCategory +
+              questionColCorrect +
+              questionColIncorrect +
+              questionColStatus;
 
           final Widget topicContent;
           if (attemptId != null && detail == null && isDetailLoading) {
-            topicContent = const Center(child: CircularProgressIndicator());
+            topicContent = _buildTopicLoadingShimmer(scale);
           } else if (attemptId != null &&
               detail == null &&
               detailError != null &&
@@ -235,92 +379,92 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                         children: [
                           _TopicHeaderCell(
                             label: 'Category',
-                            width: colCategory,
+                            width: topicColCategory,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Correct',
-                            width: colCorrect,
+                            width: topicColCorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Incorrect',
-                            width: colIncorrect,
+                            width: topicColIncorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Accuracy',
-                            width: colAccuracy,
+                            width: topicColAccuracy,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Status',
-                            width: colStatus,
+                            width: topicColStatus,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                         ],
                       ),
                       SizedBox(height: 14 * scale),
-                      ...topics.map(
-                        (topic) {
-                          final bool passed = topic.correct > 0;
-                          return Padding(
-                            padding: EdgeInsets.symmetric(vertical: 6 * scale),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: colCategory,
-                                  child: Text(
-                                    topic.category,
-                                    style: TextStyle(fontSize: rowSize),
+                      ...topicRows.map((topic) {
+                        final bool passed = topic.correct > 0;
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: 6 * scale),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: topicColCategory,
+                                child: Text(
+                                  topic.category,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: topicColCorrect,
+                                child: Text(
+                                  '${topic.correct}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: topicColIncorrect,
+                                child: Text(
+                                  '${topic.incorrect}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: topicColAccuracy,
+                                child: Text(
+                                  '${topic.accuracy}%',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: rowSize),
+                                ),
+                              ),
+                              SizedBox(
+                                width: topicColStatus,
+                                child: Center(
+                                  child: Icon(
+                                    passed ? Icons.check : Icons.close,
+                                    size: 16 * scale,
+                                    color: passed
+                                        ? const Color(0xFF1BA64B)
+                                        : const Color(0xFFE53935),
                                   ),
                                 ),
-                                SizedBox(
-                                  width: colCorrect,
-                                  child: Text(
-                                    '${topic.correct}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colIncorrect,
-                                  child: Text(
-                                    '${topic.incorrect}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colAccuracy,
-                                  child: Text(
-                                    '${topic.accuracy}%',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: rowSize),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: colStatus,
-                                  child: Center(
-                                    child: Icon(
-                                      passed ? Icons.check : Icons.close,
-                                      size: 16 * scale,
-                                      color: passed
-                                          ? const Color(0xFF1BA64B)
-                                          : const Color(0xFFE53935),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -343,26 +487,27 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                       Row(
                         children: [
                           _TopicHeaderCell(
-                            label: 'Category',
-                            width: colCategory,
+                            // label: 'Category',
+                            label: 'Questions',
+                            width: questionColCategory,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Correct',
-                            width: colCorrect,
+                            width: questionColCorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Incorrect',
-                            width: colIncorrect,
+                            width: questionColIncorrect,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
                           _TopicHeaderCell(
                             label: 'Status',
-                            width: colStatus,
+                            width: questionColStatus,
                             fontSize: headerSize,
                             height: 24 * scale,
                           ),
@@ -377,14 +522,15 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                           child: Row(
                             children: [
                               SizedBox(
-                                width: colCategory,
+                                width: questionColCategory,
                                 child: Text(
                                   'Q${index + 1}',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: rowSize),
                                 ),
                               ),
                               SizedBox(
-                                width: colCorrect,
+                                width: questionColCorrect,
                                 child: Text(
                                   answer.isCorrect ? '1' : '0',
                                   textAlign: TextAlign.center,
@@ -392,7 +538,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 ),
                               ),
                               SizedBox(
-                                width: colIncorrect,
+                                width: questionColIncorrect,
                                 child: Text(
                                   answer.isCorrect ? '0' : '1',
                                   textAlign: TextAlign.center,
@@ -400,7 +546,7 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 ),
                               ),
                               SizedBox(
-                                width: colStatus,
+                                width: questionColStatus,
                                 child: Center(
                                   child: Icon(
                                     answer.isCorrect
@@ -424,15 +570,17 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               ),
             );
           } else {
-            topicContent =
-                _buildSectionMessage('No topic breakdown available.', scale);
+            topicContent = _buildSectionMessage(
+              'No topic breakdown available.',
+              scale,
+            );
           }
 
           final Widget reviewContent;
           if (attemptId != null && detail == null && isDetailLoading) {
-            reviewContent = const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: CircularProgressIndicator()),
+            reviewContent = Padding(
+              padding: EdgeInsets.symmetric(vertical: 12 * scale),
+              child: _buildReviewLoadingShimmer(scale),
             );
           } else if (attemptId != null &&
               detail == null &&
@@ -444,8 +592,10 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
               onRetry: _fetchDetail,
             );
           } else if (reviewAnswers.isEmpty) {
-            reviewContent =
-                _buildSectionMessage('No answers available.', scale);
+            reviewContent = _buildSectionMessage(
+              'No answers available.',
+              scale,
+            );
           } else {
             reviewContent = Column(
               children: reviewAnswers.asMap().entries.map((entry) {
@@ -470,230 +620,252 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(hPad, 6 * scale, hPad, 24 * scale),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          return Scaffold(
+            body: Stack(
               children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: widget.onBack,
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      color: const Color(0xFF27407C),
-                    ),
-                    Expanded(
-                      child: Text(
-                        examName,
-                        style: TextStyle(
-                          fontSize: titleSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF27407C),
-                        ),
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/splash_background.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        hPad,
+                        10 * scale,
+                        hPad,
+                        24 * scale,
                       ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: EdgeInsets.only(left: 6 * scale),
-                  child: Text(
-                    "Here's how you did on the '$examName'\nexam.",
-                    style: TextStyle(
-                      fontSize: captionSize,
-                      color: const Color(0xFF6C7685),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 12 * scale),
-                Center(
-                  child: Column(
-                    children: [
-                      Text(
-                        'Your Score.',
-                        style: TextStyle(
-                          fontSize: captionSize,
-                          color: const Color(0xFF6C7685),
-                        ),
-                      ),
-                      SizedBox(height: 4 * scale),
-                      Text(
-                        '${scorePercent.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: scoreSize,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF1E6CF3),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 12 * scale),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          context.push(
-                            '/quiz-settings',
-                            extra: {'courseTitle': examName},
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF20324A),
-                          backgroundColor: const Color(0xFFE1E4EA),
-                          side: const BorderSide(color: Color(0xFFBCC6D6)),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Try Again',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12 * scale),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          context.push(
-                            '/performance',
-                            extra: PerformanceArgs(
-                              entry: widget.entry,
-                              history: widget.historyEntries,
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E4AA8),
-                          padding: EdgeInsets.symmetric(vertical: 12 * scale),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                        ),
-                        child: Text(
-                          'Performance',
-                          style: TextStyle(fontSize: buttonSize),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 10 * scale),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    context.push(
-                      '/exam-loading',
-                      extra: {'courseTitle': examName},
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1E4AA8),
-                    side: const BorderSide(color: Color(0xFF9FB4E9)),
-                    padding: EdgeInsets.symmetric(
-                      vertical: 12 * scale,
-                      horizontal: 16 * scale,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text(
-                    'Regenerate Exam (120 New Questions)',
-                    style: TextStyle(fontSize: buttonSize),
-                  ),
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Text(
-                    'Topic Breakdown',
-                    style: TextStyle(
-                      fontSize: sectionTitle,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8 * scale),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8 * scale,
-                    vertical: 8 * scale,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE0E5F1)),
-                  ),
-                  child: topicContent,
-                ),
-                SizedBox(height: 16 * scale),
-                Center(
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(10 * scale),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE0E5F1)),
-                    ),
-                    child: Column(
-                      children: [
-                        SizedBox(height: 4 * scale),
-                        Center(
-                          child: Text(
-                            'Review Your Answers',
-                            style: TextStyle(
-                              fontSize: 13 * scale,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 10 * scale),
-                        reviewContent,
-                        Center(
-                          child: GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Disclaimer tapped.'),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: IconButton(
+                                onPressed: widget.onBack,
+                                icon: const Icon(
+                                  Icons.arrow_back_ios_new,
+                                  size: 18,
                                 ),
-                              );
-                            },
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Not affiliated with or endorsed by API. ',
-                                style: TextStyle(
-                                  fontSize: 10 * scale,
-                                  color: const Color(0xFF6C7685),
+                                color: const Color(0xFF27407C),
+                              ),
+                            ),
+                            Text(
+                              'Quiz Complete!',
+                              style: TextStyle(
+                                fontSize: titleSize + 1,
+                                fontWeight: FontWeight.w700,
+                                color: const Color.fromARGB(255, 33, 46, 74),
+                              ),
+                            ),
+                            SizedBox(height: 6 * scale),
+                            Text(
+                              "Here's how you did on the '$examName'\nexam.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: captionSize,
+                                color: const Color(0xFF6C7685),
+                              ),
+                            ),
+                            SizedBox(height: 14 * scale),
+                            Column(
+                              children: [
+                                Text(
+                                  'Your Score.',
+                                  style: TextStyle(
+                                    fontSize: captionSize,
+                                    color: const Color(0xFF6C7685),
+                                  ),
                                 ),
+                                SizedBox(height: 4 * scale),
+                                Text(
+                                  '${scorePercent.toStringAsFixed(1)}%',
+                                  style: TextStyle(
+                                    fontSize: scoreSize,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF1E6CF3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 14 * scale),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      context.push(
+                                        '/quiz-settings',
+                                        extra: {
+                                          'courseTitle': examName,
+                                          'examId': widget.entry.examId,
+                                        },
+                                      );
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF20324A),
+                                      backgroundColor: const Color(0xFFE6E9EF),
+                                      side: const BorderSide(
+                                        color: Color(0xFFBCC6D6),
+                                      ),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 11 * scale,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Try Again',
+                                      style: TextStyle(fontSize: buttonSize),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 12 * scale),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      context.push(
+                                        '/performance',
+                                        extra: PerformanceArgs(
+                                          entry: widget.entry,
+                                          history: widget.historyEntries,
+                                        ),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF1E4AA8),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 11 * scale,
+                                      ),
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Performance',
+                                      style: TextStyle(fontSize: buttonSize),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 10 * scale),
+                            if (isPro)
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  final examId = widget.entry.examId?.trim();
+                                  if (examId == null || examId.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Exam ID missing. Please try again.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  context.push(
+                                    '/exam-loading',
+                                    extra: {
+                                      'courseTitle': examName,
+                                      'examId': examId,
+                                      'questionCount': 30,
+                                      'regenerate': true,
+                                      'examType': 'full_exam',
+                                    },
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF1E4AA8),
+                                  side: const BorderSide(
+                                    color: Color(0xFF9FB4E9),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 11 * scale,
+                                    horizontal: 14 * scale,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: Text(
+                                  'Regenerate Exam (30 New Questions)',
+                                  style: TextStyle(fontSize: buttonSize),
+                                ),
+                              ),
+                            SizedBox(height: 18 * scale),
+                            Text(
+                              'Topic Breakdown',
+                              style: TextStyle(
+                                fontSize: sectionTitle,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1F2A44),
+                              ),
+                            ),
+                            SizedBox(height: 10 * scale),
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8 * scale,
+                                vertical: 10 * scale,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE0E5F1),
+                                ),
+                              ),
+                              child: topicContent,
+                            ),
+                            SizedBox(height: 16 * scale),
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.all(10 * scale),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE0E5F1),
+                                ),
+                              ),
+                              child: Column(
                                 children: [
-                                  TextSpan(
-                                    text: 'See full\n',
+                                  Text(
+                                    'Review Your Answers',
                                     style: TextStyle(
+                                      fontSize: 13 * scale,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  SizedBox(height: 10 * scale),
+                                  reviewContent,
+                                  ApiDisclaimerSection(
+                                    baseStyle: TextStyle(
                                       fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
+                                      color: const Color(0xFF6C7685),
+                                    ),
+                                    linkStyle: TextStyle(
+                                      fontSize: 10 * scale,
+                                      color: const Color(0xFF1E6CF3),
                                       decoration: TextDecoration.underline,
                                     ),
                                   ),
-                                  TextSpan(
-                                    text: 'disclaimer.',
-                                    style: TextStyle(
-                                      fontSize: 10 * scale,
-                                      color: Color(0xFF1E6CF3),
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
+                                  SizedBox(height: 12 * scale),
                                 ],
                               ),
-                              textAlign: TextAlign.center,
                             ),
-                          ),
+                          ],
                         ),
-                        SizedBox(height: 12 * scale),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -727,7 +899,7 @@ class _TopicHeaderCell extends StatelessWidget {
       alignment: Alignment.center,
       margin: EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF7F9FF),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE0E5F1)),
       ),

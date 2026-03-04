@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/history_attempt_model.dart';
 import '../models/history_attempt_detail_model.dart';
@@ -38,7 +39,54 @@ class HistoryController extends GetxController {
       attempts.assignAll(response.data!.attempts);
       meta.value = response.data!.meta;
     } else {
-      errorMessage.value = response.message ?? 'Failed to load attempts';
+      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load attempts');
+    }
+
+    isLoading.value = false;
+  }
+
+  Future<void> fetchAllAttempts({int limit = 20}) async {
+    isLoading.value = true;
+    errorMessage.value = '';
+
+    final List<HistoryAttempt> allAttempts = <HistoryAttempt>[];
+    AttemptsMeta? latestMeta;
+    int page = 1;
+
+    while (true) {
+      final ApiResponse<HistoryAttemptsData> response =
+          await _apiService.get<HistoryAttemptsData>(
+        ApiEndpoints.historyAttempts,
+        queryParams: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+        },
+        fromJson: (json) => HistoryAttemptsData.fromJson(
+          Map<String, dynamic>.from(json as Map),
+        ),
+      );
+
+      if (!response.success || response.data == null) {
+        errorMessage.value = ErrorHandler.getMessageFromResponse(
+          response,
+          failureFallback: 'Failed to load attempts',
+        );
+        break;
+      }
+
+      allAttempts.addAll(response.data!.attempts);
+      latestMeta = response.data!.meta;
+
+      final totalPages = latestMeta?.totalPages;
+      if (totalPages == null || page >= totalPages) {
+        break;
+      }
+      page += 1;
+    }
+
+    if (errorMessage.value.isEmpty) {
+      attempts.assignAll(allAttempts);
+      meta.value = latestMeta;
     }
 
     isLoading.value = false;
@@ -61,7 +109,7 @@ class HistoryController extends GetxController {
       attemptDetails[attemptId] = response.data!;
     } else {
       attemptDetailErrors[attemptId] =
-          response.message ?? 'Failed to load attempt details';
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load attempt details');
     }
 
     attemptDetailLoading[attemptId] = false;

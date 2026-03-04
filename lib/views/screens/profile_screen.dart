@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import '../../models/user_model.dart';
 import '../../services/storage_service.dart';
 import '../../controllers/user_controller.dart';
+import '../../controllers/home_controller.dart';
 import '../../models/plan_tier.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -33,12 +35,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) {
+    if (hour < 5) {
+      return 'Hi, Good Night';
+    } else if (hour < 12) {
       return 'Hi, Good Morning';
     } else if (hour < 17) {
       return 'Hi, Good Afternoon';
-    } else {
+    } else if (hour < 21) {
       return 'Hi, Good Evening';
+    } else {
+      return 'Hi, Good Night';
     }
   }
 
@@ -50,11 +56,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final String primaryName = (user?.name ?? '').trim();
       final String fallbackName =
           '${user?.firstName ?? ''} ${user?.lastName ?? ''}'.trim();
-      final String userName = primaryName.isNotEmpty
-          ? primaryName
-          : (fallbackName.isNotEmpty ? fallbackName : 'User');
-      final String? avatarUrl =
-          user?.avatar != null && user!.avatar!.isNotEmpty ? user.avatar : null;
+      final String userName = fallbackName.isNotEmpty
+          ? fallbackName
+          : (primaryName.isNotEmpty ? primaryName : 'User');
+      final String? avatarUrl = user?.avatar != null && user!.avatar!.isNotEmpty
+          ? user.avatar
+          : null;
+      final String email = (user?.email ?? '').trim();
+      final int? avatarStamp = user?.updatedAt?.millisecondsSinceEpoch;
+      final String? avatarDisplayUrl = avatarUrl != null && avatarStamp != null
+          ? '$avatarUrl${avatarUrl.contains('?') ? '&' : '?'}v=$avatarStamp'
+          : avatarUrl;
 
       return Scaffold(
         body: GradientBackground(
@@ -78,14 +90,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: Colors.grey[300],
-                                image: avatarUrl != null
+                                image: avatarDisplayUrl != null
                                     ? DecorationImage(
-                                        image: NetworkImage(avatarUrl),
+                                        image: NetworkImage(avatarDisplayUrl),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
                               ),
-                              child: avatarUrl == null
+                              child: avatarDisplayUrl == null
                                   ? const Icon(
                                       Icons.person,
                                       size: 40,
@@ -109,6 +121,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: Color(0xFF111827),
                                 ),
                               ),
+                              if (email.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  email,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 4),
                               Text(
                                 _getGreeting(),
@@ -127,7 +149,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2D4F88),
+                            color: planTier == PlanTier.professional
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFF2D4F88),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -274,41 +298,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: const Text('Cancel'),
                                   ),
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
                                     child: const Text('Log Out'),
                                   ),
                                 ],
                               ),
                             );
-                          if (confirm == true) {
-                            // Show loading indicator
-                            if (context.mounted) {
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (context) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
+                            if (confirm == true) {
+                              // Show loading indicator
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (context) => const Center(
+                                    child: AppShimmerCircle(size: 36),
+                                  ),
+                                );
+                              }
 
-                            // Clear all user data and cache
-                            await _storageService.logout();
-                            await _userController.clearState();
+                              // Clear all user data and cache
+                              await _storageService.logout();
+                              await _userController.clearState();
+                              if (Get.isRegistered<HomeController>()) {
+                                Get.find<HomeController>().clearState();
+                              }
 
-                            if (context.mounted) {
-                              // Close loading dialog
-                              Navigator.of(context, rootNavigator: true).pop();
-                              // Navigate to onboarding screen
-                              context.go('/onboarding');
+                              if (context.mounted) {
+                                // Close loading dialog
+                                Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).pop();
+                                // Navigate to onboarding screen
+                                context.go('/onboarding');
+                              }
                             }
-                          }
                           },
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 100),
                 ],
               ),
             ),

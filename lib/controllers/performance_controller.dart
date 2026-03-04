@@ -1,10 +1,13 @@
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/api_response.dart';
 import '../models/performance_model.dart';
 import '../services/api_service.dart';
 import '../utils/api_endpoints.dart';
 
 class PerformanceController extends GetxController {
+  static const String overviewKey = '__overview__';
+
   final ApiService _apiService = ApiService();
 
   final RxMap<String, PerformanceData> performanceByExam =
@@ -31,9 +34,32 @@ class PerformanceController extends GetxController {
       performanceByExam[examId] = response.data!;
     } else {
       errorByExam[examId] =
-          response.message ?? 'Failed to load performance';
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load performance');
     }
 
     loadingByExam[examId] = false;
+  }
+
+  Future<void> fetchOverview() async {
+    if (loadingByExam[overviewKey] == true) return;
+
+    loadingByExam[overviewKey] = true;
+    errorByExam.remove(overviewKey);
+
+    final ApiResponse<PerformanceData> response =
+        await _apiService.get<PerformanceData>(
+      ApiEndpoints.overviewMe,
+      fromJson: (json) =>
+          PerformanceData.fromJson(Map<String, dynamic>.from(json as Map)),
+    );
+
+    if (response.success && response.data != null) {
+      performanceByExam[overviewKey] = response.data!;
+    } else {
+      errorByExam[overviewKey] =
+          ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load performance overview');
+    }
+
+    loadingByExam[overviewKey] = false;
   }
 }

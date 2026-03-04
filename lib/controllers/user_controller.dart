@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:get/get.dart';
+import '../core/error/error_handler.dart';
 import '../models/plan_tier.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
@@ -15,12 +16,30 @@ class UserController extends GetxController {
   final Rx<Set<String>> unlockedExamIds = Rx<Set<String>>(<String>{});
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
+  final RxBool sessionExpired = false.obs;
 
   @override
   void onInit() {
     super.onInit();
     _loadCached();
     refreshProfile();
+  }
+
+  Future<void> applyProfile(UserModel next) async {
+    final previousPlan = planTier.value;
+    user.value = next;
+    final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
+    final nextPlan =
+        (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
+            ? PlanTier.professional
+            : fromProfile;
+    if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
+      planTier.value = previousPlan;
+    } else {
+      planTier.value = nextPlan;
+    }
+    final userJson = jsonEncode(next.toJson());
+    await _storageService.saveString(AppConstants.userDataKey, userJson);
   }
 
   Future<void> _loadCached() async {
@@ -59,23 +78,13 @@ class UserController extends GetxController {
     errorMessage.value = '';
 
     final response = await _userService.getProfile();
+    if (response.statusCode == 401) {
+      sessionExpired.value = true;
+    }
     if (response.success && response.data != null) {
-      final previousPlan = planTier.value;
-      user.value = response.data;
-      final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-      final nextPlan =
-          (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
-              ? PlanTier.professional
-              : fromProfile;
-      if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
-        planTier.value = previousPlan;
-      } else {
-        planTier.value = nextPlan;
-      }
-      final userJson = jsonEncode(response.data!.toJson());
-      await _storageService.saveString(AppConstants.userDataKey, userJson);
+      await applyProfile(response.data!);
     } else {
-      errorMessage.value = response.message ?? 'Failed to load profile';
+      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile');
     }
 
     isLoading.value = false;
@@ -115,5 +124,6 @@ class UserController extends GetxController {
     unlockedExamIds.value = <String>{};
     isLoading.value = false;
     errorMessage.value = '';
+    sessionExpired.value = false;
   }
 }

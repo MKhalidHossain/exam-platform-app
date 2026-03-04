@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../../core/error/error_handler.dart';
 import '../../services/api_service.dart';
 
 class ContactUsScreen extends StatefulWidget {
@@ -38,11 +40,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: Colors.red,
-          ),
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error picking image.',
         );
       }
     }
@@ -118,7 +119,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         email: _emailController.text.trim(),
         subject: _subjectController.text.trim(),
         description: _descriptionController.text.trim(),
-        phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        phone: _phoneController.text.trim().isEmpty
+            ? null
+            : _phoneController.text.trim(),
         attachment: _selectedImage,
       );
 
@@ -128,11 +131,13 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       });
 
       if (response.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Your message has been sent successfully'),
-            backgroundColor: Colors.green,
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Your message has been sent successfully',
           ),
+          isError: false,
+          context: context,
         );
         _emailController.clear();
         _phoneController.clear();
@@ -142,11 +147,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           _selectedImage = null;
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response.message ?? 'Failed to send message'),
-            backgroundColor: Colors.red,
-          ),
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Failed to send message',
         );
       }
     } catch (e) {
@@ -154,11 +158,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: $e'),
-            backgroundColor: Colors.red,
-          ),
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error sending message.',
         );
       }
     }
@@ -209,7 +212,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               // Content
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -267,25 +273,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: _showImagePickerOptions,
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[100],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.grey[300]!,
-                                  width: 1,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.camera_alt_outlined,
-                                color: Color(0xFF2D4F88),
-                                size: 24,
-                              ),
-                            ),
-                          ),
+
                           const Spacer(),
                           Text(
                             '${_descriptionController.text.length}/200',
@@ -362,16 +350,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Save & Submit',
                                   style: TextStyle(
@@ -416,10 +395,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.grey[300]!,
-              width: 1,
-            ),
+            border: Border.all(color: Colors.grey[300]!, width: 1),
           ),
           child: TextField(
             controller: controller,
@@ -431,27 +407,17 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 : null,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 16,
-              ),
+              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 16,
               ),
               prefixIcon: icon != null
-                  ? Icon(
-                      icon,
-                      color: Colors.grey[600],
-                      size: 20,
-                    )
+                  ? Icon(icon, color: Colors.grey[600], size: 20)
                   : null,
             ),
-            style: const TextStyle(
-              fontSize: 16,
-              color: Color(0xFF111827),
-            ),
+            style: const TextStyle(fontSize: 16, color: Color(0xFF111827)),
           ),
         ),
       ],

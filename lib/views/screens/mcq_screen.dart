@@ -1,12 +1,30 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:get/get.dart';
+import '../../controllers/user_controller.dart';
+import '../../models/plan_tier.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
+  final String? examId;
+  final List<dynamic>? questions;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final int? durationMinutes;
+  final bool timedMode;
 
   const McqScreen({
     super.key,
     required this.courseTitle,
+    this.examId,
+    this.questions,
+    this.startTime,
+    this.endTime,
+    this.durationMinutes,
+    this.timedMode = true,
   });
 
   @override
@@ -14,20 +32,146 @@ class McqScreen extends StatefulWidget {
 }
 
 class _McqScreenState extends State<McqScreen> {
+  static const int _defaultDurationMinutes = 130;
+
   late final List<_Question> _questions;
+  late final FlutterTts _tts;
+  late final bool _isTimedSession;
   int _currentIndex = 0;
   final Map<int, int> _selectedIndex = {};
   final Set<int> _lockedQuestions = {};
   final Set<int> _flaggedQuestions = {};
   bool _showExplanation = false;
+  bool _isSpeaking = false;
+  Timer? _timer;
+  Duration? _remaining;
+  bool _hasAutoSubmitted = false;
+  bool _isAutoSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _questions = _buildQuestions();
+    _questions = _buildQuestions(widget.questions);
+    _tts = FlutterTts();
+    _configureTts();
+    final UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
+    final bool isPro = userController.planTier.value == PlanTier.professional;
+    _isTimedSession = widget.timedMode && isPro;
+    if (_isTimedSession) {
+      _setupTimer();
+    } else {
+      _remaining = null;
+    }
   }
 
-  List<_Question> _buildQuestions() {
+  @override
+  void dispose() {
+    _timer?.cancel();
+    unawaited(_tts.stop());
+    super.dispose();
+  }
+
+  Future<void> _configureTts() async {
+    await _tts.setLanguage('en-US');
+    await _tts.setSpeechRate(0.5);
+    await _tts.setPitch(1.0);
+    _tts.setCompletionHandler(() {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+    _tts.setCancelHandler(() {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+    _tts.setErrorHandler((_) {
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+    });
+  }
+
+  DateTime? _resolveEndTime() {
+    final now = DateTime.now();
+    final int durationMinutes =
+        (widget.durationMinutes != null && widget.durationMinutes! > 0)
+        ? widget.durationMinutes!
+        : _defaultDurationMinutes;
+    final Duration duration = Duration(minutes: durationMinutes);
+    DateTime? endTime = widget.endTime;
+
+    if (endTime == null && widget.startTime != null) {
+      endTime = widget.startTime!.add(duration);
+    }
+    if (endTime == null) {
+      endTime = now.add(duration);
+    }
+
+    if (endTime.isBefore(now)) {
+      endTime = now.add(duration);
+    }
+    if (widget.startTime != null && widget.startTime!.isAfter(now)) {
+      endTime = now.add(duration);
+    }
+
+    return endTime;
+  }
+
+  void _setupTimer() {
+    _timer?.cancel();
+    if (!_isTimedSession) {
+      _remaining = null;
+      return;
+    }
+    final DateTime? endTime = _resolveEndTime();
+    if (endTime == null) return;
+
+    final remaining = endTime.difference(DateTime.now());
+    _remaining = remaining.isNegative ? Duration.zero : remaining;
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final remaining = endTime.difference(DateTime.now());
+      if (!mounted) return;
+      if (remaining <= Duration.zero) {
+        setState(() => _remaining = Duration.zero);
+        _timer?.cancel();
+        _handleTimeExpired();
+        return;
+      }
+      setState(() => _remaining = remaining);
+    });
+  }
+
+  void _handleTimeExpired() {
+    if (_hasAutoSubmitted) return;
+    _hasAutoSubmitted = true;
+    unawaited(_tts.stop());
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isAutoSubmitting = true;
+    });
+
+    final List<dynamic> reviewQuestions =
+        (widget.questions != null && widget.questions!.isNotEmpty)
+        ? widget.questions!
+        : _questions;
+    context.go(
+      '/exam-review',
+      extra: {
+        'courseTitle': widget.courseTitle,
+        'examId': widget.examId,
+        'questions': reviewQuestions,
+        'selected': _selectedIndex,
+        'flagged': _flaggedQuestions,
+        'autoSubmit': true,
+      },
+    );
+  }
+
+  List<_Question> _buildQuestions(List<dynamic>? rawQuestions) {
+    final parsed = _parseQuestions(rawQuestions);
+    if (parsed.isNotEmpty) return parsed;
     return List<_Question>.generate(20, (index) {
       return _Question(
         number: index + 1,
@@ -39,54 +183,186 @@ class _McqScreenState extends State<McqScreen> {
           'Grateful for the lessons learned',
         ],
         correctIndex: 2,
-        codeReference:
-            'API 510, Section 3 (Definitions) - "Alteration"',
+        codeReference: 'API 510, Section 3 (Definitions) - "Alteration"',
         explanation:
             'An alteration is a change that affects the pressure-retaining capability or design conditions of a pressure vessel.\n\nA change in design temperature directly affects allowable stress and MAWP, so it is classified as an alteration.\n\n• D (weld buildup to restore metal loss) is a repair, not an alteration, because it restores the vessel to its original design condition.',
       );
     });
   }
 
+  List<_Question> _parseQuestions(List<dynamic>? rawQuestions) {
+    if (rawQuestions == null || rawQuestions.isEmpty) {
+      return [];
+    }
+
+    final List<_Question> parsed = [];
+    for (int i = 0; i < rawQuestions.length; i++) {
+      final raw = rawQuestions[i];
+      if (raw is! Map) {
+        if (raw is String) {
+          parsed.add(
+            _Question(
+              number: i + 1,
+              text: raw,
+              options: const ['Option A', 'Option B', 'Option C', 'Option D'],
+              correctIndex: null,
+              codeReference: '',
+              explanation: '',
+            ),
+          );
+        }
+        continue;
+      }
+      final data = Map<String, dynamic>.from(raw);
+      final String text =
+          (data['question'] ??
+                  data['text'] ??
+                  data['prompt'] ??
+                  'Question ${i + 1}')
+              .toString();
+
+      final dynamic rawOptions =
+          data['options'] ?? data['choices'] ?? data['answers'];
+      final List<String> options = [];
+      int? correctIndex;
+
+      if (rawOptions is List) {
+        for (int optIndex = 0; optIndex < rawOptions.length; optIndex++) {
+          final option = rawOptions[optIndex];
+          if (option is Map) {
+            final optionText =
+                option['option'] ??
+                option['text'] ??
+                option['label'] ??
+                option['value'] ??
+                option['answer'];
+            if (optionText != null) {
+              options.add(optionText.toString());
+            }
+            final bool isCorrect =
+                option['is_correct'] == true ||
+                option['isCorrect'] == true ||
+                option['correct'] == true;
+            if (isCorrect && correctIndex == null) {
+              correctIndex = optIndex;
+            }
+          } else {
+            options.add(option.toString());
+          }
+        }
+      }
+
+      if (correctIndex == null) {
+        final dynamic correctAnswer =
+            data['correctAnswer'] ?? data['answer'] ?? data['correct'];
+        if (correctAnswer is int && correctAnswer >= 0) {
+          correctIndex = correctAnswer < options.length ? correctAnswer : null;
+        } else if (correctAnswer is String) {
+          final idx = options.indexWhere(
+            (opt) =>
+                opt.toLowerCase().trim() == correctAnswer.toLowerCase().trim(),
+          );
+          if (idx >= 0) correctIndex = idx;
+        } else if (correctAnswer is List && correctAnswer.isNotEmpty) {
+          final first = correctAnswer.first;
+          if (first is int && first >= 0 && first < options.length) {
+            correctIndex = first;
+          } else if (first is String) {
+            final idx = options.indexWhere(
+              (opt) => opt.toLowerCase().trim() == first.toLowerCase().trim(),
+            );
+            if (idx >= 0) correctIndex = idx;
+          }
+        }
+      }
+
+      final String codeReference =
+          (data['codeReference'] ??
+                  data['reference'] ??
+                  data['source'] ??
+                  data['citation'] ??
+                  '')
+              .toString();
+      final String explanation =
+          (data['explanation'] ?? data['rationale'] ?? data['reason'] ?? '')
+              .toString();
+
+      if (options.isEmpty) {
+        options.addAll(const ['Option A', 'Option B', 'Option C', 'Option D']);
+      }
+
+      parsed.add(
+        _Question(
+          number: i + 1,
+          text: text,
+          options: options,
+          correctIndex: correctIndex,
+          codeReference: codeReference,
+          explanation: explanation,
+        ),
+      );
+    }
+
+    return parsed;
+  }
+
   void _onSelect(int index) {
     if (_lockedQuestions.contains(_currentIndex)) return;
     setState(() {
       _selectedIndex[_currentIndex] = index;
-      if (index != _questions[_currentIndex].correctIndex) {
+      final correctIndex = _questions[_currentIndex].correctIndex;
+      if (correctIndex != null && index != correctIndex) {
         _lockedQuestions.add(_currentIndex);
       }
     });
   }
 
   void _onNext() async {
-    if (_selectedIndex[_currentIndex] == null) return;
+    final bool hasAnswer = _selectedIndex[_currentIndex] != null;
+    final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    if (!hasAnswer && !isFlagged) return;
     if (_currentIndex < _questions.length - 1) {
+      unawaited(_tts.stop());
       setState(() {
         _currentIndex += 1;
         _showExplanation = false;
+        _isSpeaking = false;
       });
       return;
     }
 
-    if (_selectedIndex.length < _questions.length) {
+    final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
+    if (covered.length < _questions.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please answer all questions first.')),
+        const SnackBar(
+          content: Text('Please answer or flag all questions first.'),
+        ),
       );
       return;
     }
 
+    unawaited(_tts.stop());
+    final List<dynamic> reviewQuestions =
+        (widget.questions != null && widget.questions!.isNotEmpty)
+        ? widget.questions!
+        : _questions;
     final result = await context.push<Object?>(
       '/exam-review',
       extra: {
         'courseTitle': widget.courseTitle,
-        'questions': _questions,
+        'examId': widget.examId,
+        'questions': reviewQuestions,
         'selected': _selectedIndex,
         'flagged': _flaggedQuestions,
       },
     );
 
     if (result is int) {
+      unawaited(_tts.stop());
       setState(() {
         _currentIndex = result.clamp(0, _questions.length - 1);
+        _showExplanation = false;
+        _isSpeaking = false;
       });
     }
   }
@@ -101,236 +377,371 @@ class _McqScreenState extends State<McqScreen> {
     });
   }
 
+  void _toggleExplanation() {
+    final bool canViewExplanation = _selectedIndex[_currentIndex] != null;
+    if (!canViewExplanation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select an answer first to view explanation and reference.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _showExplanation = !_showExplanation;
+    });
+  }
+
+  Future<void> _speakCurrentQuestion() async {
+    final _Question question = _questions[_currentIndex];
+    final buffer = StringBuffer();
+    buffer.write('Question ${question.number}. ');
+    buffer.write(question.text);
+    if (question.options.isNotEmpty) {
+      buffer.write(' Options: ');
+      for (int i = 0; i < question.options.length; i++) {
+        final label = String.fromCharCode(65 + i);
+        buffer.write('$label. ${question.options[i]}. ');
+      }
+    }
+    await _tts.stop();
+    await _tts.speak(buffer.toString());
+    if (!mounted) return;
+    setState(() => _isSpeaking = true);
+  }
+
+  Future<void> _toggleSpeak() async {
+    if (_isSpeaking) {
+      await _tts.stop();
+      if (!mounted) return;
+      setState(() => _isSpeaking = false);
+      return;
+    }
+    await _speakCurrentQuestion();
+  }
+
   @override
   Widget build(BuildContext context) {
     final _Question question = _questions[_currentIndex];
     final int? selected = _selectedIndex[_currentIndex];
+    final bool canViewExplanation = selected != null;
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
+    final bool canGoNext = selected != null || isFlagged;
+    final String timerLabel = _remaining == null
+        ? '--:--'
+        : _formatDuration(_remaining!);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Stack(
           children: [
-            Row(
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                IconButton(
-                  onPressed: () => context.pop(),
-                  icon: const Icon(Icons.arrow_back, size: 22),
-                ),
-                Expanded(
-                  child: Text(
-                    widget.courseTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF111827),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        context.push(
+                          '/quiz-settings',
+                          extra: {
+                            'courseTitle': widget.courseTitle,
+                            'examId': widget.examId,
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.arrow_back, size: 22),
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    Expanded(
+                      child: Text(
+                        widget.courseTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _InfoPill(
+                      label:
+                          '${_selectedIndex.length}/${_questions.length} Question Answered',
+                    ),
+                    if (_isTimedSession) ...[
+                      const SizedBox(width: 8),
+                      _InfoPill(icon: Icons.timer, label: timerLabel),
+                    ],
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _toggleSpeak,
+                      icon: Icon(
+                        _isSpeaking ? Icons.volume_up : Icons.volume_off,
+                        color: const Color(0xFF274B8A),
+                      ),
+                      tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _questions.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final int? selected = _selectedIndex[index];
+                      final bool isAnswered = selected != null;
+                      final bool isFlag = _flaggedQuestions.contains(index);
+                      final bool isCurrent = index == _currentIndex;
+                      Color border = const Color(0xFF2D4F88);
+                      Color fill = Colors.white;
+                      Color textColor = const Color(0xFF111827);
+
+                      if (isAnswered) {
+                        final int? correctIndex =
+                            _questions[index].correctIndex;
+                        if (correctIndex != null) {
+                          final bool isCorrect = selected == correctIndex;
+                          if (isCorrect) {
+                            fill = const Color(0xFFD8F5D8);
+                            border = const Color(0xFF2DBD67);
+                            textColor = const Color(0xFF1B6C3E);
+                          } else {
+                            fill = const Color(0xFFFFD6D6);
+                            border = const Color(0xFFE24B4B);
+                            textColor = const Color(0xFFB42323);
+                          }
+                        } else {
+                          fill = const Color(0xFFE7F0FF);
+                          border = const Color(0xFF2F6DE0);
+                          textColor = const Color(0xFF1E4C9A);
+                        }
+                      } else if (isFlag) {
+                        fill = const Color(0xFFFFF4D6);
+                        border = const Color(0xFFFFB020);
+                        textColor = const Color(0xFFB76A00);
+                      }
+                      if (isCurrent) {
+                        border = const Color(0xFF111827);
+                      }
+
+                      return GestureDetector(
+                        onTap: () {
+                          unawaited(_tts.stop());
+                          setState(() {
+                            _currentIndex = index;
+                            _showExplanation = false;
+                            _isSpeaking = false;
+                          });
+                        },
+                        child: Container(
+                          width: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: fill,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border, width: 1.2),
+                          ),
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _InfoPill(
-                  label: '${_selectedIndex.length}/20 Question Answered',
+                const SizedBox(height: 16),
+                Text(
+                  question.text,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _InfoPill(
-                  icon: Icons.timer,
-                  label: '19 m 20s',
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.volume_up, color: Color(0xFF274B8A)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _questions.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, index) {
-                  final int? selected = _selectedIndex[index];
-                  final bool isAnswered = selected != null;
-                  final bool isFlag = _flaggedQuestions.contains(index);
-                  final bool isCurrent = index == _currentIndex;
-                  Color border = const Color(0xFF2D4F88);
-                  Color fill = Colors.white;
+                const SizedBox(height: 14),
+                ...List.generate(question.options.length, (index) {
+                  final String option = question.options[index];
+                  final bool isSelected = selected == index;
+                  final bool isCorrect =
+                      question.correctIndex != null &&
+                      index == question.correctIndex;
+                  final bool locked = _lockedQuestions.contains(_currentIndex);
+
+                  Color borderColor = const Color(0xFFE5E7EB);
+                  Color fillColor = const Color(0xFFF3F4F6);
                   Color textColor = const Color(0xFF111827);
 
-                  if (isAnswered) {
-                    final bool isCorrect =
-                        selected == _questions[index].correctIndex;
-                    if (isCorrect) {
-                      fill = const Color(0xFFD8F5D8);
-                      border = const Color(0xFF2DBD67);
-                      textColor = const Color(0xFF1B6C3E);
-                    } else {
-                      fill = const Color(0xFFFFD6D6);
-                      border = const Color(0xFFE24B4B);
-                      textColor = const Color(0xFFB42323);
+                  if (selected != null) {
+                    if (question.correctIndex != null) {
+                      if (isCorrect) {
+                        borderColor = const Color(0xFF2DBD67);
+                        fillColor = const Color(0xFFD8F5D8);
+                        textColor = const Color(0xFF1B6C3E);
+                      }
+                      if (isSelected && !isCorrect) {
+                        borderColor = const Color(0xFFE24B4B);
+                        fillColor = const Color(0xFFFFD6D6);
+                        textColor = const Color(0xFFB42323);
+                      }
+                    } else if (isSelected) {
+                      borderColor = const Color(0xFF2F6DE0);
+                      fillColor = const Color(0xFFE7F0FF);
+                      textColor = const Color(0xFF1E4C9A);
                     }
-                  } else if (isFlag) {
-                    fill = const Color(0xFFFFF4D6);
-                    border = const Color(0xFFFFB020);
-                    textColor = const Color(0xFFB76A00);
-                  }
-                  if (isCurrent) {
-                    border = const Color(0xFF111827);
                   }
 
                   return GestureDetector(
-                    onTap: () => setState(() => _currentIndex = index),
+                    onTap: locked ? null : () => _onSelect(index),
                     child: Container(
-                      width: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: fill,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: border, width: 1.2),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
                       ),
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                        ),
+                      decoration: BoxDecoration(
+                        color: fillColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: borderColor, width: 1.4),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Text(
+                              String.fromCharCode(65 + index),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              option,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
-                },
-              ),
+                }),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _toggleFlag,
+                    icon: Icon(
+                      Icons.flag,
+                      color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
+                    ),
+                    label: Text(
+                      'Flag',
+                      style: TextStyle(
+                        color: isFlagged
+                            ? const Color(0xFFB76A00)
+                            : Colors.black,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFFE5E7EB),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _PrimaryButton(
+                  label: 'Next',
+                  isEnabled: canGoNext,
+                  onTap: _onNext,
+                ),
+                const SizedBox(height: 14),
+                _DropdownHeader(
+                  isExpanded: _showExplanation && canViewExplanation,
+                  isEnabled: canViewExplanation,
+                  onTap: _toggleExplanation,
+                ),
+                if (_showExplanation && canViewExplanation) ...[
+                  const SizedBox(height: 12),
+                  _ReferenceSection(
+                    reference: question.codeReference.isNotEmpty
+                        ? question.codeReference
+                        : 'No code reference available.',
+                  ),
+                  const SizedBox(height: 16),
+                  _ExplanationSection(
+                    text: question.explanation.isNotEmpty
+                        ? question.explanation
+                        : 'No explanation available.',
+                  ),
+                ],
+                const SizedBox(height: 18),
+                const ApiDisclaimerSection(),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              question.text,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF111827),
-              ),
-            ),
-            const SizedBox(height: 14),
-            ...List.generate(question.options.length, (index) {
-              final String option = question.options[index];
-              final bool isSelected = selected == index;
-              final bool isCorrect = index == question.correctIndex;
-              final bool locked = _lockedQuestions.contains(_currentIndex);
-
-              Color borderColor = const Color(0xFFE5E7EB);
-              Color fillColor = const Color(0xFFF3F4F6);
-              Color textColor = const Color(0xFF111827);
-
-              if (selected != null) {
-                if (isCorrect) {
-                  borderColor = const Color(0xFF2DBD67);
-                  fillColor = const Color(0xFFD8F5D8);
-                  textColor = const Color(0xFF1B6C3E);
-                }
-                if (isSelected && !isCorrect) {
-                  borderColor = const Color(0xFFE24B4B);
-                  fillColor = const Color(0xFFFFD6D6);
-                  textColor = const Color(0xFFB42323);
-                }
-              }
-
-              return GestureDetector(
-                onTap: locked ? null : () => _onSelect(index),
+            if (_isAutoSubmitting)
+              Positioned.fill(
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: fillColor,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: borderColor, width: 1.4),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: borderColor),
+                  color: const Color(0xAAFFFFFF),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 6,
+                            color: Color(0xFF1E4C9A),
+                            backgroundColor: Color(0xFFD5D8DE),
+                          ),
                         ),
-                        child: Text(
-                          String.fromCharCode(65 + index),
+                        SizedBox(height: 14),
+                        Text(
+                          "Time is up. Submitting...",
                           style: TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: textColor,
+                            color: Color(0xFF111827),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          option,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-            Center(
-              child: TextButton.icon(
-                onPressed: _toggleFlag,
-                icon: Icon(
-                  Icons.flag,
-                  color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
-                ),
-                label: Text(
-                  'Flag',
-                  style: TextStyle(
-                    color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFE5E7EB),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            _PrimaryButton(
-              label: 'Next',
-              isEnabled: selected != null,
-              onTap: _onNext,
-            ),
-            const SizedBox(height: 14),
-            _DropdownHeader(
-              isExpanded: _showExplanation,
-              onTap: () => setState(() => _showExplanation = !_showExplanation),
-            ),
-            if (_showExplanation) ...[
-              const SizedBox(height: 12),
-              _ReferenceSection(
-                reference: question.codeReference,
-              ),
-              const SizedBox(height: 16),
-              _ExplanationSection(text: question.explanation),
-            ],
-            const SizedBox(height: 18),
-            const _DisclaimerSection(),
           ],
         ),
       ),
@@ -342,7 +753,7 @@ class _Question {
   final int number;
   final String text;
   final List<String> options;
-  final int correctIndex;
+  final int? correctIndex;
   final String codeReference;
   final String explanation;
 
@@ -354,6 +765,15 @@ class _Question {
     required this.codeReference,
     required this.explanation,
   });
+}
+
+String _formatDuration(Duration duration) {
+  final int totalSeconds = duration.inSeconds.clamp(0, 24 * 60 * 60);
+  final int minutes = totalSeconds ~/ 60;
+  final int seconds = totalSeconds % 60;
+  final String mm = minutes.toString().padLeft(2, '0');
+  final String ss = seconds.toString().padLeft(2, '0');
+  return '$mm:$ss';
 }
 
 class _InfoPill extends StatelessWidget {
@@ -432,38 +852,44 @@ class _PrimaryButton extends StatelessWidget {
 
 class _DropdownHeader extends StatelessWidget {
   final bool isExpanded;
+  final bool isEnabled;
   final VoidCallback onTap;
 
   const _DropdownHeader({
     required this.isExpanded,
+    required this.isEnabled,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final Color accentColor = isEnabled
+        ? const Color(0xFF2F6DE0)
+        : const Color(0xFF9CA3AF);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFF2F6DE0), width: 1.5),
+          border: Border.all(color: accentColor, width: 1.5),
           color: Colors.white,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'View Explanation \$ Reference',
+            Text(
+              'View Explanation & Reference',
               style: TextStyle(
                 fontSize: 14.5,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF2F6DE0),
+                color: accentColor,
               ),
             ),
             Icon(
               isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-              color: const Color(0xFF2F6DE0),
+              color: accentColor,
             ),
           ],
         ),
@@ -545,36 +971,6 @@ class _ExplanationSection extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        textAlign: TextAlign.center,
-      ),
     );
   }
 }

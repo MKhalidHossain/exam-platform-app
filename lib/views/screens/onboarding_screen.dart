@@ -85,7 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Back button
-                    IconButton(
+               if(_currentPage > 0)  IconButton(
                       icon: const Icon(Icons.arrow_back),
                       onPressed: () {
                         if (_currentPage > 0) {
@@ -150,8 +150,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: ElevatedButton(
                           onPressed: () => context.go('/login'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2D4F88),
-                            foregroundColor: Colors.white,
+                            backgroundColor:AppColors.primaryBlue,
+                            foregroundColor: AppColors.textWhite,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(30),
                             ),
@@ -160,7 +160,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: const Text(
                             "Let's Get Started!",
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

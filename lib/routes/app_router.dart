@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../views/screens/splash_screen.dart';
 import '../views/screens/login_screen.dart';
 import '../views/screens/navbar_screen.dart';
-
 import '../views/screens/onboarding_screen.dart';
 import '../views/screens/sign_up_screen.dart';
 import '../views/screens/forget_password_screen.dart';
@@ -24,17 +23,14 @@ import '../views/screens/history_models.dart';
 import '../views/screens/exam_loading_screen.dart';
 import '../views/screens/mcq_screen.dart';
 import '../views/screens/exam_review_screen.dart';
+import '../views/screens/exam_unlock_success_screen.dart';
+import '../views/screens/history_detail_view.dart';
 
 GoRouter getRouter() {
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
 
-
-     
- 
-
-  
 
       return null;
     },
@@ -55,7 +51,6 @@ GoRouter getRouter() {
         builder: (context, state) => const LoginScreen(),
       ),
      
-
       GoRoute(
         path: '/sign-up',
         name: 'sign-up',
@@ -162,6 +157,7 @@ GoRouter getRouter() {
               scoreDetail: '4/10',
             ),
             history: [],
+            isProfileFlow: true,
           );
         },
       ),
@@ -171,10 +167,34 @@ GoRouter getRouter() {
         builder: (context, state) {
           final extra = state.extra;
           String title = 'API 570 - Piping Inspector';
+          String? examId;
+          int? questionCount;
+          String? effectivitySheetContent;
+          String? bodyOfKnowledgeContent;
+
+          int? parseInt(dynamic value) {
+            if (value == null) return null;
+            if (value is int) return value;
+            if (value is num) return value.toInt();
+            return int.tryParse(value.toString());
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
+            questionCount = parseInt(extra['questionCount']);
+            effectivitySheetContent =
+                extra['effectivitySheetContent']?.toString();
+            bodyOfKnowledgeContent =
+                extra['bodyOfKnowledgeContent']?.toString();
           }
-          return QuizSettingsScreen(courseTitle: title);
+          return QuizSettingsScreen(
+            courseTitle: title,
+            examId: examId,
+            questionCount: questionCount,
+            effectivitySheetContent: effectivitySheetContent,
+            bodyOfKnowledgeContent: bodyOfKnowledgeContent,
+          );
         },
       ),
       GoRoute(
@@ -183,10 +203,51 @@ GoRouter getRouter() {
         builder: (context, state) {
           final extra = state.extra;
           String title = 'API 570 - Piping Inspector';
+          String? examId;
+          int? questionCount;
+          String? effectivitySheetContent;
+          String? bodyOfKnowledgeContent;
+          bool timedMode = true;
+
+          int? parseInt(dynamic value) {
+            if (value == null) return null;
+            if (value is int) return value;
+            if (value is num) return value.toInt();
+            return int.tryParse(value.toString());
+          }
+
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
+            questionCount = parseInt(extra['questionCount']);
+            effectivitySheetContent =
+                extra['effectivitySheetContent']?.toString();
+            bodyOfKnowledgeContent =
+                extra['bodyOfKnowledgeContent']?.toString();
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
           }
-          return ExamSessionScreen(courseTitle: title);
+          return ExamSessionScreen(
+            courseTitle: title,
+            examId: examId,
+            questionCount: questionCount,
+            effectivitySheetContent: effectivitySheetContent,
+            bodyOfKnowledgeContent: bodyOfKnowledgeContent,
+            timedMode: timedMode,
+          );
         },
       ),
       GoRoute(
@@ -195,10 +256,46 @@ GoRouter getRouter() {
         builder: (context, state) {
           final extra = state.extra;
           String title = 'API 570 - Piping Inspector';
+          String? examId;
+          int? questionCount;
+          bool timedMode = true;
+          bool regenerate = false;
+
+          int? parseInt(dynamic value) {
+            if (value == null) return null;
+            if (value is int) return value;
+            if (value is num) return value.toInt();
+            return int.tryParse(value.toString());
+          }
+
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
+            questionCount = parseInt(extra['questionCount']);
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            regenerate = parseBool(extra['regenerate'], fallback: regenerate);
           }
-          return ExamLoadingScreen(courseTitle: title);
+          return ExamLoadingScreen(
+            courseTitle: title,
+            examId: examId,
+            questionCount: questionCount,
+            timedMode: timedMode,
+            regenerate: regenerate,
+          );
         },
       ),
       GoRoute(
@@ -207,10 +304,67 @@ GoRouter getRouter() {
         builder: (context, state) {
           final extra = state.extra;
           String title = 'API 570 - Piping Inspector';
+          List<dynamic>? questions;
+          DateTime? startTime;
+          DateTime? endTime;
+          int? durationMinutes;
+          String? examId;
+          bool timedMode = true;
+          int? sessionId;
+
+          int? parseInt(dynamic value) {
+            if (value == null) return null;
+            if (value is int) return value;
+            if (value is num) return value.toInt();
+            return int.tryParse(value.toString());
+          }
+
+          DateTime? parseDate(dynamic value) {
+            if (value == null) return null;
+            if (value is DateTime) return value;
+            return DateTime.tryParse(value.toString());
+          }
+
+          bool parseBool(dynamic value, {bool fallback = true}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
+            final rawQuestions = extra['questions'];
+            if (rawQuestions is List) {
+              questions = rawQuestions;
+            }
+            startTime = parseDate(extra['startTime']);
+            endTime = parseDate(extra['endTime']);
+            durationMinutes = parseInt(extra['durationMinutes']);
+            timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            final rawSessionId = extra['sessionId'];
+            if (rawSessionId != null) {
+              sessionId = int.tryParse(rawSessionId.toString());
+            }
           }
-          return McqScreen(courseTitle: title);
+          return McqScreen(
+            key: sessionId != null ? ValueKey(sessionId) : null,
+            courseTitle: title,
+            examId: examId,
+            questions: questions,
+            startTime: startTime,
+            endTime: endTime,
+            durationMinutes: durationMinutes,
+            timedMode: timedMode,
+          );
         },
       ),
       GoRoute(
@@ -222,9 +376,33 @@ GoRouter getRouter() {
           List<dynamic> questions = const [];
           Map<int, int> selected = const {};
           Set<int> flagged = const {};
+          String? examId;
+          List<int>? timeSpentSec;
+          bool autoSubmit = false;
+          bool parseBool(dynamic value, {bool fallback = false}) {
+            if (value == null) return fallback;
+            if (value is bool) return value;
+            if (value is num) return value != 0;
+            final lowered = value.toString().toLowerCase();
+            if (lowered == 'true' || lowered == '1' || lowered == 'yes') {
+              return true;
+            }
+            if (lowered == 'false' || lowered == '0' || lowered == 'no') {
+              return false;
+            }
+            return fallback;
+          }
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString();
             questions = (extra['questions'] as List<dynamic>?) ?? const [];
+            final rawTimeSpent = extra['timeSpentSec'];
+            if (rawTimeSpent is List) {
+              timeSpentSec = rawTimeSpent
+                  .map((e) => int.tryParse(e.toString()) ?? 0)
+                  .toList();
+            }
+            autoSubmit = parseBool(extra['autoSubmit'], fallback: autoSubmit);
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
               selected = rawSelected.map(
@@ -246,6 +424,84 @@ GoRouter getRouter() {
             questions: questions,
             selected: selected,
             flagged: flagged,
+            examId: examId,
+            timeSpentSec: timeSpentSec,
+            autoSubmit: autoSubmit,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/history-detail',
+        name: 'history-detail',
+        builder: (context, state) {
+          final extra = state.extra;
+          HistoryEntry entry = const HistoryEntry(
+            examName: 'Exam',
+            date: '-',
+            scorePercent: 0,
+            scoreDetail: '0/0',
+          );
+          List<HistoryEntry> historyEntries = const [];
+          List<TopicBreakdown> topics = const [];
+          if (extra is Map) {
+            final rawEntry = extra['entry'];
+            if (rawEntry is HistoryEntry) {
+              entry = rawEntry;
+            }
+            final rawHistory = extra['historyEntries'];
+            if (rawHistory is List<HistoryEntry>) {
+              historyEntries = rawHistory;
+            }
+            final rawTopics = extra['topics'];
+            if (rawTopics is List<TopicBreakdown>) {
+              topics = rawTopics;
+            }
+          }
+          return HistoryDetailView(
+            entry: entry,
+            topics: topics,
+            historyEntries: historyEntries,
+            onBack: () => context.pop(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/exam-unlock-success',
+        name: 'exam-unlock-success',
+        builder: (context, state) {
+          final extra = state.extra;
+          String title = 'API 570 - Piping Inspector';
+          String examId = '';
+          int? questionCount;
+          String? effectivitySheetContent;
+          String? bodyOfKnowledgeContent;
+          int amountPaid = 150;
+
+          int? parseInt(dynamic value) {
+            if (value == null) return null;
+            if (value is int) return value;
+            if (value is num) return value.toInt();
+            return int.tryParse(value.toString());
+          }
+
+          if (extra is Map) {
+            title = extra['courseTitle']?.toString() ?? title;
+            examId = extra['examId']?.toString() ?? '';
+            questionCount = parseInt(extra['questionCount']);
+            effectivitySheetContent =
+                extra['effectivitySheetContent']?.toString();
+            bodyOfKnowledgeContent =
+                extra['bodyOfKnowledgeContent']?.toString();
+            amountPaid = parseInt(extra['amountPaid']) ?? amountPaid;
+          }
+          
+          return ExamUnlockSuccessScreen(
+            courseTitle: title,
+            examId: examId,
+            questionCount: questionCount,
+            effectivitySheetContent: effectivitySheetContent,
+            bodyOfKnowledgeContent: bodyOfKnowledgeContent,
+            amountPaid: amountPaid,
           );
         },
       ),

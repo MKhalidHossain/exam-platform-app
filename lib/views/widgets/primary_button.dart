@@ -48,12 +48,11 @@ class PrimaryButton extends StatelessWidget {
                 ),
                 child: isLoading
                     ? const SizedBox(
-                        height: 20,
-                        width: 20,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(AppColors.textWhite),
+                          strokeWidth: 2.6,
+                          color: Colors.white,
                         ),
                       )
                     : Text(
@@ -86,18 +85,17 @@ class PrimaryButton extends StatelessWidget {
                 ),
                 child: isLoading
                     ? const SizedBox(
-                        height: 20,
-                        width: 20,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(AppColors.textWhite),
+                          strokeWidth: 2.6,
+                          color: Colors.white,
                         ),
                       )
                     : Text(
                         text,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textWhite,
                         ),

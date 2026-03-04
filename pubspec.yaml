@@ -59,6 +59,15 @@ dependencies:
   # Stripe payments
   flutter_stripe: ^12.2.0
 
+  # Text to speech
+  flutter_tts: ^3.8.5
+
+  # Shimmer loading
+  shimmer: ^3.0.0
+  
+  # Lottie animations
+  lottie: ^2.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -85,6 +94,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/lottie/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

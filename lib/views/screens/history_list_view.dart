@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_shimmer.dart';
 
 import 'history_models.dart';
 
@@ -42,10 +43,12 @@ class HistoryListView extends StatelessWidget {
         final double headerContentWidth = (width - (2 * hPad)).clamp(0.0, width);
         final double filterMaxWidth = headerContentWidth * 0.55;
 
-        final List<String> options =
-            filterOptions.isNotEmpty ? filterOptions : const ['All Exams'];
-        final String activeFilter =
-            options.contains(filterValue) ? filterValue : options.first;
+        final List<String> options = filterOptions.isNotEmpty
+            ? filterOptions
+            : const ['All Exams'];
+        final String activeFilter = options.contains(filterValue)
+            ? filterValue
+            : options.first;
 
         return Column(
           children: [
@@ -53,12 +56,12 @@ class HistoryListView extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(hPad - 4, topPad, hPad, bottomPad),
               child: Row(
                 children: [
-                  SizedBox(),
-                  // IconButton(
-                  //   onPressed: () => Navigator.of(context).maybePop(),
-                  //   icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                  //   color: const Color(0xFF27407C),
-                  // ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                    color: const Color(0xFF27407C),
+                  ),
+                  //
                   Text(
                     'History',
                     style: TextStyle(
@@ -72,28 +75,40 @@ class HistoryListView extends StatelessWidget {
             ),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: hPad),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Consolidated Quiz History',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: subtitleSize,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF202B3C),
+              child: LayoutBuilder(
+                builder: (context, headerConstraints) {
+                  final double maxButtonWidth =
+                      (headerConstraints.maxWidth * 0.55).clamp(
+                        0.0,
+                        headerConstraints.maxWidth,
+                      );
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Consolidated Quiz History',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: subtitleSize,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF202B3C),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  SizedBox(width: 8 * scale),
-                  _ExamFilterMenu(
-                    value: activeFilter,
-                    options: options,
-                    maxWidth: filterMaxWidth,
-                    onSelected: onFilterChanged,
-                  ),
-                ],
+                      SizedBox(width: 8 * scale),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxButtonWidth),
+                        child: _ExamFilterMenu(
+                          value: activeFilter,
+                          options: options,
+                          maxWidth: maxButtonWidth,
+                          onSelected: onFilterChanged,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             SizedBox(height: 12 * scale),
@@ -148,9 +163,7 @@ class HistoryListView extends StatelessWidget {
                         child: Builder(
                           builder: (context) {
                             if (isLoading) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
+                              return _HistoryListShimmer(scale: scale);
                             }
 
                             if (errorMessage != null &&
@@ -197,15 +210,17 @@ class HistoryListView extends StatelessWidget {
                             }
 
                             return ListView.separated(
-                              padding:
-                                  EdgeInsets.symmetric(horizontal: 12 * scale),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12 * scale,
+                              ),
                               itemBuilder: (context, index) {
                                 final entry = entries[index];
-                                final Color scoreColor = entry.scorePercent <= 20
+                                final Color scoreColor =
+                                    entry.scorePercent <= 20
                                     ? const Color(0xFFE53935)
                                     : entry.scorePercent <= 30
-                                        ? const Color(0xFFFF8A00)
-                                        : const Color(0xFFFF4D4D);
+                                    ? const Color(0xFFFF8A00)
+                                    : const Color(0xFFFF4D4D);
                                 return InkWell(
                                   onTap: () => onSelect(entry),
                                   child: Padding(
@@ -213,12 +228,15 @@ class HistoryListView extends StatelessWidget {
                                       vertical: 10 * scale,
                                     ),
                                     child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
-                                          flex: 3,
+                                          flex: 2,
                                           child: Text(
                                             entry.examName,
+                                            textAlign: TextAlign.center,
+                                            softWrap: true,
                                             style: TextStyle(
                                               fontSize: rowTitleSize,
                                               fontWeight: FontWeight.w600,
@@ -229,7 +247,10 @@ class HistoryListView extends StatelessWidget {
                                         Expanded(
                                           flex: 2,
                                           child: Text(
-                                            entry.date.replaceFirst(', ', ',\n'),
+                                            entry.date.replaceFirst(
+                                              ', ',
+                                              ',\n',
+                                            ),
                                             textAlign: TextAlign.center,
                                             softWrap: true,
                                             style: TextStyle(
@@ -239,13 +260,14 @@ class HistoryListView extends StatelessWidget {
                                           ),
                                         ),
                                         Expanded(
-                                          flex: 1,
+                                          flex: 2,
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.end,
+                                                CrossAxisAlignment.center,
                                             children: [
                                               Text(
                                                 '${entry.scorePercent.toStringAsFixed(1)}%',
+                                                textAlign: TextAlign.left,
                                                 style: TextStyle(
                                                   fontSize: rowScoreSize,
                                                   fontWeight: FontWeight.w700,
@@ -256,7 +278,9 @@ class HistoryListView extends StatelessWidget {
                                                 entry.scoreDetail,
                                                 style: TextStyle(
                                                   fontSize: rowDateSize,
-                                                  color: const Color(0xFF6C7685),
+                                                  color: const Color(
+                                                    0xFF6C7685,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -267,10 +291,11 @@ class HistoryListView extends StatelessWidget {
                                   ),
                                 );
                               },
-                              separatorBuilder: (context, index) => const Divider(
-                                height: 1,
-                                color: Color(0xFFE4E8F2),
-                              ),
+                              separatorBuilder: (context, index) =>
+                                  const Divider(
+                                    height: 1,
+                                    color: Color(0xFFE4E8F2),
+                                  ),
                               itemCount: entries.length,
                             );
                           },
@@ -363,45 +388,106 @@ class _ExamFilterMenuState extends State<_ExamFilterMenu> {
             ),
           )
           .toList(),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: widget.maxWidth),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
-            vertical: 6,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E4AA8),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                fit: FlexFit.loose,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: labelMaxWidth),
-                  child: Text(
-                    widget.value,
-                    softWrap: true,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E4AA8),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: labelMaxWidth),
+              child: Text(
+                widget.value,
+                softWrap: true,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(width: iconSpacing),
-              const Icon(
-                Icons.keyboard_arrow_down,
-                color: Colors.white,
-                size: iconSize,
+            ),
+            const SizedBox(width: iconSpacing),
+            const Icon(
+              Icons.keyboard_arrow_down,
+              color: Colors.white,
+              size: iconSize,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryListShimmer extends StatelessWidget {
+  const _HistoryListShimmer({required this.scale});
+
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: 12 * scale),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 10 * scale),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: AppShimmerBox(height: 10 * scale, radius: 4 * scale),
+              ),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    AppShimmerBox(
+                      width: 70 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                    SizedBox(height: 6 * scale),
+                    AppShimmerBox(
+                      width: 50 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    AppShimmerBox(
+                      width: 36 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                    SizedBox(height: 6 * scale),
+                    AppShimmerBox(
+                      width: 28 * scale,
+                      height: 10 * scale,
+                      radius: 4 * scale,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
+      separatorBuilder: (context, index) =>
+          const Divider(height: 1, color: Color(0xFFE4E8F2)),
+      itemCount: 6,
     );
   }
 }

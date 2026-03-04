@@ -1,6 +1,8 @@
 import '../models/api_response.dart';
 import '../models/exam_model.dart';
+import '../models/start_exam_model.dart';
 import '../utils/api_endpoints.dart';
+import '../utils/app_constants.dart';
 import 'api_service.dart';
 
 class ExamService {
@@ -35,5 +37,71 @@ class ExamService {
       data: exams,
     );
   }
-}
 
+  Future<ApiResponse<StartExamData>> startExam({
+    required String examId,
+    required int questionCount,
+    bool regenerate = false,
+  }) async {
+    final body = <String, dynamic>{
+      'n_question': questionCount,
+      'regenerate': regenerate,
+    };
+
+    return _apiService.post<StartExamData>(
+      ApiEndpoints.examStart(examId),
+      body: body,
+      fromJson: (json) {
+        if (json is Map<String, dynamic>) {
+          return StartExamData.fromJson(json);
+        }
+        return StartExamData.fromJson(const <String, dynamic>{});
+      },
+      timeout: AppConstants.examGenerationTimeout,
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> submitExam({
+    required String examId,
+    required List<dynamic> answers,
+    List<String>? flaggedQuestionIds,
+    List<int>? timeSpentSec,
+  }) async {
+    final body = <String, dynamic>{'answers': answers};
+    if (flaggedQuestionIds != null) {
+      body['flaggedQuestionIds'] = flaggedQuestionIds;
+    }
+    if (timeSpentSec != null) {
+      body['timeSpent'] = timeSpentSec;
+    }
+
+    return _apiService.post<Map<String, dynamic>>(
+      ApiEndpoints.examSubmit(examId),
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> submitExamReview({
+    required String examId,
+    required int stars,
+    required String feedbackText,
+    required String name,
+  }) async {
+    final body = <String, dynamic>{
+      'stars': stars,
+      'feedbackText': feedbackText,
+      'name': name,
+    };
+
+    return _apiService.post<Map<String, dynamic>>(
+      ApiEndpoints.examReview(examId),
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+}

@@ -1,6 +1,4 @@
 // Conditional import: dart:io on mobile/desktop, stub on web
-import 'app_constants_io.dart' if (dart.library.html) 'app_constants_web.dart'
-    as platform;
 
 class AppConstants {
   // App Info
@@ -10,6 +8,8 @@ class AppConstants {
   // API Constants 
   static const String baseUrl = 'http://10.10.5.80:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
+  // null = no timeout (wait indefinitely).
+  static const Duration? examGenerationTimeout = null;
 
   // Stripe (use env or build config in production)
   static const String stripePublishableKey =

@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/api_disclaimer_section.dart';
 
 class ExamSessionScreen extends StatelessWidget {
   final String courseTitle;
+  final String? examId;
+  final int? questionCount;
+  final String? effectivitySheetContent;
+  final String? bodyOfKnowledgeContent;
+  final bool timedMode;
 
   const ExamSessionScreen({
     super.key,
     required this.courseTitle,
+    this.examId,
+    this.questionCount,
+    this.effectivitySheetContent,
+    this.bodyOfKnowledgeContent,
+    this.timedMode = true,
   });
 
   void _showInstructions(BuildContext context, String sessionLabel) {
@@ -14,10 +25,18 @@ class ExamSessionScreen extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final effectivity = effectivitySheetContent?.trim() ?? '';
+        final bodyOfKnowledge = bodyOfKnowledgeContent?.trim() ?? '';
+
         return Dialog(
           backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
             child: Column(
@@ -50,6 +69,46 @@ class ExamSessionScreen extends StatelessWidget {
                     color: Color(0xFF4B5563),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  'Effectivity Sheet',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  effectivity.isNotEmpty
+                      ? effectivity
+                      : 'No effectivity sheet content available.',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: Color(0xFF4B5563),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Body of Knowledge',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  bodyOfKnowledge.isNotEmpty
+                      ? bodyOfKnowledge
+                      : 'No body of knowledge content available.',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.4,
+                    color: Color(0xFF4B5563),
+                  ),
+                ),
                 const SizedBox(height: 18),
                 Row(
                   children: [
@@ -76,10 +135,26 @@ class ExamSessionScreen extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          final id = examId?.trim();
+                          if (id == null || id.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Exam ID missing. Please try again.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           Navigator.of(dialogContext).pop();
                           context.push(
                             '/exam-loading',
-                            extra: {'courseTitle': courseTitle},
+                            extra: {
+                              'courseTitle': courseTitle,
+                              'examId': id,
+                              'questionCount': questionCount ?? 1,
+                              'timedMode': timedMode,
+                            },
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -99,7 +174,7 @@ class ExamSessionScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                const _DisclaimerSection(),
+                const ApiDisclaimerSection(),
               ],
             ),
           ),
@@ -157,37 +232,30 @@ class ExamSessionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            _SessionCard(
+              title: 'Start Test',
+              description:
+                  'Begin your full exam simulation with timed closed-book and open-book sections.',
+              isPrimary: true,
+              onTap: () => _showInstructions(context, 'Full Exam'),
+            ),
+            const SizedBox(height: 12),
             IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: _SessionCard(
-                      title: 'Open Book\nSession',
-                      description:
-                          'This session tests your ability to efficiently find and apply information from the official code documents under time pressure.',
-                      onTap: () => _showInstructions(context, 'Open Book'),
+                    child: _InfoTile(
+                      title: 'Questions',
+                      value: '${questionCount ?? 1}',
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _SessionCard(
-                      title: 'Closed Book\nSession',
-                      description:
-                          'This session tests your foundational knowledge of concepts, definitions, and procedures that you must know from memory.',
-                      onTap: () => _showInstructions(context, 'Closed Book'),
-                    ),
+                  const Expanded(
+                    child: _InfoTile(title: 'Format', value: 'Full Exam'),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            _SessionCard(
-              title: 'Full Exam Simulation',
-              description:
-                  'Replicates the complete exam experience, starting with a timed closed-book session, followed by a timed open-book session.',
-              isPrimary: true,
-              onTap: () => _showInstructions(context, 'Full Exam'),
             ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
@@ -210,7 +278,7 @@ class ExamSessionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            const _DisclaimerSection(),
+            const ApiDisclaimerSection(),
           ],
         ),
       ),
@@ -234,9 +302,13 @@ class _SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color bgColor = isPrimary ? const Color(0xFF274B8A) : Colors.white;
-    final Color borderColor = isPrimary ? const Color(0xFF1E3C73) : const Color(0xFFE5E7EB);
+    final Color borderColor = isPrimary
+        ? const Color(0xFF1E3C73)
+        : const Color(0xFFE5E7EB);
     final Color titleColor = isPrimary ? Colors.white : const Color(0xFF111827);
-    final Color bodyColor = isPrimary ? Colors.white70 : const Color(0xFF4B5563);
+    final Color bodyColor = isPrimary
+        ? Colors.white70
+        : const Color(0xFF4B5563);
 
     return InkWell(
       onTap: onTap,
@@ -285,31 +357,45 @@ class _SessionCard extends StatelessWidget {
   }
 }
 
-class _DisclaimerSection extends StatelessWidget {
-  const _DisclaimerSection();
+class _InfoTile extends StatelessWidget {
+  final String title;
+  final String value;
+
+  const _InfoTile({required this.title, required this.value});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text.rich(
-        TextSpan(
-          text: 'Not affiliated with or endorsed by API. ',
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w500,
-          ),
-          children: const [
-            TextSpan(
-              text: 'See full disclaimer.',
-              style: TextStyle(
-                color: Color(0xFF2F6DE0),
-                fontWeight: FontWeight.w600,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF4FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD6E0F5), width: 1.1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF4B5563),
             ),
-          ],
-        ),
-        textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1E3C73),
+            ),
+          ),
+        ],
       ),
     );
   }

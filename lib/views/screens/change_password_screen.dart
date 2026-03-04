@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/gradient_background.dart';
+import '../widgets/app_shimmer.dart';
+import '../../core/error/error_handler.dart';
 import '../../services/user_service.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -24,42 +26,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   Future<void> _changePassword() async {
     if (_currentPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your current password'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Please enter your current password', isError: true, context: context);
       return;
     }
 
     if (_newPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a new password'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Please enter a new password', isError: true, context: context);
       return;
     }
 
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('New passwords do not match'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('New passwords do not match', isError: true, context: context);
       return;
     }
 
     if (_newPasswordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password must be at least 6 characters'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ErrorHandler.showSnackBar('Password must be at least 6 characters', isError: true, context: context);
       return;
     }
 
@@ -77,22 +59,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         if (response.success) {
           _showSuccessDialog();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.message ?? 'Failed to change password'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to change password');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error changing password: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ErrorHandler.showFromException(e, context: context, fallback: 'Error changing password.');
       }
     } finally {
       if (mounted) {
@@ -290,16 +262,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             elevation: 0,
                           ),
                           child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
+                              ? const AppShimmerCircle(size: 24)
                               : const Text(
                                   'Save',
                                   style: TextStyle(
