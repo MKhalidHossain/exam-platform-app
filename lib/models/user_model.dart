@@ -14,6 +14,8 @@ class UserModel {
   final int? fine;
   final String? referralCode;
   final String? subscriptionTier;
+  final DateTime? subscriptionStartedAt;
+  final DateTime? subscriptionExpiresAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -33,6 +35,8 @@ class UserModel {
     this.fine,
     this.referralCode,
     this.subscriptionTier,
+    this.subscriptionStartedAt,
+    this.subscriptionExpiresAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -44,7 +48,7 @@ class UserModel {
       if (value is String) return value;
       return value.toString();
     }
-    
+
     // Safely parse DateTime
     DateTime? parseDateTime(dynamic value) {
       if (value == null) return null;
@@ -70,7 +74,7 @@ class UserModel {
       if (value is num) return value.toInt();
       return int.tryParse(value.toString());
     }
-    
+
     // Extract ID from various possible fields
     String extractId() {
       if (json['_id'] != null) {
@@ -81,7 +85,7 @@ class UserModel {
       }
       return '';
     }
-    
+
     // Extract avatar URL - handle both string and object formats
     String? extractAvatar() {
       if (json['avatar'] == null) return null;
@@ -93,26 +97,37 @@ class UserModel {
       }
       return null;
     }
-    
+
     return UserModel(
       id: extractId(),
       name: getStringValue(json['name']),
       email: getStringValue(json['email']),
       phone: json['phone'] != null ? getStringValue(json['phone']) : null,
       avatar: extractAvatar(),
-      firstName: json['firstName'] != null ? getStringValue(json['firstName']) : null,
-      lastName: json['lastName'] != null ? getStringValue(json['lastName']) : null,
-      notifications: json['notifications'] is bool ? json['notifications'] as bool : null,
-      language: json['language'] != null ? getStringValue(json['language']) : null,
+      firstName: json['firstName'] != null
+          ? getStringValue(json['firstName'])
+          : null,
+      lastName: json['lastName'] != null
+          ? getStringValue(json['lastName'])
+          : null,
+      notifications: json['notifications'] is bool
+          ? json['notifications'] as bool
+          : null,
+      language: json['language'] != null
+          ? getStringValue(json['language'])
+          : null,
       country: json['country'] != null ? getStringValue(json['country']) : null,
       status: json['status'] != null ? getStringValue(json['status']) : null,
       role: json['role'] != null ? getStringValue(json['role']) : null,
       fine: parseInt(json['fine']),
-      referralCode:
-          json['referralCode'] != null ? getStringValue(json['referralCode']) : null,
+      referralCode: json['referralCode'] != null
+          ? getStringValue(json['referralCode'])
+          : null,
       subscriptionTier: json['subscriptionTier'] != null
           ? getStringValue(json['subscriptionTier'])
           : null,
+      subscriptionStartedAt: parseDateTime(json['subscriptionStartedAt']),
+      subscriptionExpiresAt: parseDateTime(json['subscriptionExpiresAt']),
       createdAt: parseDateTime(json['createdAt']),
       updatedAt: parseDateTime(json['updatedAt']),
     );
@@ -135,6 +150,8 @@ class UserModel {
       'fine': fine,
       'referralCode': referralCode,
       'subscriptionTier': subscriptionTier,
+      'subscriptionStartedAt': subscriptionStartedAt?.toIso8601String(),
+      'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
@@ -156,6 +173,8 @@ class UserModel {
     int? fine,
     String? referralCode,
     String? subscriptionTier,
+    DateTime? subscriptionStartedAt,
+    DateTime? subscriptionExpiresAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -175,6 +194,10 @@ class UserModel {
       fine: fine ?? this.fine,
       referralCode: referralCode ?? this.referralCode,
       subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+      subscriptionStartedAt:
+          subscriptionStartedAt ?? this.subscriptionStartedAt,
+      subscriptionExpiresAt:
+          subscriptionExpiresAt ?? this.subscriptionExpiresAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
