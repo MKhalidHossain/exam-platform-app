@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
-import '../widgets/gradient_background.dart';
-import '../widgets/app_shimmer.dart';
-import '../../core/error/error_handler.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../controllers/user_controller.dart';
-import '../../models/plan_tier.dart';
-import '../../services/exam_service.dart';
-import '../../services/api_service.dart';
+import '../../core/error/error_handler.dart';
 import '../../models/exam_model.dart';
+import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
+import '../../services/api_service.dart';
+import '../../services/exam_service.dart';
+import '../widgets/app_shimmer.dart';
+import '../widgets/gradient_background.dart';
 import '../widgets/unlock_exam_dialog.dart';
 
 class SubscribeScreen extends StatefulWidget {
@@ -50,7 +51,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       planLoading = false;
       if (res.success && res.data != null) {
         professionalPlan = res.data;
-        planError = null;
       } else {
         planError = ErrorHandler.getMessageFromResponse(
           res,
@@ -64,6 +64,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   Widget build(BuildContext context) {
     return Obx(() {
       final currentPlan = _userController.planTier.value;
+      final isProfessionalActive = currentPlan == PlanTier.professional;
 
       return Scaffold(
         body: GradientBackground(
@@ -71,7 +72,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           child: SafeArea(
             child: Column(
               children: [
-                // App Bar
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -83,7 +83,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       ),
                       const Expanded(
                         child: Text(
-                          'Unlock your exam access',
+                          'Subscribe',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 20,
@@ -92,60 +92,17 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 48), // Balance the back button
+                      const SizedBox(width: 48),
                     ],
                   ),
                 ),
-                // Content
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 16,
                     ),
-                    child: Column(
-                      children: [
-                        // Starter Plan Card
-                        _buildPlanCard(
-                          planTier: PlanTier.starter,
-                          isActive: currentPlan == PlanTier.starter,
-                          onUpgrade: currentPlan == PlanTier.starter
-                              ? () {
-                                  // Handle upgrade to professional
-                                  _handleUpgrade(PlanTier.professional);
-                                }
-                              : null,
-                        ),
-                        const SizedBox(height: 24),
-                        // Professional Plan Card
-                        _buildPlanCard(
-                          planTier: PlanTier.professional,
-                          isActive: currentPlan == PlanTier.professional,
-                          professionalPlan: professionalPlan,
-                          onUpgrade:
-                              (currentPlan == PlanTier.starter &&
-                                  !_isPaymentLoading)
-                              ? () {
-                                  _openUnlockExamDialog();
-                                }
-                              : null,
-                        ),
-                        if (_isPaymentLoading)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: Center(
-                              child: Column(
-                                children: const [
-                                  AppShimmerCircle(size: 28),
-                                  SizedBox(height: 12),
-                                  Text('Processing payment...'),
-                                ],
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+                    child: _buildBody(isProfessionalActive),
                   ),
                 ),
               ],
@@ -156,17 +113,128 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     });
   }
 
-  void _handleUpgrade(PlanTier planTier) {
-    // Handle upgrade logic here
-    ErrorHandler.showSnackBar(
-      'Upgrading to ${planTier == PlanTier.professional ? 'Professional' : 'Starter'} plan...',
-      isError: false,
-      context: context,
+  Widget _buildBody(bool isProfessionalActive) {
+    if (planLoading && professionalPlan == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 60),
+          child: Column(
+            children: [
+              AppShimmerCircle(size: 34),
+              SizedBox(height: 12),
+              Text(
+                'Loading subscription details...',
+                style: TextStyle(color: Color(0xFF374151)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (planError != null && professionalPlan == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(
+              planError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFFB91C1C),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton(
+                onPressed: _loadProfessionalPlan,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF2D4F88),
+                  side: const BorderSide(color: Color(0xFF2D4F88)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final List<Widget> children = [];
+    children.add(
+      _buildPlanCard(
+        planTier: PlanTier.starter,
+        isActive: !isProfessionalActive,
+      ),
     );
-    // TODO: Implement actual upgrade API call
+    children.add(const SizedBox(height: 24));
+    children.add(
+      _buildPlanCard(
+        planTier: PlanTier.professional,
+        isActive: isProfessionalActive,
+        professionalPlan: professionalPlan,
+        onUpgrade: !_isPaymentLoading
+            ? () => _openUnlockExamDialog(
+                isProfessionalActive: isProfessionalActive,
+              )
+            : null,
+      ),
+    );
+
+    if (_isPaymentLoading) {
+      children.add(
+        const Padding(
+          padding: EdgeInsets.only(top: 16),
+          child: Column(
+            children: [
+              AppShimmerCircle(size: 28),
+              SizedBox(height: 12),
+              Text('Processing payment...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (planError != null && professionalPlan != null) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text(
+            planError!,
+            style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    children.add(const SizedBox(height: 32));
+    return Column(children: children);
   }
 
-  Future<void> _openUnlockExamDialog() async {
+  Future<void> _openUnlockExamDialog({
+    required bool isProfessionalActive,
+  }) async {
     final result = await showDialog<UnlockExamDialogResult>(
       context: context,
       barrierDismissible: false,
@@ -177,8 +245,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       ),
     );
 
-    if (!mounted) return;
-    if (result == null) return;
+    if (!mounted || result == null) return;
 
     if (result.alreadyUnlocked) {
       context.push(
@@ -194,16 +261,18 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       return;
     }
 
-    await _payWithStripe(result.exam);
+    if (isProfessionalActive) {
+      await _payForExamUnlockWithStripe(result.exam);
+    } else {
+      await _payForProfessionalUpgradeWithStripe(result.exam);
+    }
   }
 
-  /// Stripe-only flow: create intent → PaymentSheet → confirm backend
-  Future<void> _payWithStripe(ExamModel exam) async {
+  Future<void> _payForProfessionalUpgradeWithStripe(ExamModel exam) async {
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
     try {
-      // 1. Create Payment Intent on backend
       final createRes = await _apiService
           .createProfessionalPlanStripePaymentIntent(examId);
       if (!mounted) return;
@@ -235,7 +304,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           ? amountFromApi.round()
           : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
 
-      // 2. Init and present Stripe Payment Sheet
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
@@ -248,7 +316,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       await Stripe.instance.presentPaymentSheet();
       if (!mounted) return;
 
-      // 3. User completed payment in sheet → confirm on backend
       final confirmRes = await _apiService.confirmProfessionalPlanStripePayment(
         paymentIntentId,
       );
@@ -258,6 +325,127 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (confirmRes.success) {
         await _userController.applyProfessionalUpgrade(examId: examId);
         await _userController.refreshProfile();
+        await _loadProfessionalPlan();
+        if (!mounted) return;
+        context.push(
+          '/exam-unlock-success',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': examId,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+            'amountPaid': amountPaid,
+          },
+        );
+      } else {
+        ErrorHandler.showFromResponse(
+          confirmRes,
+          context: context,
+          failureFallback: 'Failed to confirm payment',
+        );
+      }
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+      ErrorHandler.showSnackBar(
+        e.error.message ?? 'Payment was cancelled or failed.',
+        isError: true,
+        context: context,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+      ErrorHandler.showFromException(
+        e,
+        context: context,
+        fallback: 'Payment failed. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _payForExamUnlockWithStripe(ExamModel exam) async {
+    final examId = exam.id;
+    setState(() => _isPaymentLoading = true);
+
+    try {
+      final createRes = await _apiService.createExamStripePaymentIntent(examId);
+      if (!mounted) return;
+      if (!createRes.success || createRes.data == null) {
+        setState(() => _isPaymentLoading = false);
+        ErrorHandler.showFromResponse(
+          createRes,
+          context: context,
+          failureFallback: 'Failed to create payment',
+        );
+        return;
+      }
+
+      final bool alreadyUnlocked =
+          createRes.data?['unlocked'] == true ||
+          createRes.data?['alreadyUnlocked'] == true;
+      if (alreadyUnlocked) {
+        setState(() => _isPaymentLoading = false);
+        await _userController.addUnlockedExamId(examId);
+        await _userController.refreshProfile();
+        if (!mounted) return;
+        context.push(
+          '/quiz-settings',
+          extra: {
+            'courseTitle': exam.name,
+            'examId': exam.id,
+            'questionCount': exam.questionCount,
+            'effectivitySheetContent': exam.effectivitySheetContent,
+            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+          },
+        );
+        return;
+      }
+
+      final clientSecret = createRes.data!['clientSecret'] as String?;
+      final paymentIntentId = createRes.data!['paymentIntentId'] as String?;
+      if (clientSecret == null ||
+          clientSecret.isEmpty ||
+          paymentIntentId == null) {
+        setState(() => _isPaymentLoading = false);
+        ErrorHandler.showSnackBar(
+          'Invalid payment response',
+          isError: true,
+          context: context,
+        );
+        return;
+      }
+
+      final int fallbackAmount =
+          professionalPlan?.unlockExamPrice.round() ?? 150;
+      final amountFromApi = createRes.data!['amount'];
+      final int amountPaid = amountFromApi is num
+          ? amountFromApi.round()
+          : int.tryParse(amountFromApi?.toString() ?? '') ?? fallbackAmount;
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'EJ Exam Access',
+          returnURL: 'flutterstripe://redirect',
+        ),
+      );
+      if (!mounted) return;
+
+      await Stripe.instance.presentPaymentSheet();
+      if (!mounted) return;
+
+      final confirmRes = await _apiService.confirmExamStripePayment(
+        examId,
+        paymentIntentId,
+      );
+      if (!mounted) return;
+      setState(() => _isPaymentLoading = false);
+
+      if (confirmRes.success) {
+        await _userController.addUnlockedExamId(examId);
+        await _userController.refreshProfile();
+        await _loadProfessionalPlan();
         if (!mounted) return;
         context.push(
           '/exam-unlock-success',
@@ -305,6 +493,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     final bool isStarter = planTier == PlanTier.starter;
     final plan = professionalPlan;
 
+    if (!isStarter && isActive) {
+      return _buildActiveProfessionalPlanCard(
+        plan: plan,
+        onUnlockAnotherExam: onUpgrade,
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -324,7 +519,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Plan Header
           Row(
             children: [
               Container(
@@ -344,7 +538,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                   height: 32,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback to icon if image fails to load
                     return Icon(
                       isStarter ? Icons.star : Icons.bolt,
                       color: Colors.white,
@@ -478,7 +671,6 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           const SizedBox(height: 16),
           ..._buildFeaturesList(isStarter, professionalPlan: plan),
           const SizedBox(height: 24),
-          // Free Plan Button
           if (isStarter)
             SizedBox(
               width: double.infinity,
@@ -521,54 +713,261 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       ),
                     ),
             )
-          // Professional Paid Plan Button
           else
             SizedBox(
               width: double.infinity,
               height: 56,
-              child: isActive
-                  ? OutlinedButton(
-                      onPressed: null,
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.grey[100],
-                        foregroundColor: Colors.grey[600],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        side: BorderSide(color: Colors.grey[300]!, width: 1),
-                      ),
-                      child: const Text(
-                        'Your Current Plan',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  : ElevatedButton(
-                      onPressed: onUpgrade,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2D4F88),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        plan != null
-                            ? 'Subscribe - ${plan.priceFormatted}'
-                            : 'Subscribe - \$180.00',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+              child: ElevatedButton(
+                onPressed: onUpgrade,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D4F88),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  plan != null
+                      ? 'Subscribe - ${plan.priceFormatted}'
+                      : 'Subscribe - \$180.00',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
     );
+  }
+
+  Widget _buildActiveProfessionalPlanCard({
+    required ProfessionalPlanModel? plan,
+    VoidCallback? onUnlockAnotherExam,
+  }) {
+    final subscription = plan?.subscription;
+    final profileUser = _userController.user.value;
+    final billingCycle =
+        subscription?.billingCycle?.label ?? plan?.interval.label ?? '3 months';
+    final nextBillingDate = _formatDate(
+      profileUser?.subscriptionExpiresAt ?? subscription?.nextBillingDate,
+    );
+    final planPrice = plan?.priceFormatted ?? '\$180.00';
+    final intervalLabel = '/${plan?.interval.label ?? billingCycle}';
+    final unlockLabel = plan?.unlockExamPriceFormatted ?? '\$250.00';
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFCED7F2), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2D4F88),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Image.asset(
+                    'assets/icons/professional_plan.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.bolt, color: Colors.white, size: 32),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  plan?.name ?? 'Professional Plan',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111827),
+                    height: 1.12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD9F7DC),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFF13AF2C), width: 2),
+            ),
+            child: const Text(
+              'Active',
+              style: TextStyle(
+                color: Color(0xFF0F9E25),
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(height: 26),
+          _buildInfoRow(title: 'Billing Cycle', value: billingCycle),
+          const SizedBox(height: 16),
+          _buildInfoRow(title: 'Next Billing Date', value: nextBillingDate),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                planPrice,
+                style: const TextStyle(
+                  fontSize: 44,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF111827),
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  intervalLabel,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    color: Color(0xFF111827),
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Divider(thickness: 1, color: Color(0xFF1F2937)),
+          const SizedBox(height: 22),
+          Text(
+            plan?.description ?? 'What\'s Included in Your Plan',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ..._buildFeaturesList(false, professionalPlan: plan),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: onUnlockAnotherExam,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF184A99),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              child: Text(
+                'Unlock another exam for $unlockLabel',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: OutlinedButton(
+              onPressed: _onCancelSubscriptionTap,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF184A99),
+                side: const BorderSide(color: Color(0xFF184A99), width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              child: const Text(
+                'Cancel Subscription',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow({required String title, required String value}) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF111827),
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF111827),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _onCancelSubscriptionTap() {
+    ErrorHandler.showSnackBar(
+      'Cancellation flow is not available yet.',
+      isError: false,
+      context: context,
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '--';
+    final local = date.toLocal();
+    const months = <String>[
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final month = months[local.month - 1];
+    return '$month ${local.day}, ${local.year}';
   }
 
   List<Widget> _buildFeaturesList(
@@ -589,7 +988,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           .toList();
     }
     return [
-      _buildFeatureItem('Access to selected resources'),
+      _buildFeatureItem('Access to selected API exams'),
       _buildFeatureItem('Full-length mock exams'),
       _buildFeatureItem('Timed & Full Simulation Modes'),
       _buildFeatureItem('Interactive study mode'),
@@ -607,15 +1006,15 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check, color: Color(0xFF111827), size: 20),
+          const Icon(Icons.check, color: Color(0xFF111827), size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 color: Color(0xFF111827),
-                height: 1.5,
+                height: 1.4,
               ),
             ),
           ),

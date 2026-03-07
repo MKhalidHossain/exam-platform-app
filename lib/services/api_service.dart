@@ -683,14 +683,15 @@ class ApiService {
     return get<ProfessionalPlanModel>(
       ApiEndpoints.professionalPlan,
       fromJson: (data) {
-        if (data is Map && data['plan'] != null) {
+        if (data is Map<String, dynamic>) {
+          return ProfessionalPlanModel.fromJson(data);
+        }
+        if (data is Map) {
           return ProfessionalPlanModel.fromJson(
-            data['plan'] as Map<String, dynamic>,
+            Map<String, dynamic>.from(data),
           );
         }
-        return ProfessionalPlanModel.fromJson(
-          data is Map<String, dynamic> ? data : {},
-        );
+        return ProfessionalPlanModel.fromJson(const <String, dynamic>{});
       },
     );
   }
