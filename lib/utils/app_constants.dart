@@ -6,8 +6,8 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // API Constants
-  static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
-  // static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
+  // static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
+  static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   // null = no timeout (wait indefinitely).
   static const Duration? examGenerationTimeout = null;
