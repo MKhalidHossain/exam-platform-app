@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -54,6 +55,27 @@ class StorageService {
   Future<void> removeUserId() async {
     final prefs = await _prefs;
     await prefs.remove(AppConstants.userIdKey);
+  }
+
+  // Device ID Management
+  Future<String> getOrCreateDeviceId() async {
+    final prefs = await _prefs;
+    final existing = prefs.getString(AppConstants.deviceIdKey);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+
+    final random = Random.secure();
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final suffix = List.generate(
+      20,
+      (_) => chars[random.nextInt(chars.length)],
+    ).join();
+    final deviceId =
+        'dev_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$suffix';
+
+    await prefs.setString(AppConstants.deviceIdKey, deviceId);
+    return deviceId;
   }
 
   // Login Status

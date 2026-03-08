@@ -38,6 +38,7 @@ class ApiService {
         completer.complete(false);
         return false;
       }
+      final deviceId = await _storageService.getOrCreateDeviceId();
 
       final uri = Uri.parse(
         '${AppConstants.baseUrl}${ApiEndpoints.refreshToken}',
@@ -49,7 +50,10 @@ class ApiService {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            body: jsonEncode({'refreshToken': refreshToken}),
+            body: jsonEncode({
+              'refreshToken': refreshToken,
+              'deviceId': deviceId,
+            }),
           )
           .timeout(AppConstants.apiTimeout);
 
@@ -484,12 +488,14 @@ class ApiService {
     required String password,
     required String confirmPassword,
   }) async {
+    final deviceId = await _storageService.getOrCreateDeviceId();
     final body = {
       'phone': phone,
       'name': name,
       'email': email,
       'password': password,
       'confirmPassword': confirmPassword,
+      'deviceId': deviceId,
     };
 
     // Convert to JSON string to show exact format
@@ -609,7 +615,8 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final body = {'email': email, 'password': password};
+    final deviceId = await _storageService.getOrCreateDeviceId();
+    final body = {'email': email, 'password': password, 'deviceId': deviceId};
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);

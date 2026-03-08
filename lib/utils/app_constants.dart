@@ -6,8 +6,8 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // API Constants
-  // static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
-  static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
+  static const String baseUrl = 'http://10.10.5.94:5001/api/v1';
+  // static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   // null = no timeout (wait indefinitely).
   static const Duration? examGenerationTimeout = null;
@@ -20,6 +20,7 @@ class AppConstants {
   static const String tokenKey = 'auth_token';
   static const String refreshTokenKey = 'refresh_token';
   static const String userIdKey = 'user_id';
+  static const String deviceIdKey = 'device_id';
   static const String isLoggedInKey = 'is_logged_in';
   static const String userDataKey = 'user_data';
   static const String userRoleKey = 'user_role';
