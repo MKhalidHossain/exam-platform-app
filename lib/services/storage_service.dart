@@ -1,11 +1,13 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_constants.dart';
+import 'installation_id_service.dart';
 
 class StorageService {
+  final InstallationIdService _installationIdService = InstallationIdService();
+
   Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
 
@@ -57,25 +59,13 @@ class StorageService {
     await prefs.remove(AppConstants.userIdKey);
   }
 
-  // Device ID Management
-  Future<String> getOrCreateDeviceId() async {
-    final prefs = await _prefs;
-    final existing = prefs.getString(AppConstants.deviceIdKey);
-    if (existing != null && existing.isNotEmpty) {
-      return existing;
-    }
+  // Installation ID Management
+  Future<String> getOrCreateInstallationId() async {
+    return _installationIdService.getOrCreateInstallationId();
+  }
 
-    final random = Random.secure();
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final suffix = List.generate(
-      20,
-      (_) => chars[random.nextInt(chars.length)],
-    ).join();
-    final deviceId =
-        'dev_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$suffix';
-
-    await prefs.setString(AppConstants.deviceIdKey, deviceId);
-    return deviceId;
+  Future<String?> getInstallationId() async {
+    return _installationIdService.getInstallationId();
   }
 
   // Login Status
@@ -170,10 +160,20 @@ class StorageService {
     }
   }
 
-  // Complete logout - clears all data and cache
+  Future<void> clearSessionData() async {
+    final prefs = await _prefs;
+    await prefs.remove(AppConstants.tokenKey);
+    await prefs.remove(AppConstants.refreshTokenKey);
+    await prefs.remove(AppConstants.userIdKey);
+    await prefs.remove(AppConstants.isLoggedInKey);
+    await prefs.remove(AppConstants.userDataKey);
+    await prefs.remove(AppConstants.userRoleKey);
+    await prefs.remove(AppConstants.unlockedExamIdsKey);
+  }
+
+  // Complete logout for auth/session state.
   Future<void> logout() async {
-    // Clear all storage data
-    await clearAll();
+    await clearSessionData();
     // Clear all cache
     await clearCache();
   }

@@ -54,7 +54,7 @@ class AuthController extends GetxController {
           response,
           failureFallback: 'Login failed. Please try again.',
         );
-        if (_isAlreadyLoggedInAnotherDevice(message)) {
+        if (_isAlreadyLoggedInAnotherInstallation(message)) {
           await _showAlreadyLoggedInAlert(context, message);
         } else {
           ErrorHandler.showSnackBar(message, context: context);
@@ -196,11 +196,12 @@ class AuthController extends GetxController {
     }
   }
 
-  bool _isAlreadyLoggedInAnotherDevice(String message) {
+  bool _isAlreadyLoggedInAnotherInstallation(String message) {
     final lower = message.toLowerCase();
-    return lower.contains('already logged in on another device') ||
+    return lower.contains('already logged in on another installation') ||
+        lower.contains('locked to another installation') ||
         (lower.contains('already logged in') &&
-            lower.contains('another device'));
+            lower.contains('another installation'));
   }
 
   Future<void> _showAlreadyLoggedInAlert(

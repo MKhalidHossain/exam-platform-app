@@ -18,9 +18,11 @@ class ApiService {
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storageService.getToken();
+    final installationId = await _storageService.getOrCreateInstallationId();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      AppConstants.installationIdHeaderKey: installationId,
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
@@ -38,7 +40,7 @@ class ApiService {
         completer.complete(false);
         return false;
       }
-      final deviceId = await _storageService.getOrCreateDeviceId();
+      final installationId = await _storageService.getOrCreateInstallationId();
 
       final uri = Uri.parse(
         '${AppConstants.baseUrl}${ApiEndpoints.refreshToken}',
@@ -49,10 +51,11 @@ class ApiService {
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
+              AppConstants.installationIdHeaderKey: installationId,
             },
             body: jsonEncode({
               'refreshToken': refreshToken,
-              'deviceId': deviceId,
+              'installationId': installationId,
             }),
           )
           .timeout(AppConstants.apiTimeout);
@@ -242,11 +245,13 @@ class ApiService {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final token = await _storageService.getToken();
+      final installationId = await _storageService.getOrCreateInstallationId();
 
       final request = http.MultipartRequest('PUT', uri);
 
       // Add headers
       request.headers['Accept'] = 'application/json';
+      request.headers[AppConstants.installationIdHeaderKey] = installationId;
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -321,10 +326,12 @@ class ApiService {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final token = await _storageService.getToken();
+      final installationId = await _storageService.getOrCreateInstallationId();
 
       final request = http.MultipartRequest('POST', uri);
 
       request.headers['Accept'] = 'application/json';
+      request.headers[AppConstants.installationIdHeaderKey] = installationId;
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -488,14 +495,14 @@ class ApiService {
     required String password,
     required String confirmPassword,
   }) async {
-    final deviceId = await _storageService.getOrCreateDeviceId();
+    final installationId = await _storageService.getOrCreateInstallationId();
     final body = {
       'phone': phone,
       'name': name,
       'email': email,
       'password': password,
       'confirmPassword': confirmPassword,
-      'deviceId': deviceId,
+      'installationId': installationId,
     };
 
     // Convert to JSON string to show exact format
@@ -615,8 +622,12 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final deviceId = await _storageService.getOrCreateDeviceId();
-    final body = {'email': email, 'password': password, 'deviceId': deviceId};
+    final installationId = await _storageService.getOrCreateInstallationId();
+    final body = {
+      'email': email,
+      'password': password,
+      'installationId': installationId,
+    };
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
@@ -683,6 +694,14 @@ class ApiService {
     }
 
     return response;
+  }
+
+  Future<ApiResponse<void>> logout() async {
+    return post<void>(
+      ApiEndpoints.logout,
+      body: <String, dynamic>{},
+      allowRefresh: false,
+    );
   }
 
   /// GET professional plan. {{base_url}}/api/v1/payments/plan/professional
