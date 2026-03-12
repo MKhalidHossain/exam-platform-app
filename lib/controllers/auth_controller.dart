@@ -19,14 +19,18 @@ class AuthController extends GetxController {
     if (isLoading.value) return;
     isLoading.value = true;
     try {
-      final response = await _apiService.login(email: email, password: password);
+      final response = await _apiService.login(
+        email: email,
+        password: password,
+      );
       if (!context.mounted) return;
 
       if (response.success) {
         final UserController userController = Get.isRegistered<UserController>()
             ? Get.find<UserController>()
             : Get.put(UserController());
-        final HomeController? homeController = Get.isRegistered<HomeController>()
+        final HomeController? homeController =
+            Get.isRegistered<HomeController>()
             ? Get.find<HomeController>()
             : null;
         await userController.clearState();
@@ -35,14 +39,26 @@ class AuthController extends GetxController {
         if (homeController != null) {
           await homeController.fetchActiveExams();
         }
+        if (!context.mounted) return;
         ErrorHandler.showSnackBar(
-          ErrorHandler.getMessageFromResponse(response, successFallback: 'Login successful!'),
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Login successful!',
+          ),
           isError: false,
           context: context,
         );
         context.go('/home');
       } else {
-        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Login failed. Please try again.');
+        final message = ErrorHandler.getMessageFromResponse(
+          response,
+          failureFallback: 'Login failed. Please try again.',
+        );
+        if (_isAlreadyLoggedInAnotherInstallation(message)) {
+          await _showAlreadyLoggedInAlert(context, message);
+        } else {
+          ErrorHandler.showSnackBar(message, context: context);
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -75,13 +91,20 @@ class AuthController extends GetxController {
 
       if (response.success) {
         ErrorHandler.showSnackBar(
-          ErrorHandler.getMessageFromResponse(response, successFallback: 'Registration successful!'),
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Registration successful!',
+          ),
           isError: false,
           context: context,
         );
         context.go('/login');
       } else {
-        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Registration failed. Please try again.');
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Registration failed. Please try again.',
+        );
       }
     } catch (e) {
       if (context.mounted) {
@@ -104,16 +127,23 @@ class AuthController extends GetxController {
 
       if (response.success) {
         ErrorHandler.showSnackBar(
-          ErrorHandler.getMessageFromResponse(response, successFallback: 'OTP sent to your email successfully'),
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'OTP sent to your email successfully',
+          ),
           isError: false,
           context: context,
         );
-        context.go('/verify-otp', extra: {
-          'email': email,
-          'isForPasswordReset': true,
-        });
+        context.go(
+          '/verify-otp',
+          extra: {'email': email, 'isForPasswordReset': true},
+        );
       } else {
-        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to send OTP. Please try again.');
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Failed to send OTP. Please try again.',
+        );
       }
     } catch (e) {
       if (context.mounted) {
@@ -142,13 +172,20 @@ class AuthController extends GetxController {
 
       if (response.success) {
         ErrorHandler.showSnackBar(
-          ErrorHandler.getMessageFromResponse(response, successFallback: 'Password reset successfully'),
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Password reset successfully',
+          ),
           isError: false,
           context: context,
         );
         context.go('/login');
       } else {
-        ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to reset password. Please try again.');
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Failed to reset password. Please try again.',
+        );
       }
     } catch (e) {
       if (context.mounted) {
@@ -157,5 +194,32 @@ class AuthController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  bool _isAlreadyLoggedInAnotherInstallation(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('already logged in on another installation') ||
+        lower.contains('locked to another installation') ||
+        (lower.contains('already logged in') &&
+            lower.contains('another installation'));
+  }
+
+  Future<void> _showAlreadyLoggedInAlert(
+    BuildContext context,
+    String message,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Blocked'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }

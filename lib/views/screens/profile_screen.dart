@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_shimmer.dart';
 import '../../models/user_model.dart';
-import '../../services/storage_service.dart';
+import '../../services/auth_service.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/plan_tier.dart';
@@ -19,7 +19,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final StorageService _storageService = StorageService();
+  final AuthService _authService = AuthService();
   late final UserController _userController;
 
   @override
@@ -318,7 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               }
 
                               // Clear all user data and cache
-                              await _storageService.logout();
+                              await _authService.logout();
                               await _userController.clearState();
                               if (Get.isRegistered<HomeController>()) {
                                 Get.find<HomeController>().clearState();

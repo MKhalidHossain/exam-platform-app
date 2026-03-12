@@ -19,6 +19,9 @@ class AppConstants {
   static const String tokenKey = 'auth_token';
   static const String refreshTokenKey = 'refresh_token';
   static const String userIdKey = 'user_id';
+  static const String installationIdSecureKey = 'installation_id';
+  static const String installationBootstrapKey = 'installation_bootstrapped';
+  static const String installationIdHeaderKey = 'X-App-Installation-Id';
   static const String isLoggedInKey = 'is_logged_in';
   static const String userDataKey = 'user_data';
   static const String userRoleKey = 'user_role';

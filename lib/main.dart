@@ -4,6 +4,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'utils/app_theme.dart';
 import 'utils/app_constants.dart';
 import 'routes/app_router.dart';
+import 'services/installation_id_service.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/splash_controller.dart';
 import 'controllers/theme_controller.dart';
@@ -18,6 +19,9 @@ void main() async {
   Stripe.urlScheme = 'flutterstripe';
   await Stripe.instance.applySettings();
 
+  // Ensure installation identifier exists before any API/auth actions.
+  await InstallationIdService().getOrCreateInstallationId();
+
   // Initialize GetX
   Get.put(ThemeController());
   Get.put(AuthController(), permanent: true);
@@ -28,14 +32,15 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-  
 
   @override
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
 
     return Obx(() {
-      final themeMode = themeController.isDarkMode ? ThemeMode.dark : ThemeMode.light;
+      final themeMode = themeController.isDarkMode
+          ? ThemeMode.dark
+          : ThemeMode.light;
       return MaterialApp.router(
         key: ValueKey<ThemeMode>(themeMode),
         title: 'EJ Flutter App',
