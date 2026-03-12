@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_constants.dart';
+import 'installation_id_service.dart';
 
 class StorageService {
+  final InstallationIdService _installationIdService = InstallationIdService();
+
   Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
 
@@ -54,6 +57,15 @@ class StorageService {
   Future<void> removeUserId() async {
     final prefs = await _prefs;
     await prefs.remove(AppConstants.userIdKey);
+  }
+
+  // Installation ID Management
+  Future<String> getOrCreateInstallationId() async {
+    return _installationIdService.getOrCreateInstallationId();
+  }
+
+  Future<String?> getInstallationId() async {
+    return _installationIdService.getInstallationId();
   }
 
   // Login Status
@@ -148,10 +160,20 @@ class StorageService {
     }
   }
 
-  // Complete logout - clears all data and cache
+  Future<void> clearSessionData() async {
+    final prefs = await _prefs;
+    await prefs.remove(AppConstants.tokenKey);
+    await prefs.remove(AppConstants.refreshTokenKey);
+    await prefs.remove(AppConstants.userIdKey);
+    await prefs.remove(AppConstants.isLoggedInKey);
+    await prefs.remove(AppConstants.userDataKey);
+    await prefs.remove(AppConstants.userRoleKey);
+    await prefs.remove(AppConstants.unlockedExamIdsKey);
+  }
+
+  // Complete logout for auth/session state.
   Future<void> logout() async {
-    // Clear all storage data
-    await clearAll();
+    await clearSessionData();
     // Clear all cache
     await clearCache();
   }
