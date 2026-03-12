@@ -6,7 +6,8 @@ class AppColors {
   static const Color primaryBlueDark = Color(0xFF19478D); // Darker blue variant
   static const Color accentBlue = Color(0xFF2F76C4); // Medium blue for links and accents
   static const Color accentCyan = Color(0xFF3489C9); // Lighter blue for accents
-  static const Color onboardingBlue = Color(0xFF111111); // Dark blue for onboarding
+  static const Color onboardingBlue = Color(0xFF111111); 
+  // Dark blue for onboarding
   
   // Background Colors (matching gradient from images)
   static const Color backgroundGradientStart = Color(0xFFE0F2F7); // Light blue top
