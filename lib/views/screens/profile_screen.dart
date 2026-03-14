@@ -242,6 +242,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         _SettingItem(
+                          icon: Icons.group_add_outlined,
+                          title: 'Referral',
+                          subtitle: 'Track your referral users and rewards',
+                          onTap: () {
+                            context.push('/referral');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
                           icon: Icons.privacy_tip_outlined,
                           title: 'Privacy policy',
                           subtitle: 'How we handle your data',

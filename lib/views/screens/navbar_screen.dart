@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'history_tab.dart';
+import 'ebook_tab_screen.dart';
 import '../../models/plan_tier.dart';
 
 class NavbarScreen extends StatefulWidget {
@@ -51,6 +52,7 @@ class _NavbarScreenState extends State<NavbarScreen> {
                       unlockedCourseIds: widget.unlockedCourseIds,
                     ),
                     const HistoryTab(),
+                    const EbookTabScreen(),
                     ProfileScreen(planTier: widget.planTier),
                   ],
                 ),
@@ -119,7 +121,14 @@ class _BottomNavBar extends StatelessWidget {
           _NavItem(
             index: 2,
             currentIndex: currentIndex,
-            icon: currentIndex == 2 ? Icons.person : Icons.person_outline,
+            icon: Icons.menu_book_rounded,
+            label: 'Ebook',
+            onTap: onTap,
+          ),
+          _NavItem(
+            index: 3,
+            currentIndex: currentIndex,
+            icon: currentIndex == 3 ? Icons.person : Icons.person_outline,
             label: 'Profile',
             onTap: onTap,
           ),

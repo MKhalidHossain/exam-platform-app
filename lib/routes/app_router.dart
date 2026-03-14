@@ -25,6 +25,7 @@ import '../views/screens/mcq_screen.dart';
 import '../views/screens/exam_review_screen.dart';
 import '../views/screens/exam_unlock_success_screen.dart';
 import '../views/screens/history_detail_view.dart';
+import '../views/screens/referral_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -132,6 +133,11 @@ GoRouter getRouter() {
         path: '/contact-us',
         name: 'contact-us',
         builder: (context, state) => const ContactUsScreen(),
+      ),
+      GoRoute(
+        path: '/referral',
+        name: 'referral',
+        builder: (context, state) => const ReferralScreen(),
       ),
       GoRoute(
         path: '/professional-plan',
