@@ -20,7 +20,11 @@ class _ReferralScreenState extends State<ReferralScreen> {
   final ReferralService _referralService = ReferralService();
 
   bool _isLoading = true;
+<<<<<<< HEAD
   bool _isActionLoading = false;
+=======
+  bool _isSubmitting = false;
+>>>>>>> 8605f6adb60b6fa8bd5e87f729391d0a6530337f
   String? _error;
   ReferralProfile? _profile;
   ReferralReferredUsersData? _usersData;
@@ -41,8 +45,14 @@ class _ReferralScreenState extends State<ReferralScreen> {
     }
 
     final profileRes = await _referralService.getMyReferralProfile();
-    final usersRes = await _referralService.getMyReferredUsers(page: 1, limit: 50);
-    final ledgerRes = await _referralService.getMyReferralLedger(page: 1, limit: 50);
+    final usersRes = await _referralService.getMyReferredUsers(
+      page: 1,
+      limit: 50,
+    );
+    final ledgerRes = await _referralService.getMyReferralLedger(
+      page: 1,
+      limit: 50,
+    );
 
     if (!mounted) return;
 
@@ -68,6 +78,103 @@ class _ReferralScreenState extends State<ReferralScreen> {
     });
   }
 
+  Future<double?> _promptAmount({
+    required String title,
+    required String hintText,
+  }) async {
+    final controller = TextEditingController();
+
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(hintText: hintText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) {
+                Navigator.of(context).pop(null);
+                return;
+              }
+              final value = double.tryParse(text);
+              Navigator.of(context).pop(value);
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+
+    return result;
+  }
+
+  Future<void> _convertToCredit() async {
+    final amount = await _promptAmount(
+      title: 'Convert to App Credit',
+      hintText: 'Leave blank to convert full available balance',
+    );
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = true);
+    final response = await _referralService.convertToCredit(amount: amount);
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (!response.success) {
+      ErrorHandler.showFromResponse(
+        response,
+        context: context,
+        failureFallback: 'Unable to convert balance to app credit.',
+      );
+      return;
+    }
+
+    ErrorHandler.showSnackBar(
+      'Referral balance converted to app credit.',
+      isError: false,
+      context: context,
+    );
+    await _loadAll();
+  }
+
+  Future<void> _requestCashPayout() async {
+    final amount = await _promptAmount(
+      title: 'Request Cash Payout',
+      hintText: 'Leave blank to request full available balance',
+    );
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = true);
+    final response = await _referralService.requestCashPayout(amount: amount);
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (!response.success) {
+      ErrorHandler.showFromResponse(
+        response,
+        context: context,
+        failureFallback: 'Unable to submit payout request.',
+      );
+      return;
+    }
+
+    ErrorHandler.showSnackBar(
+      'Cash payout request submitted.',
+      isError: false,
+      context: context,
+    );
+    await _loadAll();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,29 +184,29 @@ class _ReferralScreenState extends State<ReferralScreen> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                 child: Row(
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                      color: const Color(0xFF2D4F88),
+                      color: const Color(0xFF10213F),
                     ),
                     const Expanded(
                       child: Text(
-                        'Referral',
+                        'Referral Center',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Color(0xFF2D4F88),
-                          fontSize: 21,
-                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF10213F),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ),
                     IconButton(
                       onPressed: _loadAll,
                       icon: const Icon(Icons.refresh_rounded),
-                      color: const Color(0xFF2D4F88),
+                      color: const Color(0xFF10213F),
                     ),
                   ],
                 ),
@@ -157,8 +264,9 @@ class _ReferralScreenState extends State<ReferralScreen> {
       onRefresh: _loadAll,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
         children: [
+<<<<<<< HEAD
           if (program != null) ...[
             _buildProgramIntro(program),
             const SizedBox(height: 12),
@@ -171,27 +279,36 @@ class _ReferralScreenState extends State<ReferralScreen> {
           const SizedBox(height: 14),
           _buildSectionTitle('Referred Users (${users.length})'),
           const SizedBox(height: 8),
+=======
+          _buildHero(profile),
+          const SizedBox(height: 16),
+          _buildActionBar(profile),
+          const SizedBox(height: 18),
+          _buildSectionTitle('Referred Buyers'),
+          const SizedBox(height: 10),
+>>>>>>> 8605f6adb60b6fa8bd5e87f729391d0a6530337f
           if (users.isEmpty)
             _emptyCard('No referred users yet.')
           else
             ...users.map(_buildReferredUserCard),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           _buildSectionTitle('Reward Ledger'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildRewardLedger(ledger?.rewards ?? const []),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           _buildSectionTitle('Payout Requests'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildPayoutLedger(ledger?.payouts ?? const []),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           _buildSectionTitle('Credit Conversions'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _buildConversionLedger(ledger?.conversions ?? const []),
         ],
       ),
     );
   }
 
+<<<<<<< HEAD
   Widget _buildProgramIntro(ReferralProgram program) {
     return Container(
       width: double.infinity,
@@ -326,42 +443,40 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
   Widget _buildReferralIdentity(ReferralProfile profile) {
     final channels = profile.program?.shareChannels ?? const <String>[];
+=======
+  Widget _buildHero(ReferralProfile profile) {
+    final earnings = profile.earnings;
+>>>>>>> 8605f6adb60b6fa8bd5e87f729391d0a6530337f
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFCFDAF7)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF173B2E), Color(0xFF245B47), Color(0xFF4C9A7D)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x332D4F88),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Your Referral Program',
+            'Your referral code',
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1E3A8A),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SelectableText(
-            'Code: ${profile.referralCode}',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF0F172A),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          SelectableText(
-            profile.referralLink,
-            style: const TextStyle(
+              color: Color(0xFFD6E4FF),
               fontSize: 12,
-              color: Color(0xFF475569),
+              fontWeight: FontWeight.w700,
             ),
           ),
+<<<<<<< HEAD
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -399,6 +514,71 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 _shareChannelButton('Facebook', () => _shareByChannel('facebook', profile)),
               if (channels.contains('instagram'))
                 _shareChannelButton('Instagram', () => _shareByChannel('instagram', profile)),
+=======
+          const SizedBox(height: 8),
+          SelectableText(
+            profile.referralCode,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            profile.referralLink,
+            style: const TextStyle(color: Color(0xFFD6E4FF), height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _heroStat(
+                  title: 'Available',
+                  value: _usd(earnings.availableBalance),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _heroStat(
+                  title: 'Pending',
+                  value: _usd(earnings.pendingRewards),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _heroStat(
+                  title: 'App Credit',
+                  value: _usd(profile.appCreditBalance),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _heroSummary(
+                  title: 'Referred users',
+                  value: earnings.inspectorsReferred.toString(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _heroSummary(
+                  title: 'Successful purchases',
+                  value: earnings.successfulUpgrades.toString(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _heroSummary(
+                  title: 'Total earned',
+                  value: _usd(earnings.totalEarned),
+                ),
+              ),
+>>>>>>> 8605f6adb60b6fa8bd5e87f729391d0a6530337f
             ],
           ),
         ],
@@ -406,6 +586,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
     );
   }
 
+<<<<<<< HEAD
   Widget _shareChannelButton(String label, VoidCallback onTap) {
     return OutlinedButton(
       onPressed: onTap,
@@ -689,13 +870,15 @@ class _ReferralScreenState extends State<ReferralScreen> {
     Color valueColor = const Color(0xFF0F172A),
     bool fullWidth = false,
   }) {
+=======
+  Widget _heroStat({required String title, required String value}) {
+>>>>>>> 8605f6adb60b6fa8bd5e87f729391d0a6530337f
     return Container(
-      width: fullWidth ? double.infinity : null,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: const Color(0x1FFFFFFF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x33FFFFFF)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -703,21 +886,132 @@ class _ReferralScreenState extends State<ReferralScreen> {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 17,
-              color: valueColor,
+              color: Color(0xFFD6E4FF),
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _heroSummary({required String title, required String value}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFFD6E4FF),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionBar(ReferralProfile profile) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _actionButton(
+          label: 'Copy Link',
+          icon: Icons.copy_outlined,
+          onTap: () async {
+            await Clipboard.setData(ClipboardData(text: profile.referralLink));
+            if (!mounted) return;
+            ErrorHandler.showSnackBar(
+              'Referral link copied.',
+              isError: false,
+              context: context,
+            );
+          },
+        ),
+        _actionButton(
+          label: 'Share Link',
+          icon: Icons.share_outlined,
+          filled: true,
+          onTap: () {
+            Share.share(
+              'Join with my referral link ${profile.referralLink} and get 10% off your ebook purchase.',
+            );
+          },
+        ),
+        _actionButton(
+          label: _isSubmitting ? 'Working...' : 'To Credit',
+          icon: Icons.account_balance_wallet_outlined,
+          onTap: _isSubmitting ? null : _convertToCredit,
+        ),
+        _actionButton(
+          label: _isSubmitting ? 'Working...' : 'Cash Payout',
+          icon: Icons.payments_outlined,
+          onTap: _isSubmitting ? null : _requestCashPayout,
+        ),
+      ],
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+    bool filled = false,
+  }) {
+    final foreground = filled ? Colors.white : const Color(0xFF2D4F88);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: filled ? const Color(0xFF2D4F88) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFD8E3F5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: foreground),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(color: foreground, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w900,
+        color: Color(0xFF10213F),
       ),
     );
   }
@@ -728,12 +1022,12 @@ class _ReferralScreenState extends State<ReferralScreen> {
         : const Color(0xFFB91C1C);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -741,60 +1035,113 @@ class _ReferralScreenState extends State<ReferralScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  user.referredName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.referredName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        color: Color(0xFF10213F),
+                      ),
+                    ),
+                    if (user.referredEmail.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        user.referredEmail,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  user.status,
+                  user.status.toUpperCase(),
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
             ],
           ),
-          if (user.referredEmail.trim().isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              user.referredEmail,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-            ),
-          ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
-            'Joined: ${_dateText(user.joinedAt)} | Upgraded: ${_dateText(user.upgradedAt)}',
-            style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+            'Joined ${_dateText(user.joinedAt)}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          Text(
+            'First successful purchase ${_dateText(user.upgradedAt)}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
           ),
           if (user.disqualifiedReason.trim().isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
-              'Reason: ${user.disqualifiedReason}',
-              style: const TextStyle(fontSize: 11.5, color: Color(0xFFB91C1C)),
+              user.disqualifiedReason,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFFB91C1C),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _miniInfo('Total', _usd(user.commission.totalCommission)),
-              _miniInfo('Pending', _usd(user.commission.pendingCommission)),
-              _miniInfo('Available', _usd(user.commission.availableCommission)),
-              _miniInfo('Paid Out', _usd(user.commission.paidOutCommission)),
+              _miniStat('Total', _usd(user.commission.totalCommission)),
+              _miniStat('Pending', _usd(user.commission.pendingCommission)),
+              _miniStat('Available', _usd(user.commission.availableCommission)),
+              _miniStat('Paid out', _usd(user.commission.paidOutCommission)),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStat(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF10213F),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -806,61 +1153,23 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
     return Column(
       children: rewards
-          .map(
-            (reward) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Status: ${reward.status}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Created: ${_dateText(reward.createdAt)}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                        Text(
-                          'Pending until: ${_dateText(reward.pendingUntil)}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _usd(reward.commissionAmount),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1D4ED8),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Remaining ${_usd(reward.remainingAmount)}',
-                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          )
+          .map((reward) {
+            final color = switch (reward.status) {
+              'available' => const Color(0xFF166534),
+              'pending' => const Color(0xFF92400E),
+              'paid_out' => const Color(0xFF1D4ED8),
+              _ => const Color(0xFF64748B),
+            };
+
+            return _ledgerCard(
+              title: reward.status.replaceAll('_', ' ').toUpperCase(),
+              subtitle:
+                  'Created ${_dateText(reward.createdAt)} • Pending until ${_dateText(reward.pendingUntil)}',
+              amount: _usd(reward.commissionAmount),
+              trailingText: 'Remaining ${_usd(reward.remainingAmount)}',
+              accent: color,
+            );
+          })
           .toList(growable: false),
     );
   }
@@ -871,48 +1180,12 @@ class _ReferralScreenState extends State<ReferralScreen> {
     return Column(
       children: payouts
           .map(
-            (payout) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Status: ${payout.status}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Requested: ${_dateText(payout.requestedAt)}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                        Text(
-                          'Processed: ${_dateText(payout.processedAt)}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    _usd(payout.amount),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1D4ED8),
-                    ),
-                  ),
-                ],
-              ),
+            (payout) => _ledgerCard(
+              title: payout.status.toUpperCase(),
+              subtitle:
+                  'Requested ${_dateText(payout.requestedAt)} • Processed ${_dateText(payout.processedAt)}',
+              amount: _usd(payout.amount),
+              accent: const Color(0xFF7C3AED),
             ),
           )
           .toList(growable: false),
@@ -925,98 +1198,105 @@ class _ReferralScreenState extends State<ReferralScreen> {
     return Column(
       children: conversions
           .map(
-            (conversion) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Converted to App Credit',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _usd(conversion.amount),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1D4ED8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Converted: ${_dateText(conversion.convertedAt)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                  Text(
-                    'Credit: ${_usd(conversion.creditBalanceBefore)} -> ${_usd(conversion.creditBalanceAfter)}',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
+            (conversion) => _ledgerCard(
+              title: 'APP CREDIT',
+              subtitle:
+                  'Converted ${_dateText(conversion.convertedAt)} • ${_usd(conversion.creditBalanceBefore)} -> ${_usd(conversion.creditBalanceAfter)}',
+              amount: _usd(conversion.amount),
+              accent: const Color(0xFF0F766E),
             ),
           )
           .toList(growable: false),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF1E3A8A),
-      ),
-    );
-  }
-
-  Widget _miniInfo(String label, String value) {
+  Widget _ledgerCard({
+    required String title,
+    required String subtitle,
+    required String amount,
+    required Color accent,
+    String? trailingText,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF334155),
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyCard(String text) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 52,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF10213F),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                amount,
+                style: TextStyle(fontWeight: FontWeight.w900, color: accent),
+              ),
+              if (trailingText != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  trailingText,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyCard(String message) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
       ),
       child: Text(
-        text,
+        message,
         style: const TextStyle(
-          fontSize: 12.5,
           color: Color(0xFF64748B),
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1027,13 +1307,28 @@ class _ReferralScreenState extends State<ReferralScreen> {
     return '\$${amount.toStringAsFixed(hasFraction ? 2 : 0)}';
   }
 
-  String _dateText(DateTime? value) {
-    if (value == null) return '--';
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '${local.year}-$mm-$dd $hh:$min';
+  String _dateText(DateTime? date) {
+    if (date == null) return 'Not yet';
+    final local = date.toLocal();
+    final month = _monthName(local.month);
+    return '$month ${local.day}, ${local.year}';
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[(month - 1).clamp(0, 11)];
   }
 }

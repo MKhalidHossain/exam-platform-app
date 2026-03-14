@@ -2,10 +2,7 @@ class EbookStoreData {
   final List<EbookCategory> categories;
   final EbookUserAccess userAccess;
 
-  const EbookStoreData({
-    required this.categories,
-    required this.userAccess,
-  });
+  const EbookStoreData({required this.categories, required this.userAccess});
 
   factory EbookStoreData.fromJson(Map<String, dynamic> json) {
     final rawCategories = json['categories'];
@@ -18,6 +15,112 @@ class EbookStoreData {
     return EbookStoreData(
       categories: categories,
       userAccess: EbookUserAccess.fromJson(_asMap(json['userAccess'])),
+    );
+  }
+
+  factory EbookStoreData.fromUpgradeAddOnOptions(
+    List<EbookUpgradeAddOnOption> options,
+    EbookUserAccess userAccess,
+  ) {
+    final products = options
+        .asMap()
+        .entries
+        .map(
+          (entry) => entry.value.toProduct(
+            categoryId: 'upgrade_add_ons',
+            sortOrder: entry.key,
+            userAccess: userAccess,
+          ),
+        )
+        .toList(growable: false);
+
+    return EbookStoreData(
+      categories: [
+        EbookCategory(
+          id: 'upgrade_add_ons',
+          title: 'Ebook Store',
+          slug: 'ebook-store',
+          shortCode: 'EBOOKS',
+          description: 'Available ebook add-ons and guides',
+          sortOrder: 0,
+          products: products,
+        ),
+      ],
+      userAccess: userAccess,
+    );
+  }
+}
+
+class EbookUpgradeAddOnOption {
+  final String id;
+  final String code;
+  final String title;
+  final double basePrice;
+  final double regularPrice;
+  final double upgradeDiscountPrice;
+  final String currency;
+  final bool isBundle;
+
+  const EbookUpgradeAddOnOption({
+    required this.id,
+    required this.code,
+    required this.title,
+    required this.basePrice,
+    required this.regularPrice,
+    required this.upgradeDiscountPrice,
+    required this.currency,
+    required this.isBundle,
+  });
+
+  factory EbookUpgradeAddOnOption.fromJson(Map<String, dynamic> json) {
+    return EbookUpgradeAddOnOption(
+      id: _asString(json['id']),
+      code: _asString(json['code']),
+      title: _asString(json['title']),
+      basePrice: _asDouble(json['basePrice']),
+      regularPrice: _asDouble(json['regularPrice']),
+      upgradeDiscountPrice: _asDouble(json['upgradeDiscountPrice']),
+      currency: _asString(json['currency'], fallback: 'USD'),
+      isBundle: _asBool(json['isBundle']),
+    );
+  }
+
+  EbookProduct toProduct({
+    required String categoryId,
+    required int sortOrder,
+    required EbookUserAccess userAccess,
+  }) {
+    final currentPrice = regularPrice > 0 ? regularPrice : basePrice;
+    final originalPrice = basePrice > currentPrice ? basePrice : currentPrice;
+    final unlocked = userAccess.isUnlockedForCode(code);
+
+    return EbookProduct(
+      id: id,
+      categoryId: categoryId,
+      code: code,
+      title: title,
+      shortDescription: isBundle
+          ? 'Bundle add-on from the upgrade catalog'
+          : 'Guide from the upgrade catalog',
+      fullDescription: '',
+      coverImageUrl: '',
+      contentUrl: '',
+      previewAvailable: false,
+      previewTitle: '',
+      previewContent: '',
+      previewUrl: '',
+      pricing: EbookPricing(
+        current: currentPrice,
+        original: originalPrice,
+        upgradeDiscount: upgradeDiscountPrice,
+        currency: currency,
+      ),
+      isBundle: isBundle,
+      bundleIncludes: const [],
+      locked: !unlocked,
+      unlocked: unlocked,
+      purchaseState: unlocked ? 'purchased' : 'locked',
+      sortOrder: sortOrder,
     );
   }
 }
@@ -182,6 +285,29 @@ class EbookUserAccess {
       hasApi510Bundle: _asBool(json['has_api510_bundle']),
       resourceUnlocks: unlocks,
     );
+  }
+
+  bool isUnlockedForCode(String code) {
+    final normalized = code.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+
+    if (resourceUnlocks
+        .map((e) => e.trim().toLowerCase())
+        .contains(normalized)) {
+      return true;
+    }
+
+    switch (normalized) {
+      case 'api510_inspection_guide':
+      case 'api510':
+        return hasApi510InspectionGuide || hasApi510Bundle;
+      case 'api510_report_guide':
+        return hasApi510ReportGuide || hasApi510Bundle;
+      case 'api510_bundle':
+        return hasApi510Bundle;
+      default:
+        return false;
+    }
   }
 }
 

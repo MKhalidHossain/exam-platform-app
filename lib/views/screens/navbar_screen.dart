@@ -8,11 +8,17 @@ import '../../models/plan_tier.dart';
 class NavbarScreen extends StatefulWidget {
   final PlanTier planTier;
   final Set<String> unlockedCourseIds;
+  final int initialIndex;
+  final String initialReferralCode;
+  final String initialProductId;
 
   const NavbarScreen({
     super.key,
     this.planTier = PlanTier.starter,
     this.unlockedCourseIds = const {},
+    this.initialIndex = 0,
+    this.initialReferralCode = '',
+    this.initialProductId = '',
   });
 
   @override
@@ -20,11 +26,16 @@ class NavbarScreen extends StatefulWidget {
 }
 
 class _NavbarScreenState extends State<NavbarScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex.clamp(0, 3);
+  }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       extendBody: true,
       backgroundColor: const Color(0xFFF2F5FF),
@@ -52,7 +63,10 @@ class _NavbarScreenState extends State<NavbarScreen> {
                       unlockedCourseIds: widget.unlockedCourseIds,
                     ),
                     const HistoryTab(),
-                    const EbookTabScreen(),
+                    EbookTabScreen(
+                      initialReferralCode: widget.initialReferralCode,
+                      initialProductId: widget.initialProductId,
+                    ),
                     ProfileScreen(planTier: widget.planTier),
                   ],
                 ),
@@ -82,10 +96,7 @@ class _BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const _BottomNavBar({
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const _BottomNavBar({required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

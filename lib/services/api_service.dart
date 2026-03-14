@@ -435,15 +435,7 @@ class ApiService {
         T? parsedData;
         if (responseData != null && fromJson != null) {
           try {
-            // Ensure responseData is a Map before passing to fromJson
-            if (responseData is Map<String, dynamic>) {
-              parsedData = fromJson(responseData);
-            } else {
-              debugPrint(
-                '⚠️ Response data is not a Map: ${responseData.runtimeType}',
-              );
-              parsedData = fromJson(responseData);
-            }
+            parsedData = fromJson(responseData);
           } catch (e, stackTrace) {
             debugPrint('❌ Error parsing data with fromJson:');
             debugPrint('   Error: $e');
@@ -494,7 +486,9 @@ class ApiService {
     required String email,
     required String password,
     required String confirmPassword,
+    String? referralCode,
   }) async {
+    final trimmedReferralCode = referralCode?.trim() ?? '';
     final installationId = await _storageService.getOrCreateInstallationId();
     final body = {
       'phone': phone,
@@ -503,6 +497,7 @@ class ApiService {
       'password': password,
       'confirmPassword': confirmPassword,
       'installationId': installationId,
+      if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
     };
 
     // Convert to JSON string to show exact format
