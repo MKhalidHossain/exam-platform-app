@@ -44,6 +44,8 @@ class ApiEndpoints {
   // Resource Store / eBook Endpoints
   static const String resources = '/resources';
   static const String resourceStore = '$resources/store';
+  static const String resourceUpgradeAddonOptions =
+      '$resources/upgrade-addon-options';
   static String resourcePurchasedContent(String productId) =>
       '$resources/products/$productId/content';
   static const String resourcePurchaseStripeCreate =
@@ -53,9 +55,13 @@ class ApiEndpoints {
 
   // Referral Endpoints
   static const String referrals = '/referrals';
+  static String referralPublicCode(String code) => '$referrals/public/$code';
   static const String referralProfile = '$referrals/me';
   static const String referralReferredUsers = '$referrals/referred-users';
   static const String referralLedger = '$referrals/ledger';
+  static const String referralConvertToCredit = '$referrals/convert-to-credit';
+  static const String referralCashPayoutRequest =
+      '$referrals/cash-payout-request';
 
   // Payment Endpoints (payments base is /payments)
   static const String payments = '/payments';

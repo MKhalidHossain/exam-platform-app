@@ -13,13 +13,30 @@ class EbookService {
     );
   }
 
+  Future<ApiResponse<List<EbookUpgradeAddOnOption>>> getUpgradeAddOnOptions() {
+    return _apiService.get<List<EbookUpgradeAddOnOption>>(
+      ApiEndpoints.resourceUpgradeAddonOptions,
+      fromJson: (json) {
+        if (json is List) {
+          return json
+              .map((item) => EbookUpgradeAddOnOption.fromJson(_asMap(item)))
+              .toList(growable: false);
+        }
+        return const <EbookUpgradeAddOnOption>[];
+      },
+    );
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> createStripePaymentIntent({
     required String productId,
+    String? referralCode,
   }) {
+    final trimmedReferralCode = referralCode?.trim() ?? '';
     return _apiService.post<Map<String, dynamic>>(
       ApiEndpoints.resourcePurchaseStripeCreate,
       body: {
         'productId': productId,
+        if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
       },
       fromJson: (json) => _asMap(json),
     );
@@ -30,9 +47,7 @@ class EbookService {
   }) {
     return _apiService.post<Map<String, dynamic>>(
       ApiEndpoints.resourcePurchaseStripeConfirm,
-      body: {
-        'paymentIntentId': paymentIntentId,
-      },
+      body: {'paymentIntentId': paymentIntentId},
       fromJson: (json) => _asMap(json),
     );
   }

@@ -21,6 +21,29 @@ class ReferralProfile {
   }
 }
 
+class ReferralPublicCode {
+  final String referralCode;
+  final String referralLink;
+  final String referrerName;
+  final double discountPercent;
+
+  const ReferralPublicCode({
+    required this.referralCode,
+    required this.referralLink,
+    required this.referrerName,
+    required this.discountPercent,
+  });
+
+  factory ReferralPublicCode.fromJson(Map<String, dynamic> json) {
+    return ReferralPublicCode(
+      referralCode: _stringValue(json['referralCode']),
+      referralLink: _stringValue(json['referralLink']),
+      referrerName: _stringValue(json['referrerName']),
+      discountPercent: _doubleValue(json['discountPercent']),
+    );
+  }
+}
+
 class ReferralEarnings {
   final int inspectorsReferred;
   final int successfulUpgrades;
@@ -72,17 +95,19 @@ class ReferralMeta {
     );
   }
 
-  static const empty = ReferralMeta(page: 1, limit: 10, total: 0, totalPages: 1);
+  static const empty = ReferralMeta(
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  );
 }
 
 class ReferralReferredUsersData {
   final List<ReferralReferredUser> users;
   final ReferralMeta meta;
 
-  const ReferralReferredUsersData({
-    required this.users,
-    required this.meta,
-  });
+  const ReferralReferredUsersData({required this.users, required this.meta});
 
   factory ReferralReferredUsersData.fromJson(Map<String, dynamic> json) {
     final rawUsers = json['users'];

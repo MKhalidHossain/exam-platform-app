@@ -9,7 +9,9 @@ import '../widgets/custom_text_field.dart';
 import '../widgets/primary_button.dart';
 
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
+  final String initialReferralCode;
+
+  const SignUpScreen({super.key, this.initialReferralCode = ''});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -22,10 +24,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  late final TextEditingController _referralCodeController;
   final AuthController _authController = Get.find<AuthController>();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _referralCodeController = TextEditingController(
+      text: widget.initialReferralCode,
+    );
+  }
 
   @override
   void dispose() {
@@ -34,6 +45,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _referralCodeController.dispose();
     super.dispose();
   }
 
@@ -56,12 +68,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
       email: _emailController.text.trim(),
       password: _passwordController.text,
       confirmPassword: _confirmPasswordController.text,
+      referralCode: _referralCodeController.text.trim(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: GradientBackground(
         child: SafeArea(
@@ -73,7 +85,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 20),
-                  
+
                   // Back Button
                   Align(
                     alignment: Alignment.centerLeft,
@@ -93,7 +105,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       constraints: const BoxConstraints(),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 20),
 
                   // Logo and App Name
@@ -150,6 +162,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       }
                       return null;
                     },
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  CustomTextField(
+                    label: 'Referral Code',
+                    hint: 'Optional referral code',
+                    prefixIcon: Icons.sell_outlined,
+                    controller: _referralCodeController,
                   ),
 
                   const SizedBox(height: 24),
@@ -253,9 +274,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 ),
                                 TextSpan(
                                   text: ' *',
-                                  style: TextStyle(
-                                    color: AppColors.textLink,
-                                  ),
+                                  style: TextStyle(color: AppColors.textLink),
                                 ),
                               ],
                             ),

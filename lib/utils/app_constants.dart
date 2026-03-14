@@ -5,8 +5,9 @@ class AppConstants {
   static const String appName = 'EJ Flutter App';
   static const String appVersion = '1.0.0';
 
-  // API Constants 
-  static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
+  // API Constants
+  // static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
+    static const String baseUrl = 'http://localhost:5001/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   // null = no timeout (wait indefinitely).
   static const Duration? examGenerationTimeout = null;
@@ -26,6 +27,9 @@ class AppConstants {
   static const String userDataKey = 'user_data';
   static const String userRoleKey = 'user_role';
   static const String unlockedExamIdsKey = 'unlocked_exam_ids';
+  static const String pendingReferralCodeKey = 'pending_referral_code';
+  static const String pendingReferralProductIdKey =
+      'pending_referral_product_id';
 
   // Pagination
   static const int defaultPageSize = 20;

@@ -90,6 +90,11 @@ class StorageService {
     return prefs.getString(key);
   }
 
+  Future<void> remove(String key) async {
+    final prefs = await _prefs;
+    await prefs.remove(key);
+  }
+
   Future<void> saveStringList(String key, List<String> value) async {
     final prefs = await _prefs;
     await prefs.setStringList(key, value);
