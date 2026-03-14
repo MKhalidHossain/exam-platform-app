@@ -13,6 +13,13 @@ class ReferralService {
     );
   }
 
+  Future<ApiResponse<ReferralProgram>> getMyReferralProgram() {
+    return _apiService.get<ReferralProgram>(
+      ApiEndpoints.referralProgram,
+      fromJson: (json) => ReferralProgram.fromJson(_asMap(json)),
+    );
+  }
+
   Future<ApiResponse<ReferralReferredUsersData>> getMyReferredUsers({
     int page = 1,
     int limit = 20,
@@ -38,6 +45,24 @@ class ReferralService {
         'limit': limit.toString(),
       },
       fromJson: (json) => ReferralLedgerData.fromJson(_asMap(json)),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> convertToAppCredit({double? amount}) {
+    return _apiService.post<Map<String, dynamic>>(
+      ApiEndpoints.referralConvertToCredit,
+      body: amount != null ? {'amount': amount} : const <String, dynamic>{},
+      fromJson: (json) => _asMap(json),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> requestCashPayout({
+    double? amount,
+  }) {
+    return _apiService.post<Map<String, dynamic>>(
+      ApiEndpoints.referralCashPayoutRequest,
+      body: amount != null ? {'amount': amount} : const <String, dynamic>{},
+      fromJson: (json) => _asMap(json),
     );
   }
 }

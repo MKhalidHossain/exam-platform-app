@@ -54,8 +54,11 @@ class ApiEndpoints {
   // Referral Endpoints
   static const String referrals = '/referrals';
   static const String referralProfile = '$referrals/me';
+  static const String referralProgram = '$referrals/program';
   static const String referralReferredUsers = '$referrals/referred-users';
   static const String referralLedger = '$referrals/ledger';
+  static const String referralConvertToCredit = '$referrals/convert-to-credit';
+  static const String referralCashPayoutRequest = '$referrals/cash-payout-request';
 
   // Payment Endpoints (payments base is /payments)
   static const String payments = '/payments';

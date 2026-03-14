@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/error/error_handler.dart';
 import '../../models/referral_model.dart';
@@ -19,6 +20,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
   final ReferralService _referralService = ReferralService();
 
   bool _isLoading = true;
+  bool _isActionLoading = false;
   String? _error;
   ReferralProfile? _profile;
   ReferralReferredUsersData? _usersData;
@@ -147,6 +149,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
       return const SizedBox.shrink();
     }
 
+    final program = profile.program;
     final users = _usersData?.users ?? const <ReferralReferredUser>[];
     final ledger = _ledgerData;
 
@@ -156,7 +159,13 @@ class _ReferralScreenState extends State<ReferralScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          if (program != null) ...[
+            _buildProgramIntro(program),
+            const SizedBox(height: 12),
+          ],
           _buildReferralIdentity(profile),
+          const SizedBox(height: 10),
+          _buildReferralActions(profile),
           const SizedBox(height: 12),
           _buildSummarySection(profile),
           const SizedBox(height: 14),
@@ -183,7 +192,141 @@ class _ReferralScreenState extends State<ReferralScreen> {
     );
   }
 
+  Widget _buildProgramIntro(ReferralProgram program) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFCFDAF7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            program.headline,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E3A8A),
+            ),
+          ),
+          if (program.description.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              program.description,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF334155),
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _miniInfo(
+                'Referrer Reward',
+                '${program.referrerCommissionPercent}% commission',
+              ),
+              _miniInfo(
+                'New User Reward',
+                '${program.newUserDiscountPercent}% discount',
+              ),
+              _miniInfo(
+                'Pending Period',
+                '${program.pendingPeriodDays} days',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReferralActions(ReferralProfile profile) {
+    final fallbackCanConvert = profile.earnings.availableBalance > 0;
+    final fallbackCanPayout = profile.earnings.availableBalance >= 100;
+    final canConvert = profile.actions.canConvertToAppCredit || fallbackCanConvert;
+    final canPayout = profile.actions.canRequestCashPayout || fallbackCanPayout;
+    final minCash = profile.actions.minimumCashPayout > 0
+        ? profile.actions.minimumCashPayout
+        : 100;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'My Earnings Actions',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E3A8A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: (_isActionLoading || !canConvert)
+                  ? null
+                  : () => _convertAvailableToCredit(profile),
+              icon: _isActionLoading
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.account_balance_wallet_outlined),
+              label: const Text('Convert to App Credit'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D4F88),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: (_isActionLoading || !canPayout)
+                  ? null
+                  : () => _requestCashPayout(profile),
+              icon: const Icon(Icons.payments_outlined),
+              label: const Text('Request Cash Payout'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2D4F88),
+                side: const BorderSide(color: Color(0xFF2D4F88)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Minimum available balance for cash payout is ${_usd(minCash)}.',
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReferralIdentity(ReferralProfile profile) {
+    final channels = profile.program?.shareChannels ?? const <String>[];
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -220,45 +363,254 @@ class _ReferralScreenState extends State<ReferralScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _copyReferralLink(profile),
+              icon: const Icon(Icons.copy_outlined, size: 18),
+              label: const Text('Copy Referral Link'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D4F88),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: profile.referralLink));
-                  if (!mounted) return;
-                  ErrorHandler.showSnackBar(
-                    'Referral link copied.',
-                    isError: false,
-                    context: context,
-                  );
-                },
-                icon: const Icon(Icons.copy_outlined, size: 18),
-                label: const Text('Copy Link'),
+                onPressed: () => _shareByChannel('share', profile),
+                icon: const Icon(Icons.share_outlined, size: 18),
+                label: const Text('Share'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF2D4F88),
                   side: const BorderSide(color: Color(0xFF2D4F88)),
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Share.share(
-                    'Join with my referral link and get 10% discount: ${profile.referralLink}',
-                  );
-                },
-                icon: const Icon(Icons.share_outlined, size: 18),
-                label: const Text('Share Link'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2D4F88),
-                  foregroundColor: Colors.white,
-                ),
-              ),
+              if (channels.contains('whatsapp'))
+                _shareChannelButton('WhatsApp', () => _shareByChannel('whatsapp', profile)),
+              if (channels.contains('linkedin'))
+                _shareChannelButton('LinkedIn', () => _shareByChannel('linkedin', profile)),
+              if (channels.contains('sms'))
+                _shareChannelButton('Text Message', () => _shareByChannel('sms', profile)),
+              if (channels.contains('facebook'))
+                _shareChannelButton('Facebook', () => _shareByChannel('facebook', profile)),
+              if (channels.contains('instagram'))
+                _shareChannelButton('Instagram', () => _shareByChannel('instagram', profile)),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Widget _shareChannelButton(String label, VoidCallback onTap) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF2D4F88),
+        side: const BorderSide(color: Color(0xFFC8D7FA)),
+        visualDensity: VisualDensity.compact,
+      ),
+      child: Text(label),
+    );
+  }
+
+  Future<void> _copyReferralLink(ReferralProfile profile) async {
+    await Clipboard.setData(ClipboardData(text: profile.referralLink));
+    if (!mounted) return;
+    ErrorHandler.showSnackBar(
+      'Referral link copied.',
+      isError: false,
+      context: context,
+    );
+  }
+
+  String _buildShareMessage(ReferralProfile profile) {
+    final configured = profile.program?.shareMessage.trim() ?? '';
+    if (configured.isNotEmpty) return configured;
+
+    return [
+      'I have been using Inspectors Path to practice for API certification exams.',
+      '',
+      'If you are studying for API exams, this app is worth checking out.',
+      '',
+      'Use my referral code and get 10% off the Professional Plan.',
+      '',
+      'Referral Code: ${profile.referralCode}',
+      'Referral Link: ${profile.referralLink}',
+    ].join('\n');
+  }
+
+  Future<void> _shareByChannel(String channel, ReferralProfile profile) async {
+    final message = _buildShareMessage(profile);
+    final encodedMessage = Uri.encodeComponent(message);
+    final encodedLink = Uri.encodeComponent(profile.referralLink);
+
+    if (channel == 'whatsapp') {
+      final uri = Uri.parse('https://wa.me/?text=$encodedMessage');
+      final opened = await _tryOpenExternalUrl(uri);
+      if (!opened) await Share.share(message);
+      return;
+    }
+
+    if (channel == 'linkedin') {
+      final uri = Uri.parse(
+        'https://www.linkedin.com/sharing/share-offsite/?url=$encodedLink',
+      );
+      final opened = await _tryOpenExternalUrl(uri);
+      if (!opened) await Share.share(message);
+      return;
+    }
+
+    if (channel == 'sms') {
+      final uri = Uri.parse('sms:?body=$encodedMessage');
+      final opened = await _tryOpenExternalUrl(uri);
+      if (!opened) await Share.share(message);
+      return;
+    }
+
+    if (channel == 'facebook') {
+      final uri = Uri.parse(
+        'https://www.facebook.com/sharer/sharer.php?u=$encodedLink',
+      );
+      final opened = await _tryOpenExternalUrl(uri);
+      if (!opened) await Share.share(message);
+      return;
+    }
+
+    if (channel == 'instagram') {
+      await Share.share(message);
+      return;
+    }
+
+    await Share.share(message, subject: 'Inspectors Path referral');
+  }
+
+  Future<bool> _tryOpenExternalUrl(Uri uri) async {
+    try {
+      if (await canLaunchUrl(uri)) {
+        return launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _convertAvailableToCredit(ReferralProfile profile) async {
+    final available = profile.earnings.availableBalance;
+    if (available <= 0) {
+      ErrorHandler.showSnackBar(
+        'No available referral balance to convert.',
+        isError: true,
+        context: context,
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Convert to App Credit'),
+        content: Text(
+          'Convert your available balance (${_usd(available)}) to app credit?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Convert'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isActionLoading = true);
+    final res = await _referralService.convertToAppCredit();
+    if (!mounted) return;
+    setState(() => _isActionLoading = false);
+
+    if (!res.success) {
+      ErrorHandler.showFromResponse(
+        res,
+        context: context,
+        failureFallback: 'Failed to convert referral balance.',
+      );
+      return;
+    }
+
+    ErrorHandler.showSnackBar(
+      'Referral balance converted to app credit.',
+      isError: false,
+      context: context,
+    );
+    await _loadAll();
+  }
+
+  Future<void> _requestCashPayout(ReferralProfile profile) async {
+    final minBalance = profile.actions.minimumCashPayout > 0
+        ? profile.actions.minimumCashPayout
+        : 100;
+    final available = profile.earnings.availableBalance;
+    if (available < minBalance) {
+      ErrorHandler.showSnackBar(
+        'Minimum ${_usd(minBalance)} available balance is required for payout.',
+        isError: true,
+        context: context,
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Request Cash Payout'),
+        content: Text(
+          'Request cash payout for your available balance (${_usd(available)})?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isActionLoading = true);
+    final res = await _referralService.requestCashPayout();
+    if (!mounted) return;
+    setState(() => _isActionLoading = false);
+
+    if (!res.success) {
+      ErrorHandler.showFromResponse(
+        res,
+        context: context,
+        failureFallback: 'Failed to request cash payout.',
+      );
+      return;
+    }
+
+    ErrorHandler.showSnackBar(
+      'Cash payout request submitted.',
+      isError: false,
+      context: context,
+    );
+    await _loadAll();
   }
 
   Widget _buildSummarySection(ReferralProfile profile) {
