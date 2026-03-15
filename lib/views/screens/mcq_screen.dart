@@ -103,9 +103,7 @@ class _McqScreenState extends State<McqScreen> {
     if (endTime == null && widget.startTime != null) {
       endTime = widget.startTime!.add(duration);
     }
-    if (endTime == null) {
-      endTime = now.add(duration);
-    }
+    endTime ??= now.add(duration);
 
     if (endTime.isBefore(now)) {
       endTime = now.add(duration);
@@ -495,7 +493,7 @@ class _McqScreenState extends State<McqScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _questions.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
                       final int? selected = _selectedIndex[index];
                       final bool isAnswered = selected != null;

@@ -1117,7 +1117,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: widget.options.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final option = widget.options[index];
                 final isSelected = _selectedId == option.id;
@@ -1148,7 +1148,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                                 ? Image.network(
                                     option.coverImageUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => _imageFallback(),
+                                    errorBuilder: (_, _, _) => _imageFallback(),
                                   )
                                 : _imageFallback(),
                           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -112,8 +113,22 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
       if (referralRes.success && referralRes.data != null) {
         _referralProfile = referralRes.data;
+        _removeSelfReferralFromSharedContext(referralRes.data!);
       }
     });
+  }
+
+  void _removeSelfReferralFromSharedContext(ReferralProfile profile) {
+    final myReferralCode = profile.referralCode.trim().toUpperCase();
+    final sharedReferralCode = _sharedReferralCode.trim().toUpperCase();
+
+    if (myReferralCode.isEmpty || sharedReferralCode.isEmpty) {
+      return;
+    }
+
+    if (myReferralCode == sharedReferralCode) {
+      _sharedReferralCode = '';
+    }
   }
 
   bool _storeHasProducts(EbookStoreData store) {
@@ -287,10 +302,24 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     return 'ejflutter:///shared-ebook${params.isEmpty ? '' : '?$params'}';
   }
 
-  Future<void> _shareEbook(EbookProduct product) async {
+  String _buildSharedLandingLink(EbookProduct product) {
+    final referralCode = _referralProfile?.referralCode.trim() ?? '';
+    return Uri.parse(AppConstants.publicBaseUrl)
+        .replace(
+          path: AppConstants.sharedEbookPath,
+          queryParameters: {
+            'productId': product.id,
+            if (referralCode.isNotEmpty) 'ref': referralCode,
+          },
+        )
+        .toString();
+  }
+
+  String _buildShareMessage(EbookProduct product) {
     final previewUrl = product.previewUrl.trim();
     final referralCode = _referralProfile?.referralCode.trim() ?? '';
-    final referralLink = _referralProfile?.referralLink.trim() ?? '';
+    final landingLink = _buildSharedLandingLink(product);
+    final deepLink = _buildSharedDeepLink(product);
 
     final buffer = StringBuffer()
       ..writeln(product.title)
@@ -312,15 +341,206 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     }
 
     buffer.writeln();
-    buffer.writeln('Open in app: ${_buildSharedDeepLink(product)}');
+    buffer.writeln('Open in app: $deepLink');
+    buffer.writeln('Landing page: $landingLink');
 
-    if (referralLink.isNotEmpty) {
-      buffer.writeln('Referral link: $referralLink');
+    return buffer.toString().trim();
+  }
+
+  Future<void> _copySharedLink(EbookProduct product) async {
+    final landingLink = _buildSharedLandingLink(product);
+    await Clipboard.setData(ClipboardData(text: landingLink));
+    if (!mounted) return;
+    ErrorHandler.showSnackBar(
+      'Share link copied to clipboard.',
+      isError: false,
+      context: context,
+    );
+  }
+
+  Future<void> _shareViaWhatsApp(EbookProduct product) async {
+    final message = _buildShareMessage(product);
+    final uri = Uri.parse(
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
+    );
+    await _launchShareUri(uri);
+  }
+
+  Future<void> _shareViaFacebook(EbookProduct product) async {
+    final landingLink = _buildSharedLandingLink(product);
+    final uri = Uri.parse(
+      'https://www.facebook.com/sharer/sharer.php?u=${Uri.encodeComponent(landingLink)}',
+    );
+    await _launchShareUri(uri);
+  }
+
+  Future<void> _shareWithSystemSheet(EbookProduct product) async {
+    await Share.share(
+      _buildShareMessage(product),
+      subject: 'Check out ${product.title}',
+    );
+  }
+
+  Future<void> _launchShareUri(Uri uri) async {
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (launched || !mounted) return;
+    ErrorHandler.showSnackBar(
+      'Unable to open the selected sharing app.',
+      isError: true,
+      context: context,
+    );
+  }
+
+  Future<void> _showShareSheet(EbookProduct product) async {
+    if ((_referralProfile?.referralCode.trim() ?? '').isEmpty) {
+      ErrorHandler.showSnackBar(
+        'Your referral profile is still loading. Please try again.',
+        isError: true,
+        context: context,
+      );
+      return;
     }
 
-    await Share.share(
-      buffer.toString().trim(),
-      subject: 'Check out ${product.title}',
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFF8FAFF),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Share ${product.title}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Send a product-specific referral link. Buyers get 10% off and your commission is tracked on purchase.',
+                style: const TextStyle(color: Color(0xFF64748B), height: 1.45),
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _shareOption(
+                    label: 'Copy link',
+                    icon: Icons.link_rounded,
+                    background: const Color(0xFFE8F1FF),
+                    foreground: const Color(0xFF1D4ED8),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _copySharedLink(product);
+                    },
+                  ),
+                  _shareOption(
+                    label: 'WhatsApp',
+                    icon: Icons.chat_bubble_rounded,
+                    background: const Color(0xFFE8F8EF),
+                    foreground: const Color(0xFF15803D),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _shareViaWhatsApp(product);
+                    },
+                  ),
+                  _shareOption(
+                    label: 'Facebook',
+                    icon: Icons.facebook_rounded,
+                    background: const Color(0xFFE7F0FF),
+                    foreground: const Color(0xFF1D4ED8),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _shareViaFacebook(product);
+                    },
+                  ),
+                  _shareOption(
+                    label: 'More',
+                    icon: Icons.more_horiz_rounded,
+                    background: const Color(0xFFF1F5F9),
+                    foreground: const Color(0xFF334155),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _shareWithSystemSheet(product);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFDCE7F7)),
+                ),
+                child: Text(
+                  _buildSharedLandingLink(product),
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _shareOption({
+    required String label,
+    required IconData icon,
+    required Color background,
+    required Color foreground,
+    required Future<void> Function() onTap,
+  }) {
+    return SizedBox(
+      width: 104,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFDCE7F7)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: foreground),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1317,7 +1537,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
               _actionIcon(
                 tooltip: 'Share',
                 icon: Icons.share_outlined,
-                onTap: () => _shareEbook(product),
+                onTap: () => _showShareSheet(product),
               ),
               if (product.previewAvailable) ...[
                 const SizedBox(width: 8),

@@ -6,11 +6,15 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // API Constants
-  // static const String baseUrl = 'http://187.77.10.158:5001/api/v1';
-    static const String baseUrl = 'http://localhost:5001/api/v1';
+  // static const String apiOrigin = 'http://187.77.10.158:5001';
+  static const String apiOrigin = 'http://localhost:5001';
+  static const String baseUrl = '$apiOrigin/api/v1';
   static const Duration apiTimeout = Duration(seconds: 30);
   // null = no timeout (wait indefinitely).
   static const Duration? examGenerationTimeout = null;
+  static const String publicBaseUrl = apiOrigin;
+  static const String appLinkScheme = 'ejflutter';
+  static const String sharedEbookPath = '/shared-ebook';
 
   // Stripe (use env or build config in production)
   static const String stripePublishableKey =

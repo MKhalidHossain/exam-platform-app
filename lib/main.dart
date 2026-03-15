@@ -5,6 +5,7 @@ import 'utils/app_theme.dart';
 import 'utils/app_constants.dart';
 import 'routes/app_router.dart';
 import 'services/installation_id_service.dart';
+import 'services/app_link_service.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/splash_controller.dart';
 import 'controllers/theme_controller.dart';
@@ -30,8 +31,28 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final AppLinkService _appLinkService;
+
+  @override
+  void initState() {
+    super.initState();
+    _appLinkService = AppLinkService(_router);
+    _appLinkService.start();
+  }
+
+  @override
+  void dispose() {
+    _appLinkService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

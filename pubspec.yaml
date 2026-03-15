@@ -62,6 +62,9 @@ dependencies:
   # Share content to social media / apps
   share_plus: ^10.1.4
 
+  # Deep links / app links
+  app_links: ^6.3.3
+
   # In-app PDF reader
   syncfusion_flutter_pdfviewer: ^27.2.5
   
