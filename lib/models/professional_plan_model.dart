@@ -12,6 +12,7 @@ class ProfessionalPlanModel {
   final PlanInterval interval;
   final String? description;
   final List<String> features;
+  final List<PlanAddOnOption> prePurchaseAddOnOptions;
   final PlanSubscription? subscription;
 
   const ProfessionalPlanModel({
@@ -23,6 +24,7 @@ class ProfessionalPlanModel {
     required this.interval,
     this.description,
     this.features = const [],
+    this.prePurchaseAddOnOptions = const [],
     this.subscription,
   });
 
@@ -58,6 +60,13 @@ class ProfessionalPlanModel {
       };
     }
 
+    final rawAddOnOptions = json['prePurchaseAddOnOptions'];
+    final addOnOptions = rawAddOnOptions is List
+        ? rawAddOnOptions
+              .map((e) => PlanAddOnOption.fromJson(_asMap(e)))
+              .toList(growable: false)
+        : const <PlanAddOnOption>[];
+
     return ProfessionalPlanModel(
       id: planJson['id'] as String? ?? 'professional',
       name: planJson['name'] as String? ?? 'Professional Plan',
@@ -77,6 +86,7 @@ class ProfessionalPlanModel {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      prePurchaseAddOnOptions: addOnOptions,
       subscription: subscriptionJson != null
           ? PlanSubscription.fromJson(subscriptionJson)
           : null,
@@ -100,6 +110,62 @@ class ProfessionalPlanModel {
     }
     return '${currency.toUpperCase()} ${amount.toStringAsFixed(2)}';
   }
+}
+
+class PlanAddOnOption {
+  final String id;
+  final String code;
+  final String title;
+  final num basePrice;
+  final num regularPrice;
+  final num upgradeDiscountPrice;
+  final String currency;
+  final bool isBundle;
+  final String coverImageUrl;
+
+  const PlanAddOnOption({
+    required this.id,
+    required this.code,
+    required this.title,
+    required this.basePrice,
+    required this.regularPrice,
+    required this.upgradeDiscountPrice,
+    required this.currency,
+    required this.isBundle,
+    required this.coverImageUrl,
+  });
+
+  factory PlanAddOnOption.fromJson(Map<String, dynamic> json) {
+    return PlanAddOnOption(
+      id: (json['id'] ?? '').toString(),
+      code: (json['code'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      basePrice: ProfessionalPlanModel._parseNum(json['basePrice']) ?? 0,
+      regularPrice: ProfessionalPlanModel._parseNum(json['regularPrice']) ?? 0,
+      upgradeDiscountPrice:
+          ProfessionalPlanModel._parseNum(json['upgradeDiscountPrice']) ?? 0,
+      currency: (json['currency'] ?? 'USD').toString(),
+      isBundle: json['isBundle'] == true,
+      coverImageUrl: (json['coverImageUrl'] ?? '').toString(),
+    );
+  }
+
+  String formatMoney(num amount) {
+    if (currency.toUpperCase() == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
+    return '${currency.toUpperCase()} ${amount.toStringAsFixed(2)}';
+  }
+
+  String get basePriceFormatted => formatMoney(basePrice);
+  String get regularPriceFormatted => formatMoney(regularPrice);
+  String get upgradeDiscountPriceFormatted => formatMoney(upgradeDiscountPrice);
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return const <String, dynamic>{};
 }
 
 class PlanInterval {

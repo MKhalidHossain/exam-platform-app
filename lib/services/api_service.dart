@@ -720,10 +720,18 @@ class ApiService {
   /// Create Stripe Payment Intent for professional plan + first exam unlock.
   /// POST {{base_url}}/api/v1/payments/plan/professional/stripe/create
   Future<ApiResponse<Map<String, dynamic>>>
-  createProfessionalPlanStripePaymentIntent(String examId) async {
+  createProfessionalPlanStripePaymentIntent(
+    String examId, {
+    String? addonProductId,
+  }) async {
+    final body = <String, dynamic>{'examId': examId};
+    if (addonProductId != null && addonProductId.trim().isNotEmpty) {
+      body['addonProductId'] = addonProductId.trim();
+    }
+
     return post<Map<String, dynamic>>(
       ApiEndpoints.professionalPlanStripeCreate(),
-      body: {'examId': examId},
+      body: body,
       fromJson: (json) => json is Map<String, dynamic>
           ? json
           : Map<String, dynamic>.from(json as Map),

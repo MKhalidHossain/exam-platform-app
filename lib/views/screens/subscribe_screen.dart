@@ -264,17 +264,42 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     if (isProfessionalActive) {
       await _payForExamUnlockWithStripe(result.exam);
     } else {
-      await _payForProfessionalUpgradeWithStripe(result.exam);
+      final selection = await _showUpgradeAddOnSelectionDialog();
+      if (!mounted || selection == null) return;
+      await _payForProfessionalUpgradeWithStripe(
+        result.exam,
+        addonProductId: selection.addonProductId,
+      );
     }
   }
 
-  Future<void> _payForProfessionalUpgradeWithStripe(ExamModel exam) async {
+  Future<_UpgradeCheckoutSelection?> _showUpgradeAddOnSelectionDialog() async {
+    final options = professionalPlan?.prePurchaseAddOnOptions ?? const [];
+    if (options.isEmpty) {
+      return const _UpgradeCheckoutSelection(addonProductId: null);
+    }
+
+    return showModalBottomSheet<_UpgradeCheckoutSelection>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _UpgradeAddOnSheet(options: options),
+    );
+  }
+
+  Future<void> _payForProfessionalUpgradeWithStripe(
+    ExamModel exam, {
+    String? addonProductId,
+  }) async {
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
     try {
-      final createRes = await _apiService
-          .createProfessionalPlanStripePaymentIntent(examId);
+      final createRes = await _apiService.createProfessionalPlanStripePaymentIntent(
+        examId,
+        addonProductId: addonProductId,
+      );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
@@ -1019,6 +1044,239 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _UpgradeCheckoutSelection {
+  final String? addonProductId;
+
+  const _UpgradeCheckoutSelection({required this.addonProductId});
+}
+
+class _UpgradeAddOnSheet extends StatefulWidget {
+  final List<PlanAddOnOption> options;
+
+  const _UpgradeAddOnSheet({
+    required this.options,
+  });
+
+  @override
+  State<_UpgradeAddOnSheet> createState() => _UpgradeAddOnSheetState();
+}
+
+class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
+  String? _selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF6F8FF),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Upgrade Your Knowledge Before Checkout',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+                color: const Color(0xFF374151),
+              ),
+            ],
+          ),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Add one professional guide to your upgrade.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF4B5563),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: widget.options.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final option = widget.options[index];
+                final isSelected = _selectedId == option.id;
+
+                return InkWell(
+                  onTap: () => setState(() => _selectedId = option.id),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF2D4F88)
+                            : const Color(0xFFDDE4F8),
+                        width: isSelected ? 1.6 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 58,
+                            height: 78,
+                            child: option.coverImageUrl.trim().isNotEmpty
+                                ? Image.network(
+                                    option.coverImageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => _imageFallback(),
+                                  )
+                                : _imageFallback(),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                option.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              if (option.isBundle) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'Bundle',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFB91C1C),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 7),
+                              Row(
+                                children: [
+                                  Text(
+                                    option.upgradeDiscountPriceFormatted,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Text(
+                                    option.regularPriceFormatted,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF9CA3AF),
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Radio<String>(
+                          value: option.id,
+                          groupValue: _selectedId,
+                          activeColor: const Color(0xFF2D4F88),
+                          onChanged: (value) => setState(() => _selectedId = value),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(
+                const _UpgradeCheckoutSelection(addonProductId: null),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2D4F88),
+                side: const BorderSide(color: Color(0xFF2D4F88)),
+              ),
+              child: const Text(
+                'Continue Without Add-On',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _selectedId == null
+                  ? null
+                  : () => Navigator.of(context).pop(
+                        _UpgradeCheckoutSelection(addonProductId: _selectedId),
+                      ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D4F88),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text(
+                'Proceed to Payment',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imageFallback() {
+    return Container(
+      color: const Color(0xFFE5E7EB),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.menu_book_rounded,
+        color: Color(0xFF6B7280),
       ),
     );
   }

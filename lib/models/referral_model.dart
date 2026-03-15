@@ -3,12 +3,16 @@ class ReferralProfile {
   final String referralLink;
   final double appCreditBalance;
   final ReferralEarnings earnings;
+  final ReferralActions actions;
+  final ReferralProgram? program;
 
   const ReferralProfile({
     required this.referralCode,
     required this.referralLink,
     required this.appCreditBalance,
     required this.earnings,
+    this.actions = const ReferralActions(),
+    this.program,
   });
 
   factory ReferralProfile.fromJson(Map<String, dynamic> json) {
@@ -17,6 +21,75 @@ class ReferralProfile {
       referralLink: _stringValue(json['referralLink']),
       appCreditBalance: _doubleValue(json['appCreditBalance']),
       earnings: ReferralEarnings.fromJson(_mapValue(json['earnings'])),
+      actions: ReferralActions.fromJson(_mapValue(json['actions'])),
+      program: json['program'] != null
+          ? ReferralProgram.fromJson(_mapValue(json['program']))
+          : null,
+    );
+  }
+}
+
+class ReferralProgram {
+  final String headline;
+  final String description;
+  final int referrerCommissionPercent;
+  final int newUserDiscountPercent;
+  final int pendingPeriodDays;
+  final double minimumCashPayout;
+  final List<String> shareChannels;
+  final String shareMessage;
+
+  const ReferralProgram({
+    required this.headline,
+    required this.description,
+    required this.referrerCommissionPercent,
+    required this.newUserDiscountPercent,
+    required this.pendingPeriodDays,
+    required this.minimumCashPayout,
+    required this.shareChannels,
+    required this.shareMessage,
+  });
+
+  factory ReferralProgram.fromJson(Map<String, dynamic> json) {
+    final rawChannels = json['shareChannels'];
+    final channels = rawChannels is List
+        ? rawChannels.map((e) => _stringValue(e)).toList(growable: false)
+        : const <String>[];
+
+    return ReferralProgram(
+      headline: _stringValue(
+        json['headline'],
+        fallback: 'Help Your Friend Pass Their Certification',
+      ),
+      description: _stringValue(json['description']),
+      referrerCommissionPercent:
+          _intValue(json['referrerCommissionPercent'], fallback: 10),
+      newUserDiscountPercent:
+          _intValue(json['newUserDiscountPercent'], fallback: 10),
+      pendingPeriodDays: _intValue(json['pendingPeriodDays'], fallback: 7),
+      minimumCashPayout: _doubleValue(json['minimumCashPayout'], fallback: 100),
+      shareChannels: channels,
+      shareMessage: _stringValue(json['shareMessage']),
+    );
+  }
+}
+
+class ReferralActions {
+  final bool canConvertToAppCredit;
+  final bool canRequestCashPayout;
+  final double minimumCashPayout;
+
+  const ReferralActions({
+    this.canConvertToAppCredit = false,
+    this.canRequestCashPayout = false,
+    this.minimumCashPayout = 100,
+  });
+
+  factory ReferralActions.fromJson(Map<String, dynamic> json) {
+    return ReferralActions(
+      canConvertToAppCredit: _boolValue(json['canConvertToAppCredit']),
+      canRequestCashPayout: _boolValue(json['canRequestCashPayout']),
+      minimumCashPayout: _doubleValue(json['minimumCashPayout'], fallback: 100),
     );
   }
 }
@@ -189,12 +262,16 @@ class ReferralLedgerData {
   final List<ReferralRewardEntry> rewards;
   final List<ReferralPayoutEntry> payouts;
   final List<ReferralConversionEntry> conversions;
+  final ReferralEarnings? earnings;
+  final ReferralActions actions;
   final ReferralMeta meta;
 
   const ReferralLedgerData({
     required this.rewards,
     required this.payouts,
     required this.conversions,
+    this.earnings,
+    this.actions = const ReferralActions(),
     required this.meta,
   });
 
@@ -224,6 +301,10 @@ class ReferralLedgerData {
       rewards: rewards,
       payouts: payouts,
       conversions: conversions,
+      earnings: json['earnings'] != null
+          ? ReferralEarnings.fromJson(_mapValue(json['earnings']))
+          : null,
+      actions: ReferralActions.fromJson(_mapValue(json['actions'])),
       meta: ReferralMeta.fromJson(_mapValue(json['meta'])),
     );
   }
@@ -346,6 +427,20 @@ double _doubleValue(dynamic value, {double fallback = 0}) {
   if (value is double) return value;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString()) ?? fallback;
+}
+
+bool _boolValue(dynamic value, {bool fallback = false}) {
+  if (value == null) return fallback;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final normalized = value.toString().trim().toLowerCase();
+  if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+    return true;
+  }
+  if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+    return false;
+  }
+  return fallback;
 }
 
 DateTime? _dateValue(dynamic value) {
