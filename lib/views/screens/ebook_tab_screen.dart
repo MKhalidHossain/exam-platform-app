@@ -1046,17 +1046,74 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: SizedBox(
-                  width: 76,
-                  height: 104,
+              Container(
+                width: 84,
+                height: 118,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1A10213F),
+                      blurRadius: 14,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
                   child: product.coverImageUrl.trim().isNotEmpty
-                      ? Image.network(
-                          product.coverImageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, error, stackTrace) =>
-                              _coverFallback(product),
+                      ? Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Container(color: const Color(0xFFE2E8F0)),
+                            Image.network(
+                              product.coverImageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, error, stackTrace) =>
+                                  _coverFallback(product),
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      color: const Color(0xFFE2E8F0),
+                                      alignment: Alignment.center,
+                                      child: const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            ),
+                            Positioned(
+                              left: 8,
+                              right: 8,
+                              bottom: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xAA10213F),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  product.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.15,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         )
                       : _coverFallback(product),
                 ),

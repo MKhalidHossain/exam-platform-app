@@ -60,6 +60,7 @@ class EbookUpgradeAddOnOption {
   final double upgradeDiscountPrice;
   final String currency;
   final bool isBundle;
+  final String coverImageUrl;
 
   const EbookUpgradeAddOnOption({
     required this.id,
@@ -70,6 +71,7 @@ class EbookUpgradeAddOnOption {
     required this.upgradeDiscountPrice,
     required this.currency,
     required this.isBundle,
+    required this.coverImageUrl,
   });
 
   factory EbookUpgradeAddOnOption.fromJson(Map<String, dynamic> json) {
@@ -82,6 +84,7 @@ class EbookUpgradeAddOnOption {
       upgradeDiscountPrice: _asDouble(json['upgradeDiscountPrice']),
       currency: _asString(json['currency'], fallback: 'USD'),
       isBundle: _asBool(json['isBundle']),
+      coverImageUrl: _asString(json['coverImageUrl']),
     );
   }
 
@@ -103,7 +106,7 @@ class EbookUpgradeAddOnOption {
           ? 'Bundle add-on from the upgrade catalog'
           : 'Guide from the upgrade catalog',
       fullDescription: '',
-      coverImageUrl: '',
+      coverImageUrl: coverImageUrl,
       contentUrl: '',
       previewAvailable: false,
       previewTitle: '',
