@@ -34,6 +34,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
   bool _isLoading = true;
   String? _error;
+  EbookStoreData? _store;
   EbookProduct? _product;
   String _productId = '';
   String _sharedReferralCode = '';
@@ -108,6 +109,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
     setState(() {
       _isLoading = false;
+      _store = store;
       _product = product;
       if (referralRes.success && referralRes.data != null) {
         _removeSelfReferral(referralRes.data!);
@@ -136,6 +138,33 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       }
     }
     return null;
+  }
+
+  List<EbookProduct> _findProductsByCodes(
+    EbookStoreData? store,
+    List<String> codes, {
+    String excludeProductId = '',
+  }) {
+    if (store == null || codes.isEmpty) return const <EbookProduct>[];
+
+    final normalizedCodes = codes
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+    final products = <EbookProduct>[];
+
+    for (final category in store.categories) {
+      for (final product in category.products) {
+        final normalizedCode = product.code.trim().toLowerCase();
+        if (product.id == excludeProductId) continue;
+        if (normalizedCodes.contains(normalizedCode)) {
+          products.add(product);
+        }
+      }
+    }
+
+    products.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return products;
   }
 
   void _removeSelfReferral(ReferralProfile profile) {
@@ -562,6 +591,14 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         ? product.pricing.current * 0.10
         : 0.0;
     final discountedPrice = product.pricing.current - referralDiscount;
+    final bundledProducts = product.isBundle
+        ? _findProductsByCodes(
+            _store,
+            product.bundleIncludes,
+            excludeProductId: product.id,
+          )
+        : const <EbookProduct>[];
+    final bundleIsResolved = bundledProducts.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -819,12 +856,14 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           ),
           const SizedBox(height: 18),
           _sectionCard(
-            title: 'About This Ebook',
+            title: product.isBundle ? 'About This Bundle' : 'About This Ebook',
             child: Text(
               product.fullDescription.trim().isNotEmpty
                   ? product.fullDescription
                   : product.shortDescription.trim().isNotEmpty
                   ? product.shortDescription
+                  : product.isBundle
+                  ? 'This bundle groups multiple study guides into one purchase so every included ebook unlocks together.'
                   : 'This ebook gives you practical study material, structured explanations, and a focused buying flow for certification preparation.',
               style: const TextStyle(color: Color(0xFF475569), height: 1.65),
             ),
@@ -832,19 +871,63 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           if (product.bundleIncludes.isNotEmpty) ...[
             const SizedBox(height: 16),
             _sectionCard(
-              title: 'What You Get',
-              child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: product.bundleIncludes
-                    .map(
-                      (item) => _detailPill(
-                        item.replaceAll('_', ' ').toUpperCase(),
-                        const Color(0xFFF1F5F9),
-                        const Color(0xFF334155),
-                      ),
+              title: product.isBundle ? 'Bundle Ebooks' : 'What You Get',
+              child: bundleIsResolved
+                  ? Column(
+                      children: bundledProducts
+                          .map(
+                            (bundleProduct) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildBundleProductCard(bundleProduct),
+                            ),
+                          )
+                          .toList(growable: false),
                     )
-                    .toList(growable: false),
+                  : Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: product.bundleIncludes
+                          .map(
+                            (item) => _detailPill(
+                              item.replaceAll('_', ' ').toUpperCase(),
+                              const Color(0xFFF1F5F9),
+                              const Color(0xFF334155),
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+            ),
+          ],
+          if (product.isBundle && bundleIsResolved) ...[
+            const SizedBox(height: 16),
+            _sectionCard(
+              title: 'Bundle Access',
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isUnlocked
+                      ? const Color(0xFFE7F8EF)
+                      : const Color(0xFFF8FAFF),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isUnlocked
+                        ? const Color(0xFFBBF7D0)
+                        : const Color(0xFFDCE7F7),
+                  ),
+                ),
+                child: Text(
+                  isUnlocked
+                      ? 'This bundle purchase unlocks all ${bundledProducts.length} included ebook${bundledProducts.length == 1 ? '' : 's'}. Open each one from the list above.'
+                      : 'Buying this bundle will unlock all ${bundledProducts.length} included ebook${bundledProducts.length == 1 ? '' : 's'} together.',
+                  style: TextStyle(
+                    color: isUnlocked
+                        ? const Color(0xFF166534)
+                        : const Color(0xFF334155),
+                    height: 1.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ],
@@ -890,6 +973,10 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _isBuying
                             ? null
+                            : product.isBundle
+                            ? isUnlocked
+                                  ? null
+                                  : () => _startCheckout(product)
                             : isUnlocked
                             ? () => _openReader(product)
                             : () => _startCheckout(product),
@@ -903,16 +990,30 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                 ),
                               )
                             : Icon(
-                                isUnlocked
+                                product.isBundle
+                                    ? isUnlocked
+                                          ? Icons.collections_bookmark_rounded
+                                          : Icons.shopping_bag_outlined
+                                    : isUnlocked
                                     ? Icons.menu_book_rounded
                                     : Icons.shopping_bag_outlined,
                                 size: 18,
                               ),
-                        label: Text(isUnlocked ? 'Open eBook' : 'Purchase Now'),
+                        label: Text(
+                          product.isBundle
+                              ? isUnlocked
+                                    ? 'Bundle Unlocked'
+                                    : 'Purchase Bundle'
+                              : isUnlocked
+                              ? 'Open eBook'
+                              : 'Purchase Now',
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isUnlocked
                               ? const Color(0xFF1F8A5B)
                               : const Color(0xFF10213F),
+                          disabledBackgroundColor: const Color(0xFF1F8A5B),
+                          disabledForegroundColor: Colors.white,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -930,7 +1031,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    if (product.previewAvailable) ...[
+                    if (!product.isBundle && product.previewAvailable) ...[
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _openPreview(product),
@@ -950,6 +1051,191 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                   ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBundleProductCard(EbookProduct product) {
+    final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              width: 72,
+              height: 92,
+              child: product.coverImageUrl.trim().isNotEmpty
+                  ? Image.network(
+                      product.coverImageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _bundleCoverFallback(product),
+                    )
+                  : _bundleCoverFallback(product),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _detailPill(
+                      isUnlocked ? 'Unlocked' : 'Included in bundle',
+                      isUnlocked
+                          ? const Color(0xFFE7F8EF)
+                          : const Color(0xFFE0EDFF),
+                      isUnlocked
+                          ? const Color(0xFF166534)
+                          : const Color(0xFF20437C),
+                    ),
+                    if (product.previewAvailable)
+                      _detailPill(
+                        'Preview',
+                        const Color(0xFFF1F5F9),
+                        const Color(0xFF475569),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  product.title,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    height: 1.15,
+                  ),
+                ),
+                if (product.shortDescription.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    product.shortDescription,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: isUnlocked
+                            ? () => _openReader(product)
+                            : null,
+                        icon: const Icon(Icons.menu_book_rounded, size: 17),
+                        label: const Text('Open'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1F8A5B),
+                          disabledBackgroundColor: const Color(0xFFE2E8F0),
+                          disabledForegroundColor: const Color(0xFF64748B),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (product.previewAvailable) ...[
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: () => _openPreview(product),
+                        icon: const Icon(Icons.visibility_outlined, size: 17),
+                        label: const Text('Preview'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF2D4F88),
+                          side: const BorderSide(color: Color(0xFFD8E3F5)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bundleCoverFallback(EbookProduct product) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF183153), Color(0xFF355B97)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0x26FFFFFF),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              product.code.trim().isEmpty
+                  ? 'EBOOK'
+                  : product.code.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            product.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              height: 1.15,
             ),
           ),
         ],

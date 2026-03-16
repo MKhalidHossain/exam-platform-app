@@ -491,62 +491,63 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     final coverProduct = category.products.first;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _openCategoryDetails(category),
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(22),
           child: Ink(
-            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: const Color(0xFFDCE7F7)),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x142D4F88),
-                  blurRadius: 16,
-                  offset: Offset(0, 8),
+                  blurRadius: 14,
+                  offset: Offset(0, 7),
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 92,
-                  height: 122,
+                  margin: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x1A10213F),
-                        blurRadius: 14,
+                        blurRadius: 12,
                         offset: Offset(0, 8),
                       ),
                     ],
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(22),
-                    child: coverProduct.coverImageUrl.trim().isNotEmpty
-                        ? Image.network(
-                            coverProduct.coverImageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                _coverFallback(coverProduct),
-                          )
-                        : _coverFallback(coverProduct),
+                    borderRadius: BorderRadius.circular(18),
+                    child: AspectRatio(
+                      aspectRatio: 1.7,
+                      child: coverProduct.coverImageUrl.trim().isNotEmpty
+                          ? Image.network(
+                              coverProduct.coverImageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  _coverFallback(coverProduct),
+                            )
+                          : _coverFallback(coverProduct),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           _tag(
                             category.shortCode.trim().isEmpty
@@ -569,25 +570,26 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                           color: Color(0xFF0F172A),
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
-                          height: 1.15,
+                          height: 1.2,
                         ),
                       ),
                       if (category.description.trim().isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
                           category.description,
-                          maxLines: 3,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Color(0xFF475569),
+                            fontSize: 13,
                             height: 1.45,
                           ),
                         ),
                       ],
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 5,
+                        runSpacing: 5,
                         children: previewProducts
                             .map(
                               (product) => _tag(
@@ -598,23 +600,36 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                             )
                             .toList(growable: false),
                       ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 18,
-                            color: Color(0xFF2D4F88),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'View category ebooks',
-                            style: const TextStyle(
-                              color: Color(0xFF2D4F88),
-                              fontWeight: FontWeight.w800,
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FBFF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFDCE7F7)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'View category ebooks',
+                                style: TextStyle(
+                                  color: Color(0xFF2D4F88),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 18,
+                              color: Color(0xFF2D4F88),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -651,7 +666,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
   Widget _tag(String text, Color background, Color foreground) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(999),
@@ -660,7 +675,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         text,
         style: TextStyle(
           color: foreground,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -669,7 +684,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
   Widget _coverFallback(EbookProduct product) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF16304F), Color(0xFF4A79C8)],
@@ -682,7 +697,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0x26FFFFFF),
               borderRadius: BorderRadius.circular(999),
@@ -695,7 +710,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 8,
+                fontSize: 9,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -707,16 +722,33 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 10,
+              fontSize: 15,
               fontWeight: FontWeight.w800,
-              height: 1.15,
+              height: 1.2,
             ),
           ),
-          const SizedBox(height: 6),
-          const Icon(
-            Icons.auto_stories_rounded,
-            color: Color(0xFFDCE7F8),
-            size: 18,
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(
+                Icons.auto_stories_rounded,
+                color: Color(0xFFDCE7F8),
+                size: 16,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Professional ebook collection',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFFDCE7F8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
