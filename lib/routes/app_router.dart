@@ -28,6 +28,8 @@ import '../views/screens/history_detail_view.dart';
 import '../views/screens/referral_screen.dart';
 import '../views/screens/shared_ebook_redirect_screen.dart';
 import '../views/screens/shared_referral_redirect_screen.dart';
+import '../models/ebook_store_model.dart';
+import '../views/screens/ebook_category_screen.dart';
 import '../views/screens/ebook_detail_screen.dart';
 
 GoRouter getRouter() {
@@ -127,6 +129,20 @@ GoRouter getRouter() {
           referralCode: state.uri.queryParameters['ref'] ?? '',
           productId: state.uri.queryParameters['productId'] ?? '',
         ),
+      ),
+      GoRoute(
+        path: '/ebook-category',
+        name: 'ebook-category',
+        builder: (context, state) {
+          final extra = state.extra;
+          final category = extra is Map ? extra['category'] : null;
+          return EbookCategoryScreen(
+            categoryId: state.uri.queryParameters['categoryId'] ?? '',
+            initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+            initialProductId: state.uri.queryParameters['productId'] ?? '',
+            initialCategory: category is EbookCategory ? category : null,
+          );
+        },
       ),
       GoRoute(
         path: '/ebook-detail',

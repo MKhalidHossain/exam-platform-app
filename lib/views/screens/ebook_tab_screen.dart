@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
@@ -12,7 +10,6 @@ import '../../services/storage_service.dart';
 import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/gradient_background.dart';
-import 'ebook_pdf_viewer_screen.dart';
 
 class EbookTabScreen extends StatefulWidget {
   final String initialReferralCode;
@@ -37,10 +34,9 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
   String? _error;
   EbookStoreData? _store;
   ReferralProfile? _referralProfile;
-  String? _activeProductId;
-  String? _selectedCategoryId;
   String _sharedReferralCode = '';
   String _sharedProductId = '';
+  String? _selectedCategoryId;
 
   @override
   void initState() {
@@ -139,540 +135,18 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     return false;
   }
 
-  Future<void> _buyWithStripe(
-    EbookProduct product, {
-    String referralCode = '',
-    String referralProductId = '',
-  }) async {
-    if (_activeProductId != null) return;
-
-    setState(() => _activeProductId = product.id);
-
-    try {
-      final createRes = await _ebookService.createStripePaymentIntent(
-        productId: product.id,
-        referralCode: referralCode,
-        referralProductId: referralProductId,
-      );
-
-      if (!mounted) return;
-
-      if (!createRes.success || createRes.data == null) {
-        setState(() => _activeProductId = null);
-        ErrorHandler.showFromResponse(
-          createRes,
-          context: context,
-          failureFallback: 'Unable to start payment.',
-        );
-        return;
-      }
-
-      final data = createRes.data!;
-      if (data['unlocked'] == true) {
-        setState(() => _activeProductId = null);
-        await _loadData();
-        await _openReader(product);
-        return;
-      }
-
-      final clientSecret = data['clientSecret']?.toString() ?? '';
-      final paymentIntentId = data['paymentIntentId']?.toString() ?? '';
-
-      if (clientSecret.isEmpty || paymentIntentId.isEmpty) {
-        setState(() => _activeProductId = null);
-        ErrorHandler.showSnackBar(
-          'Invalid payment response from server.',
-          isError: true,
-          context: context,
-        );
-        return;
-      }
-
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: 'EJ eBook Store',
-          returnURL: 'flutterstripe://redirect',
-        ),
-      );
-
-      if (!mounted) return;
-      await Stripe.instance.presentPaymentSheet();
-
-      if (!mounted) return;
-
-      final confirmRes = await _ebookService.confirmStripePayment(
-        paymentIntentId: paymentIntentId,
-      );
-
-      if (!mounted) return;
-      setState(() => _activeProductId = null);
-
-      if (!confirmRes.success) {
-        ErrorHandler.showFromResponse(
-          confirmRes,
-          context: context,
-          failureFallback: 'Payment confirmation failed.',
-        );
-        return;
-      }
-
-      if (referralCode.trim().isNotEmpty) {
-        _sharedReferralCode = referralCode.trim();
-      }
-      _sharedProductId = product.id;
-
-      ErrorHandler.showSnackBar(
-        'Purchase completed. eBook unlocked.',
-        isError: false,
-        context: context,
-      );
-
-      await _loadData();
-      await _openReader(product);
-    } on StripeException catch (e) {
-      if (!mounted) return;
-      setState(() => _activeProductId = null);
-      ErrorHandler.showSnackBar(
-        e.error.message ?? 'Payment cancelled or failed.',
-        isError: true,
-        context: context,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _activeProductId = null);
-      ErrorHandler.showFromException(
-        e,
-        context: context,
-        fallback: 'Payment failed. Please try again.',
-      );
-    }
-  }
-
-  Future<void> _startCheckout(EbookProduct product) async {
-    final decision = await _showCheckoutSheet(product);
-    if (!mounted || decision == null) return;
-    await _buyWithStripe(
-      product,
-      referralCode: decision.referralCode,
-      referralProductId: decision.referralProductId,
-    );
-  }
-
-  Future<void> _openReader(EbookProduct product) async {
-    var contentUrl = product.contentUrl;
-
-    if (contentUrl.trim().isEmpty) {
-      final contentRes = await _ebookService.getPurchasedContent(
-        productId: product.id,
-      );
-      if (!mounted) return;
-      if (!contentRes.success || contentRes.data == null) {
-        ErrorHandler.showFromResponse(
-          contentRes,
-          context: context,
-          failureFallback: 'You need to purchase this eBook first.',
-        );
-        return;
-      }
-      contentUrl = contentRes.data!.contentUrl;
-    }
-
-    if (contentUrl.trim().isEmpty) {
-      ErrorHandler.showSnackBar(
-        'PDF URL is not available for this eBook.',
-        isError: true,
-        context: context,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            EbookPdfViewerScreen(title: product.title, pdfUrl: contentUrl),
-      ),
-    );
-  }
-
-  String _scopedReferralCodeForProduct(String productId) {
-    final sharedProductId = _sharedProductId.trim();
-    final sharedReferralCode = _sharedReferralCode.trim();
-    if (sharedProductId.isEmpty || sharedReferralCode.isEmpty) {
-      return '';
-    }
-    return sharedProductId == productId ? sharedReferralCode : '';
-  }
-
-  void _openProductDetails(EbookProduct product) {
-    final scopedReferralCode = _scopedReferralCodeForProduct(product.id);
+  void _openCategoryDetails(EbookCategory category) {
     context.push(
       Uri(
-        path: '/ebook-detail',
+        path: '/ebook-category',
         queryParameters: {
-          'productId': product.id,
-          if (scopedReferralCode.isNotEmpty) 'ref': scopedReferralCode,
+          'categoryId': category.id,
+          if (_sharedReferralCode.trim().isNotEmpty) 'ref': _sharedReferralCode,
+          if (_sharedProductId.trim().isNotEmpty) 'productId': _sharedProductId,
         },
       ).toString(),
+      extra: {'category': category},
     );
-  }
-
-  Future<void> _openPreview(EbookProduct product) async {
-    final url = product.previewUrl.trim();
-    if (url.isNotEmpty) {
-      final uri = Uri.tryParse(url);
-      if (uri == null) {
-        ErrorHandler.showSnackBar(
-          'Invalid preview URL.',
-          isError: true,
-          context: context,
-        );
-        return;
-      }
-
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    if (product.previewContent.trim().isEmpty) {
-      ErrorHandler.showSnackBar(
-        'Preview is not available.',
-        isError: true,
-        context: context,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFF8FAFF),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.previewTitle.trim().isNotEmpty
-                      ? product.previewTitle
-                      : 'Preview',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF10213F),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  product.previewContent,
-                  style: const TextStyle(height: 1.5, color: Color(0xFF334155)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<_CheckoutDecision?> _showCheckoutSheet(EbookProduct product) async {
-    final initialCode = _scopedReferralCodeForProduct(product.id);
-    final hasReferralOffer = initialCode.isNotEmpty;
-
-    return showModalBottomSheet<_CheckoutDecision>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: const Color(0xFFF8FAFF),
-      builder: (context) {
-        final referralController = TextEditingController(text: initialCode);
-        ReferralPublicCode? referralPreview;
-        bool isValidating = false;
-        String? referralError;
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final enteredCode = referralController.text.trim();
-            final hasValidReferral =
-                hasReferralOffer &&
-                referralPreview != null &&
-                referralPreview!.referralCode.toUpperCase() ==
-                    enteredCode.toUpperCase();
-            final referralDiscount = hasValidReferral
-                ? product.pricing.current *
-                      (referralPreview!.discountPercent / 100)
-                : 0.0;
-            final payableAmount = product.pricing.current - referralDiscount;
-
-            Future<void> validateReferral() async {
-              final code = referralController.text.trim();
-              if (code.isEmpty || !hasReferralOffer) {
-                setModalState(() {
-                  referralPreview = null;
-                  referralError = null;
-                });
-                return;
-              }
-
-              setModalState(() {
-                isValidating = true;
-                referralError = null;
-              });
-
-              final response = await _referralService.getPublicReferralCode(
-                code,
-              );
-              if (!mounted) return;
-
-              setModalState(() {
-                isValidating = false;
-                if (response.success && response.data != null) {
-                  referralPreview = response.data;
-                  referralError = null;
-                } else {
-                  referralPreview = null;
-                  referralError = ErrorHandler.getMessageFromResponse(
-                    response,
-                    failureFallback: 'Referral code is not valid.',
-                  );
-                }
-              });
-            }
-
-            Future<void> continueCheckout() async {
-              final code = referralController.text.trim();
-              if (hasReferralOffer && code.isNotEmpty && !hasValidReferral) {
-                await validateReferral();
-                if (referralPreview == null) {
-                  return;
-                }
-              }
-
-              if (!context.mounted) return;
-              Navigator.of(context).pop(
-                _CheckoutDecision(
-                  referralCode: hasReferralOffer ? code : '',
-                  referralProductId: hasReferralOffer ? product.id : '',
-                ),
-              );
-            }
-
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                24 + MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Complete Purchase',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      product.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF183153), Color(0xFF2D4F88)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Price summary',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _summaryRow(
-                            'Store price',
-                            _currencyText(
-                              product.pricing.current,
-                              product.pricing.currency,
-                            ),
-                            valueColor: Colors.white,
-                          ),
-                          if (referralDiscount > 0) ...[
-                            const SizedBox(height: 8),
-                            _summaryRow(
-                              'Referral discount',
-                              '-${_currencyText(referralDiscount, product.pricing.currency)}',
-                              valueColor: const Color(0xFFB8F1D9),
-                            ),
-                          ],
-                          const Divider(color: Color(0x33FFFFFF), height: 22),
-                          _summaryRow(
-                            'Pay now',
-                            _currencyText(
-                              payableAmount,
-                              product.pricing.currency,
-                            ),
-                            valueColor: Colors.white,
-                            isEmphasis: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (hasReferralOffer) ...[
-                      const SizedBox(height: 18),
-                      const Text(
-                        'Referral code',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: referralController,
-                        readOnly: true,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          hintText: 'Shared ebook referral',
-                          filled: true,
-                          fillColor: Colors.white,
-                          suffixIcon: isValidating
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                )
-                              : TextButton(
-                                  onPressed: validateReferral,
-                                  child: const Text('Apply'),
-                                ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD8E3F5),
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD8E3F5),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (hasReferralOffer && hasValidReferral) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE7F8EF),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFB9E5C7)),
-                        ),
-                        child: Text(
-                          'Referral applied from ${referralPreview!.referrerName}. '
-                          'You save ${referralPreview!.discountPercent.toStringAsFixed(0)}%.',
-                          style: const TextStyle(
-                            color: Color(0xFF166534),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (hasReferralOffer && referralError != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        referralError!,
-                        style: const TextStyle(
-                          color: Color(0xFFB91C1C),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: continueCheckout,
-                        icon: const Icon(Icons.lock_outline_rounded),
-                        label: const Text('Continue to Stripe'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2D4F88),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  List<_EbookListItem> _flattenProducts(EbookStoreData store) {
-    final categoryIdFilter = _selectedCategoryId;
-    final List<_EbookListItem> items = [];
-
-    for (final category in store.categories) {
-      if (categoryIdFilter != null && category.id != categoryIdFilter) {
-        continue;
-      }
-
-      for (final product in category.products) {
-        items.add(_EbookListItem(category: category, product: product));
-      }
-    }
-
-    items.sort((a, b) {
-      final aShared = a.product.id == _sharedProductId ? 0 : 1;
-      final bShared = b.product.id == _sharedProductId ? 0 : 1;
-      if (aShared != bShared) {
-        return aShared.compareTo(bShared);
-      }
-
-      final byCategory = a.category.sortOrder.compareTo(b.category.sortOrder);
-      if (byCategory != 0) return byCategory;
-      return a.product.sortOrder.compareTo(b.product.sortOrder);
-    });
-
-    return items;
   }
 
   @override
@@ -782,7 +256,14 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
       return const SizedBox.shrink();
     }
 
-    final products = _flattenProducts(store);
+    final allCategories =
+        store.categories.where((item) => item.products.isNotEmpty).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final categories = _selectedCategoryId == null
+        ? allCategories
+        : allCategories
+              .where((item) => item.id == _selectedCategoryId)
+              .toList(growable: false);
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -796,10 +277,10 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           if (_sharedReferralCode.isNotEmpty) const SizedBox(height: 18),
           _buildCategorySelector(store),
           const SizedBox(height: 18),
-          if (products.isEmpty)
+          if (categories.isEmpty)
             _emptyState()
           else
-            ...products.map(_buildProductCard),
+            ...categories.map(_buildCategoryCard),
         ],
       ),
     );
@@ -948,9 +429,9 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
   }
 
   Widget _buildCategorySelector(EbookStoreData store) {
-    final categories = store.categories
-        .where((item) => item.products.isNotEmpty)
-        .toList();
+    final categories =
+        store.categories.where((item) => item.products.isNotEmpty).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     if (categories.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -972,19 +453,29 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _categoryChip(
-                label: 'All',
-                selected: _selectedCategoryId == null,
-                onTap: () => setState(() => _selectedCategoryId = null),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _categoryChip(
+                  label: 'All',
+                  selected: _selectedCategoryId == null,
+                  onTap: () {
+                    setState(() {
+                      _selectedCategoryId = null;
+                    });
+                  },
+                ),
               ),
               ...categories.map(
                 (category) => Padding(
-                  padding: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.only(right: 8),
                   child: _categoryChip(
                     label: category.title,
                     selected: _selectedCategoryId == category.id,
-                    onTap: () =>
-                        setState(() => _selectedCategoryId = category.id),
+                    onTap: () {
+                      setState(() {
+                        _selectedCategoryId = category.id;
+                      });
+                    },
                   ),
                 ),
               ),
@@ -992,6 +483,147 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCategoryCard(EbookCategory category) {
+    final previewProducts = category.products.take(3).toList(growable: false);
+    final coverProduct = category.products.first;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openCategoryDetails(category),
+          borderRadius: BorderRadius.circular(26),
+          child: Ink(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: const Color(0xFFDCE7F7)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x142D4F88),
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 92,
+                  height: 122,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1A10213F),
+                        blurRadius: 14,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: coverProduct.coverImageUrl.trim().isNotEmpty
+                        ? Image.network(
+                            coverProduct.coverImageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                _coverFallback(coverProduct),
+                          )
+                        : _coverFallback(coverProduct),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _tag(
+                            category.shortCode.trim().isEmpty
+                                ? 'CATEGORY'
+                                : category.shortCode,
+                            const Color(0xFFE0EDFF),
+                            const Color(0xFF20437C),
+                          ),
+                          _tag(
+                            '${category.products.length} eBooks',
+                            const Color(0xFFE7F8EF),
+                            const Color(0xFF166534),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        category.title,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          height: 1.15,
+                        ),
+                      ),
+                      if (category.description.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          category.description,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF475569),
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: previewProducts
+                            .map(
+                              (product) => _tag(
+                                product.title,
+                                const Color(0xFFF1F5F9),
+                                const Color(0xFF475569),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                            color: Color(0xFF2D4F88),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'View category ebooks',
+                            style: const TextStyle(
+                              color: Color(0xFF2D4F88),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1014,361 +646,6 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         color: selected ? const Color(0xFF2D4F88) : const Color(0xFFD8E3F5),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    );
-  }
-
-  Widget _buildProductCard(_EbookListItem item) {
-    final product = item.product;
-    final category = item.category;
-    final isBusy = _activeProductId == product.id;
-    final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
-    final isSharedProduct = product.id == _sharedProductId;
-    final scopedReferralCode = _scopedReferralCodeForProduct(product.id);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _openProductDetails(product),
-          borderRadius: BorderRadius.circular(26),
-          child: Ink(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(
-                color: isSharedProduct
-                    ? const Color(0xFFF6D87A)
-                    : const Color(0xFFDCE7F7),
-                width: isSharedProduct ? 1.4 : 1,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x142D4F88),
-                  blurRadius: 16,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 84,
-                      height: 118,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x1A10213F),
-                            blurRadius: 14,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: product.coverImageUrl.trim().isNotEmpty
-                            ? Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  Container(color: const Color(0xFFE2E8F0)),
-                                  Image.network(
-                                    product.coverImageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, error, stackTrace) =>
-                                        _coverFallback(product),
-                                    loadingBuilder:
-                                        (context, child, loadingProgress) {
-                                          if (loadingProgress == null) {
-                                            return child;
-                                          }
-                                          return Container(
-                                            color: const Color(0xFFE2E8F0),
-                                            alignment: Alignment.center,
-                                            child: const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                  ),
-                                  Positioned(
-                                    left: 8,
-                                    right: 8,
-                                    bottom: 8,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xAA10213F),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        product.title,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          height: 1.15,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : _coverFallback(product),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _tag(
-                                category.title,
-                                const Color(0xFFE0EDFF),
-                                const Color(0xFF20437C),
-                              ),
-                              if (product.isBundle)
-                                _tag(
-                                  'Bundle',
-                                  const Color(0xFFFFEDD5),
-                                  const Color(0xFFB45309),
-                                ),
-                              if (isUnlocked)
-                                _tag(
-                                  'Unlocked',
-                                  const Color(0xFFE7F8EF),
-                                  const Color(0xFF166534),
-                                ),
-                              if (isSharedProduct)
-                                _tag(
-                                  'Shared Pick',
-                                  const Color(0xFFFFF7D6),
-                                  const Color(0xFF8A5A00),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            product.title,
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              height: 1.15,
-                            ),
-                          ),
-                          if (product.shortDescription.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              product.shortDescription,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF475569),
-                                height: 1.45,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (product.bundleIncludes.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: product.bundleIncludes
-                        .map(
-                          (item) => _tag(
-                            item.replaceAll('_', ' ').toUpperCase(),
-                            const Color(0xFFF1F5F9),
-                            const Color(0xFF475569),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFF),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Store price',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                _currencyText(
-                                  product.pricing.current,
-                                  product.pricing.currency,
-                                ),
-                                style: const TextStyle(
-                                  color: Color(0xFF10213F),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              if (product.pricing.original >
-                                  product.pricing.current)
-                                Text(
-                                  _currencyText(
-                                    product.pricing.original,
-                                    product.pricing.currency,
-                                  ),
-                                  style: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    decoration: TextDecoration.lineThrough,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (scopedReferralCode.isNotEmpty &&
-                          isSharedProduct &&
-                          !isUnlocked)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE7F8EF),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: const Text(
-                            '10% referral ready',
-                            style: TextStyle(
-                              color: Color(0xFF166534),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: isBusy
-                            ? null
-                            : isUnlocked
-                            ? () => _openReader(product)
-                            : () => _startCheckout(product),
-                        icon: isBusy
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                isUnlocked
-                                    ? Icons.menu_book_rounded
-                                    : Icons.shopping_bag_outlined,
-                                size: 18,
-                              ),
-                        label: Text(isUnlocked ? 'Open eBook' : 'Stripe Buy'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isUnlocked
-                              ? const Color(0xFF1F8A5B)
-                              : const Color(0xFF10213F),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (product.previewAvailable) ...[
-                      const SizedBox(width: 8),
-                      _actionIcon(
-                        tooltip: 'Preview',
-                        icon: Icons.visibility_outlined,
-                        onTap: () => _openPreview(product),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _actionIcon({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5FF),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Icon(icon, color: const Color(0xFF2D4F88), size: 20),
-        ),
-      ),
     );
   }
 
@@ -1470,58 +747,4 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
       ),
     );
   }
-
-  Widget _summaryRow(
-    String label,
-    String value, {
-    Color valueColor = const Color(0xFF10213F),
-    bool isEmphasis = false,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isEmphasis ? Colors.white70 : const Color(0xFFD6E4FF),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor,
-            fontSize: isEmphasis ? 18 : 14,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _currencyText(double amount, String currency) {
-    final symbol = currency.toUpperCase() == 'USD'
-        ? r'$'
-        : '${currency.toUpperCase()} ';
-    final hasFraction = amount % 1 != 0;
-    return '$symbol${amount.toStringAsFixed(hasFraction ? 2 : 0)}';
-  }
-}
-
-class _EbookListItem {
-  final EbookCategory category;
-  final EbookProduct product;
-
-  const _EbookListItem({required this.category, required this.product});
-}
-
-class _CheckoutDecision {
-  final String referralCode;
-  final String referralProductId;
-
-  const _CheckoutDecision({
-    required this.referralCode,
-    required this.referralProductId,
-  });
 }
