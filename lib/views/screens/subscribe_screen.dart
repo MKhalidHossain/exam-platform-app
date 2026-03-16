@@ -8,8 +8,12 @@ import '../../core/error/error_handler.dart';
 import '../../models/exam_model.dart';
 import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
+import '../../models/referral_model.dart';
 import '../../services/api_service.dart';
 import '../../services/exam_service.dart';
+import '../../services/referral_service.dart';
+import '../../services/storage_service.dart';
+import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/unlock_exam_dialog.dart';
@@ -58,6 +62,58 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         );
       }
     });
+  }
+
+  num? _parseCheckoutAmount(dynamic value) {
+    if (value is num) return value;
+    if (value == null) return null;
+    return num.tryParse(value.toString());
+  }
+
+  bool _didServerMissSelectedAddon({
+    required Map<String, dynamic> paymentData,
+    required String? addonProductId,
+    required String? addonProductCode,
+    required num baseAmount,
+  }) {
+    final hasAddonSelection =
+        (addonProductId?.trim().isNotEmpty ?? false) ||
+        (addonProductCode?.trim().isNotEmpty ?? false);
+    if (!hasAddonSelection) return false;
+
+    final breakdownRaw = paymentData['breakdown'];
+    final breakdown = breakdownRaw is Map<String, dynamic>
+        ? breakdownRaw
+        : (breakdownRaw is Map
+              ? Map<String, dynamic>.from(breakdownRaw)
+              : const <String, dynamic>{});
+
+    final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
+    final totalAmount =
+        _parseCheckoutAmount(breakdown['totalAmount']) ??
+        _parseCheckoutAmount(paymentData['amount']) ??
+        0;
+
+    return (addonFinalPrice ?? 0) <= 0 || totalAmount <= baseAmount;
+  }
+
+  Future<ReferralPublicCode?> _loadPendingExamReferralOffer() async {
+    final storageService = StorageService();
+    final referralCode = await storageService.getString(
+      AppConstants.pendingReferralCodeKey,
+    );
+    final trimmedReferralCode = referralCode?.trim() ?? '';
+    if (trimmedReferralCode.isEmpty) return null;
+
+    final response = await ReferralService().getPublicReferralCode(
+      trimmedReferralCode,
+    );
+    if (response.success && response.data != null) {
+      return response.data;
+    }
+
+    await storageService.remove(AppConstants.pendingReferralCodeKey);
+    return null;
   }
 
   @override
@@ -262,21 +318,40 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     }
 
     if (isProfessionalActive) {
-      await _payForExamUnlockWithStripe(result.exam);
+      final selection = await _showUpgradeAddOnSelectionDialog(
+        showReferralDiscount: true,
+      );
+      if (!mounted || selection == null) return;
+      await _payForExamUnlockWithStripe(
+        result.exam,
+        addonProductId: selection.addonProductId,
+        addonProductCode: selection.addonProductCode,
+      );
     } else {
-      final selection = await _showUpgradeAddOnSelectionDialog();
+      final selection = await _showUpgradeAddOnSelectionDialog(
+        showReferralDiscount: false,
+      );
       if (!mounted || selection == null) return;
       await _payForProfessionalUpgradeWithStripe(
         result.exam,
         addonProductId: selection.addonProductId,
+        addonProductCode: selection.addonProductCode,
       );
     }
   }
 
-  Future<_UpgradeCheckoutSelection?> _showUpgradeAddOnSelectionDialog() async {
+  Future<_UpgradeCheckoutSelection?> _showUpgradeAddOnSelectionDialog({
+    required bool showReferralDiscount,
+  }) async {
     final options = professionalPlan?.prePurchaseAddOnOptions ?? const [];
+    final referralOffer = showReferralDiscount
+        ? await _loadPendingExamReferralOffer()
+        : null;
     if (options.isEmpty) {
-      return const _UpgradeCheckoutSelection(addonProductId: null);
+      return const _UpgradeCheckoutSelection(
+        addonProductId: null,
+        addonProductCode: null,
+      );
     }
 
     return showModalBottomSheet<_UpgradeCheckoutSelection>(
@@ -284,22 +359,30 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _UpgradeAddOnSheet(options: options),
+      builder: (_) => _UpgradeAddOnSheet(
+        options: options,
+        examPrice: professionalPlan?.unlockExamPrice ?? 0,
+        currency: professionalPlan?.currency ?? 'USD',
+        referralOffer: referralOffer,
+      ),
     );
   }
 
   Future<void> _payForProfessionalUpgradeWithStripe(
     ExamModel exam, {
     String? addonProductId,
+    String? addonProductCode,
   }) async {
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
     try {
-      final createRes = await _apiService.createProfessionalPlanStripePaymentIntent(
-        examId,
-        addonProductId: addonProductId,
-      );
+      final createRes = await _apiService
+          .createProfessionalPlanStripePaymentIntent(
+            examId,
+            addonProductId: addonProductId,
+            addonProductCode: addonProductCode,
+          );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
@@ -328,6 +411,21 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final int amountPaid = amountFromApi is num
           ? amountFromApi.round()
           : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
+      final professionalBaseAmount = professionalPlan?.price ?? 180;
+      if (_didServerMissSelectedAddon(
+        paymentData: createRes.data!,
+        addonProductId: addonProductId,
+        addonProductCode: addonProductCode,
+        baseAmount: professionalBaseAmount,
+      )) {
+        setState(() => _isPaymentLoading = false);
+        ErrorHandler.showSnackBar(
+          'The payment server returned plan-only pricing. Deploy the updated backend, then try again.',
+          isError: true,
+          context: context,
+        );
+        return;
+      }
 
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
@@ -348,6 +446,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
+        await StorageService().remove(AppConstants.pendingReferralCodeKey);
         await _userController.applyProfessionalUpgrade(examId: examId);
         await _userController.refreshProfile();
         await _loadProfessionalPlan();
@@ -389,12 +488,20 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     }
   }
 
-  Future<void> _payForExamUnlockWithStripe(ExamModel exam) async {
+  Future<void> _payForExamUnlockWithStripe(
+    ExamModel exam, {
+    String? addonProductId,
+    String? addonProductCode,
+  }) async {
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
     try {
-      final createRes = await _apiService.createExamStripePaymentIntent(examId);
+      final createRes = await _apiService.createExamStripePaymentIntent(
+        examId,
+        addonProductId: addonProductId,
+        addonProductCode: addonProductCode,
+      );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
@@ -447,6 +554,20 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final int amountPaid = amountFromApi is num
           ? amountFromApi.round()
           : int.tryParse(amountFromApi?.toString() ?? '') ?? fallbackAmount;
+      if (_didServerMissSelectedAddon(
+        paymentData: createRes.data!,
+        addonProductId: addonProductId,
+        addonProductCode: addonProductCode,
+        baseAmount: professionalPlan?.unlockExamPrice ?? 150,
+      )) {
+        setState(() => _isPaymentLoading = false);
+        ErrorHandler.showSnackBar(
+          'The payment server returned exam-only pricing. Deploy the updated backend, then try again.',
+          isError: true,
+          context: context,
+        );
+        return;
+      }
 
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
@@ -1051,15 +1172,25 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
 class _UpgradeCheckoutSelection {
   final String? addonProductId;
+  final String? addonProductCode;
 
-  const _UpgradeCheckoutSelection({required this.addonProductId});
+  const _UpgradeCheckoutSelection({
+    required this.addonProductId,
+    required this.addonProductCode,
+  });
 }
 
 class _UpgradeAddOnSheet extends StatefulWidget {
   final List<PlanAddOnOption> options;
+  final num examPrice;
+  final String currency;
+  final ReferralPublicCode? referralOffer;
 
   const _UpgradeAddOnSheet({
     required this.options,
+    required this.examPrice,
+    required this.currency,
+    required this.referralOffer,
   });
 
   @override
@@ -1067,10 +1198,32 @@ class _UpgradeAddOnSheet extends StatefulWidget {
 }
 
 class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
-  String? _selectedId;
+  String? _selectedValue;
+
+  PlanAddOnOption? get _selectedOption {
+    if (_selectedValue == null) return null;
+    for (final option in widget.options) {
+      if (option.selectionValue == _selectedValue) return option;
+    }
+    return null;
+  }
+
+  String _formatMoney(num amount) {
+    if (widget.currency.toUpperCase() == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
+    return '${widget.currency.toUpperCase()} ${amount.toStringAsFixed(2)}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final selectedOption = _selectedOption;
+    final referralDiscount = widget.referralOffer == null
+        ? 0
+        : widget.examPrice * (widget.referralOffer!.discountPercent / 100);
+    final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
+    final num totalPrice = widget.examPrice - referralDiscount + addonPrice;
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF6F8FF),
@@ -1084,7 +1237,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             children: [
               const Expanded(
                 child: Text(
-                  'Upgrade Your Knowledge Before Checkout',
+                  'Add an eBook Before Checkout',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -1102,13 +1255,82 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Add one professional guide to your upgrade.',
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF4B5563),
-              ),
+              'Choose one add-on guide, or continue without an ebook.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFDDE4F8)),
+            ),
+            child: Column(
+              children: [
+                _priceRow('Exam unlock', _formatMoney(widget.examPrice)),
+                if (referralDiscount > 0) ...[
+                  const SizedBox(height: 6),
+                  _priceRow(
+                    'Referral discount',
+                    '-${_formatMoney(referralDiscount)}',
+                  ),
+                ],
+                const SizedBox(height: 6),
+                _priceRow(
+                  'Selected eBook',
+                  selectedOption == null
+                      ? 'Not added'
+                      : _formatMoney(addonPrice),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1),
+                ),
+                _priceRow(
+                  'Total today',
+                  _formatMoney(totalPrice),
+                  isTotal: true,
+                ),
+              ],
+            ),
+          ),
+          if (widget.referralOffer != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF6D87A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Referral ready for your first exam',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF7C4A03),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your first paid exam unlock.',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           ConstrainedBox(
             constraints: BoxConstraints(
@@ -1120,10 +1342,11 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final option = widget.options[index];
-                final isSelected = _selectedId == option.id;
+                final optionValue = option.selectionValue;
+                final isSelected = _selectedValue == optionValue;
 
                 return InkWell(
-                  onTap: () => setState(() => _selectedId = option.id),
+                  onTap: () => setState(() => _selectedValue = optionValue),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -1215,10 +1438,11 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                           ),
                         ),
                         Radio<String>(
-                          value: option.id,
-                          groupValue: _selectedId,
+                          value: optionValue,
+                          groupValue: _selectedValue,
                           activeColor: const Color(0xFF2D4F88),
-                          onChanged: (value) => setState(() => _selectedId = value),
+                          onChanged: (value) =>
+                              setState(() => _selectedValue = value),
                         ),
                       ],
                     ),
@@ -1233,7 +1457,10 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             height: 50,
             child: OutlinedButton(
               onPressed: () => Navigator.of(context).pop(
-                const _UpgradeCheckoutSelection(addonProductId: null),
+                const _UpgradeCheckoutSelection(
+                  addonProductId: null,
+                  addonProductCode: null,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF2D4F88),
@@ -1250,18 +1477,25 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _selectedId == null
+              onPressed: _selectedOption == null
                   ? null
                   : () => Navigator.of(context).pop(
-                        _UpgradeCheckoutSelection(addonProductId: _selectedId),
+                      _UpgradeCheckoutSelection(
+                        addonProductId: _selectedOption!.id.trim().isEmpty
+                            ? null
+                            : _selectedOption!.id,
+                        addonProductCode: _selectedOption!.code.trim().isEmpty
+                            ? null
+                            : _selectedOption!.code,
                       ),
+                    ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2D4F88),
                 foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Proceed to Payment',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              child: Text(
+                'Proceed With Add-On • ${_formatMoney(totalPrice)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -1274,10 +1508,22 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
     return Container(
       color: const Color(0xFFE5E7EB),
       alignment: Alignment.center,
-      child: const Icon(
-        Icons.menu_book_rounded,
-        color: Color(0xFF6B7280),
-      ),
+      child: const Icon(Icons.menu_book_rounded, color: Color(0xFF6B7280)),
+    );
+  }
+
+  Widget _priceRow(String label, String value, {bool isTotal = false}) {
+    final textStyle = TextStyle(
+      fontSize: isTotal ? 15 : 13.5,
+      fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+      color: const Color(0xFF111827),
+    );
+
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: textStyle)),
+        Text(value, style: textStyle),
+      ],
     );
   }
 }

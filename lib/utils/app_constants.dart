@@ -15,6 +15,7 @@ class AppConstants {
   static const String publicBaseUrl = apiOrigin;
   static const String appLinkScheme = 'ejflutter';
   static const String sharedEbookPath = '/shared-ebook';
+  static const String sharedReferralPath = '/shared-referral';
 
   // Stripe (use env or build config in production)
   static const String stripePublishableKey =

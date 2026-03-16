@@ -137,7 +137,7 @@ class PlanAddOnOption {
 
   factory PlanAddOnOption.fromJson(Map<String, dynamic> json) {
     return PlanAddOnOption(
-      id: (json['id'] ?? '').toString(),
+      id: (json['id'] ?? json['_id'] ?? json['productId'] ?? '').toString(),
       code: (json['code'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       basePrice: ProfessionalPlanModel._parseNum(json['basePrice']) ?? 0,
@@ -160,6 +160,11 @@ class PlanAddOnOption {
   String get basePriceFormatted => formatMoney(basePrice);
   String get regularPriceFormatted => formatMoney(regularPrice);
   String get upgradeDiscountPriceFormatted => formatMoney(upgradeDiscountPrice);
+  String get selectionValue {
+    final normalizedId = id.trim();
+    if (normalizedId.isNotEmpty) return normalizedId;
+    return code.trim();
+  }
 }
 
 Map<String, dynamic> _asMap(dynamic value) {

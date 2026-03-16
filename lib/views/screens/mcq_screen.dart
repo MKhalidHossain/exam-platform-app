@@ -447,6 +447,8 @@ class _McqScreenState extends State<McqScreen> {
                           extra: {
                             'courseTitle': widget.courseTitle,
                             'examId': widget.examId,
+                            'questionCount': _questions.length,
+                            'selectedQuestionCount': _questions.length,
                           },
                         );
                       },

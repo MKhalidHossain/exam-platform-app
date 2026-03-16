@@ -30,13 +30,17 @@ class EbookService {
   Future<ApiResponse<Map<String, dynamic>>> createStripePaymentIntent({
     required String productId,
     String? referralCode,
+    String? referralProductId,
   }) {
     final trimmedReferralCode = referralCode?.trim() ?? '';
+    final trimmedReferralProductId = referralProductId?.trim() ?? '';
     return _apiService.post<Map<String, dynamic>>(
       ApiEndpoints.resourcePurchaseStripeCreate,
       body: {
         'productId': productId,
         if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
+        if (trimmedReferralProductId.isNotEmpty)
+          'referralProductId': trimmedReferralProductId,
       },
       fromJson: (json) => _asMap(json),
     );

@@ -31,8 +31,8 @@ class UserController extends GetxController {
     final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
     final nextPlan =
         (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
-            ? PlanTier.professional
-            : fromProfile;
+        ? PlanTier.professional
+        : fromProfile;
     if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
       planTier.value = previousPlan;
     } else {
@@ -44,7 +44,18 @@ class UserController extends GetxController {
 
   Future<void> _loadCached() async {
     try {
-      final cachedUser = await _storageService.getString(AppConstants.userDataKey);
+      final hasSession = await _storageService.hasValidSessionArtifacts();
+      if (!hasSession) {
+        await _storageService.remove(AppConstants.userDataKey);
+        await _storageService.remove(AppConstants.unlockedExamIdsKey);
+        user.value = null;
+        unlockedExamIds.value = <String>{};
+        return;
+      }
+
+      final cachedUser = await _storageService.getString(
+        AppConstants.userDataKey,
+      );
       if (cachedUser != null && cachedUser.isNotEmpty) {
         final decoded = jsonDecode(cachedUser);
         if (decoded is Map<String, dynamic>) {
@@ -52,8 +63,9 @@ class UserController extends GetxController {
         }
       }
 
-      final cachedUnlocked =
-          await _storageService.getStringList(AppConstants.unlockedExamIdsKey);
+      final cachedUnlocked = await _storageService.getStringList(
+        AppConstants.unlockedExamIdsKey,
+      );
       if (cachedUnlocked != null) {
         unlockedExamIds.value = cachedUnlocked.toSet();
       }
@@ -84,7 +96,10 @@ class UserController extends GetxController {
     if (response.success && response.data != null) {
       await applyProfile(response.data!);
     } else {
-      errorMessage.value = ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile');
+      errorMessage.value = ErrorHandler.getMessageFromResponse(
+        response,
+        failureFallback: 'Failed to load profile',
+      );
     }
 
     isLoading.value = false;

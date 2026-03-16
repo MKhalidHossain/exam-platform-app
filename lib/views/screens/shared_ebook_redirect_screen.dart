@@ -47,17 +47,15 @@ class _SharedEbookRedirectScreenState extends State<SharedEbookRedirectScreen> {
       );
     }
 
-    final token = await _storageService.getToken();
-    final isLoggedIn = await _storageService.isLoggedIn();
+    final hasSession = await _storageService.hasValidSessionArtifacts();
     if (!mounted) return;
 
-    final nextRoute = isLoggedIn && (token?.isNotEmpty ?? false)
+    final nextRoute = hasSession
         ? Uri(
-            path: '/home',
+            path: '/ebook-detail',
             queryParameters: {
-              'tab': 'ebook',
-              if (referralCode.isNotEmpty) 'ref': referralCode,
               if (productId.isNotEmpty) 'productId': productId,
+              if (referralCode.isNotEmpty) 'ref': referralCode,
             },
           ).toString()
         : Uri(

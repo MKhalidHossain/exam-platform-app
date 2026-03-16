@@ -79,6 +79,18 @@ class StorageService {
     return prefs.getBool(AppConstants.isLoggedInKey) ?? false;
   }
 
+  Future<bool> hasValidSessionArtifacts() async {
+    final token = await getToken();
+    final refreshToken = await getRefreshToken();
+    final isLoggedInFlag = await isLoggedIn();
+
+    return token != null &&
+        token.isNotEmpty &&
+        refreshToken != null &&
+        refreshToken.isNotEmpty &&
+        isLoggedInFlag;
+  }
+
   // Generic Methods
   Future<void> saveString(String key, String value) async {
     final prefs = await _prefs;

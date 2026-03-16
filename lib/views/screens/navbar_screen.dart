@@ -62,11 +62,11 @@ class _NavbarScreenState extends State<NavbarScreen> {
                       planTier: widget.planTier,
                       unlockedCourseIds: widget.unlockedCourseIds,
                     ),
-                    const HistoryTab(),
                     EbookTabScreen(
                       initialReferralCode: widget.initialReferralCode,
                       initialProductId: widget.initialProductId,
                     ),
+                    const HistoryTab(),
                     ProfileScreen(planTier: widget.planTier),
                   ],
                 ),
@@ -125,15 +125,15 @@ class _BottomNavBar extends StatelessWidget {
           _NavItem(
             index: 1,
             currentIndex: currentIndex,
-            icon: Icons.history,
-            label: 'History',
+            icon: Icons.menu_book_rounded,
+            label: 'Ebook',
             onTap: onTap,
           ),
           _NavItem(
             index: 2,
             currentIndex: currentIndex,
-            icon: Icons.menu_book_rounded,
-            label: 'Ebook',
+            icon: Icons.history,
+            label: 'History',
             onTap: onTap,
           ),
           _NavItem(

@@ -50,6 +50,16 @@ class AppLinkService {
     if (uri == null) return null;
 
     final normalizedPath = _normalizedPath(uri);
+    if (normalizedPath == AppConstants.sharedReferralPath) {
+      return Uri(
+        path: AppConstants.sharedReferralPath,
+        queryParameters: {
+          if ((uri.queryParameters['ref'] ?? '').trim().isNotEmpty)
+            'ref': uri.queryParameters['ref']!.trim(),
+        },
+      ).toString();
+    }
+
     if (normalizedPath == AppConstants.sharedEbookPath) {
       return Uri(
         path: AppConstants.sharedEbookPath,
@@ -67,7 +77,7 @@ class AppLinkService {
       final referralCode = segments[1].trim();
       if (referralCode.isEmpty) return null;
       return Uri(
-        path: AppConstants.sharedEbookPath,
+        path: AppConstants.sharedReferralPath,
         queryParameters: {'ref': referralCode},
       ).toString();
     }
@@ -77,11 +87,17 @@ class AppLinkService {
 
   String _normalizedPath(Uri uri) {
     final host = uri.host.trim();
+    if (host == 'shared-referral') {
+      return AppConstants.sharedReferralPath;
+    }
     if (host == 'shared-ebook') {
       return AppConstants.sharedEbookPath;
     }
 
     final path = uri.path.trim();
+    if (path == '/shared-referral' || path == 'shared-referral') {
+      return AppConstants.sharedReferralPath;
+    }
     if (path == '/shared-ebook' || path == 'shared-ebook') {
       return AppConstants.sharedEbookPath;
     }

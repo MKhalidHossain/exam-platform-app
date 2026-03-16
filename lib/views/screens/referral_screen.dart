@@ -170,6 +170,20 @@ class _ReferralScreenState extends State<ReferralScreen> {
     await _loadAll();
   }
 
+  Future<void> _shareReferralInvite(ReferralProfile profile) async {
+    final referralLink = profile.referralLink.trim();
+    if (referralLink.isNotEmpty) {
+      await Share.share(referralLink);
+      return;
+    }
+
+    if (!mounted) return;
+    ErrorHandler.showSnackBar(
+      'Referral link is not ready yet.',
+      context: context,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,20 +202,34 @@ class _ReferralScreenState extends State<ReferralScreen> {
                       color: const Color(0xFF10213F),
                     ),
                     const Expanded(
-                      child: Text(
-                        'Referral Center',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF10213F),
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
+                      child: Center(
+                        child: Text(
+                          'Referral Center',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF10213F),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),
-                    IconButton(
-                      onPressed: _loadAll,
-                      icon: const Icon(Icons.refresh_rounded),
-                      color: const Color(0xFF10213F),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: _profile == null
+                              ? null
+                              : () => _shareReferralInvite(_profile!),
+                          icon: const Icon(Icons.share_outlined),
+                          color: const Color(0xFF10213F),
+                        ),
+                        IconButton(
+                          onPressed: _loadAll,
+                          icon: const Icon(Icons.refresh_rounded),
+                          color: const Color(0xFF10213F),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -251,7 +279,6 @@ class _ReferralScreenState extends State<ReferralScreen> {
       return const SizedBox.shrink();
     }
 
-    final program = profile.program;
     final users = _usersData?.users ?? const <ReferralReferredUser>[];
     final ledger = _ledgerData;
 
@@ -469,11 +496,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           label: 'Share Link',
           icon: Icons.share_outlined,
           filled: true,
-          onTap: () {
-            Share.share(
-              'Join with my referral link ${profile.referralLink} and get 10% off your ebook purchase.',
-            );
-          },
+          onTap: () => _shareReferralInvite(profile),
         ),
         _actionButton(
           label: _isSubmitting ? 'Working...' : 'To Credit',

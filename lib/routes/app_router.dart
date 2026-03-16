@@ -27,6 +27,8 @@ import '../views/screens/exam_unlock_success_screen.dart';
 import '../views/screens/history_detail_view.dart';
 import '../views/screens/referral_screen.dart';
 import '../views/screens/shared_ebook_redirect_screen.dart';
+import '../views/screens/shared_referral_redirect_screen.dart';
+import '../views/screens/ebook_detail_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
@@ -98,8 +100,8 @@ GoRouter getRouter() {
         builder: (context, state) {
           final tab = state.uri.queryParameters['tab'] ?? '';
           final initialIndex = switch (tab) {
-            'history' => 1,
-            'ebook' => 2,
+            'ebook' => 1,
+            'history' => 2,
             'profile' => 3,
             _ => 0,
           };
@@ -112,11 +114,26 @@ GoRouter getRouter() {
         },
       ),
       GoRoute(
+        path: '/shared-referral',
+        name: 'shared-referral',
+        builder: (context, state) => SharedReferralRedirectScreen(
+          referralCode: state.uri.queryParameters['ref'] ?? '',
+        ),
+      ),
+      GoRoute(
         path: '/shared-ebook',
         name: 'shared-ebook',
         builder: (context, state) => SharedEbookRedirectScreen(
           referralCode: state.uri.queryParameters['ref'] ?? '',
           productId: state.uri.queryParameters['productId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/ebook-detail',
+        name: 'ebook-detail',
+        builder: (context, state) => EbookDetailScreen(
+          productId: state.uri.queryParameters['productId'] ?? '',
+          initialReferralCode: state.uri.queryParameters['ref'] ?? '',
         ),
       ),
       GoRoute(
@@ -195,6 +212,7 @@ GoRouter getRouter() {
           String title = 'API 570 - Piping Inspector';
           String? examId;
           int? questionCount;
+          int? selectedQuestionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
 
@@ -209,6 +227,7 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
+            selectedQuestionCount = parseInt(extra['selectedQuestionCount']);
             effectivitySheetContent = extra['effectivitySheetContent']
                 ?.toString();
             bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
@@ -218,6 +237,7 @@ GoRouter getRouter() {
             courseTitle: title,
             examId: examId,
             questionCount: questionCount,
+            selectedQuestionCount: selectedQuestionCount,
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
           );
