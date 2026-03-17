@@ -80,25 +80,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             children: [
               // Header with back button and skip
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Back button
-               if(_currentPage > 0)  IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () {
-                        if (_currentPage > 0) {
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        } else {
-                          context.pop();
-                        }
-                      },
-                      color: const Color(0xFF111827),
-                    ),
+                    if (_currentPage > 0)
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () {
+                          if (_currentPage > 0) {
+                            _pageController.previousPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          } else {
+                            context.pop();
+                          }
+                        },
+                        color: const Color(0xFF111827),
+                      ),
                     // Skip button
                     TextButton(
                       onPressed: _onSkip,
@@ -150,7 +154,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: ElevatedButton(
                           onPressed: () => context.go('/login'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:AppColors.primaryBlue,
+                            backgroundColor: AppColors.primaryBlue,
                             foregroundColor: AppColors.textWhite,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(30),
@@ -197,11 +201,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               else
                 // Next Button for other pages
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: PrimaryButton(
-                    text: "Next",
-                    onPressed: _onNext,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
                   ),
+                  child: PrimaryButton(text: "Next", onPressed: _onNext),
                 ),
             ],
           ),
@@ -211,66 +215,72 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildPage(OnboardingPage page) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Illustration
-          Expanded(
-            flex: 3,
-            child: Center(
-              child: Image.asset(
-                page.imagePath,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  // Placeholder if image not found
-                  return Container(
-                    width: 300,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color: AppColors.backgroundLight,
-                      borderRadius: BorderRadius.circular(20),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompactHeight = constraints.maxHeight < 560;
+        final imageHeight = (constraints.maxHeight * 0.42)
+            .clamp(180.0, 280.0)
+            .toDouble();
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Let onboarding pages scroll on shorter screens instead of
+                // forcing the content to overflow below the viewport.
+                SizedBox(
+                  height: imageHeight,
+                  child: Center(
+                    child: Image.asset(
+                      page.imagePath,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: imageHeight,
+                          height: imageHeight,
+                          decoration: BoxDecoration(
+                            color: AppColors.backgroundLight,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(
+                            Icons.image,
+                            size: 100,
+                            color: AppColors.textSecondary,
+                          ),
+                        );
+                      },
                     ),
-                    child: const Icon(
-                      Icons.image,
-                      size: 100,
-                      color: AppColors.textSecondary,
-                    ),
-                  );
-                },
-              ),
+                  ),
+                ),
+                SizedBox(height: isCompactHeight ? 24 : 40),
+                Text(
+                  page.title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: isCompactHeight ? 22 : 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF111827),
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  page.description,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: isCompactHeight ? 13 : 14,
+                    color: const Color(0xFF616161),
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
-
-          const SizedBox(height: 40),
-
-          // Title
-          Text(
-            page.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF111827),
-              height: 1.3,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Description
-          Text(
-            page.description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF616161),
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

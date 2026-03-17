@@ -11,6 +11,7 @@ class QuizSettingsScreen extends StatefulWidget {
   final String courseTitle;
   final String? examId;
   final int? questionCount;
+  final int? selectedQuestionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
 
@@ -19,6 +20,7 @@ class QuizSettingsScreen extends StatefulWidget {
     required this.courseTitle,
     this.examId,
     this.questionCount,
+    this.selectedQuestionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
   });
@@ -28,6 +30,8 @@ class QuizSettingsScreen extends StatefulWidget {
 }
 
 class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
+  static final Map<String, int> _savedQuestionCountsByExam = <String, int>{};
+
   final ApiService _apiService = ApiService();
   double _questionCount = 2;
   bool _timedMode = true;
@@ -35,13 +39,44 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
   bool _isStarterUsageLoading = false;
   bool _hasStarterSubmittedThisExam = false;
 
+  String? get _examCacheKey {
+    final examId = widget.examId?.trim();
+    if (examId == null || examId.isEmpty) return null;
+    return examId;
+  }
+
+  int _resolveInitialQuestionCount() {
+    final cachedCount = _examCacheKey == null
+        ? null
+        : _savedQuestionCountsByExam[_examCacheKey!];
+    final candidates = <int?>[
+      widget.selectedQuestionCount,
+      cachedCount,
+      widget.questionCount,
+      2,
+    ];
+    for (final value in candidates) {
+      if (value != null && value > 0) {
+        return value;
+      }
+    }
+    return 2;
+  }
+
+  void _cacheSelectedQuestionCount(int count) {
+    final cacheKey = _examCacheKey;
+    if (cacheKey == null || count <= 0) return;
+    _savedQuestionCountsByExam[cacheKey] = count;
+  }
+
   @override
   void initState() {
     super.initState();
-    final int initialCount = widget.questionCount ?? 2;
+    final int initialCount = _resolveInitialQuestionCount();
     if (initialCount > 0) {
       _questionCount = initialCount.toDouble();
     }
+    _cacheSelectedQuestionCount(initialCount);
     _loadStarterExamUsage();
   }
 
@@ -88,7 +123,8 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
 
     return Obx(() {
       final bool isPro = userController.planTier.value == PlanTier.professional;
-      final int rawTotalQuestions = widget.questionCount ?? 2;
+      final int rawTotalQuestions =
+          widget.questionCount ?? _resolveInitialQuestionCount();
       final int totalQuestions = rawTotalQuestions > 0 ? rawTotalQuestions : 1;
       final int freeLimit = totalQuestions < 2 ? totalQuestions : 2;
       final int maxSelectable = isPro ? totalQuestions : freeLimit;
@@ -187,7 +223,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                       activeColor: const Color(0xFF1E4C9A),
                       inactiveColor: const Color(0xFFE4ECFA),
                       onChanged: isPro
-                          ? (value) => setState(() => _questionCount = value)
+                          ? (value) => setState(() {
+                              _questionCount = value;
+                              _cacheSelectedQuestionCount(value.toInt());
+                            })
                           : null,
                     ),
                     Text(
@@ -288,12 +327,14 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                     );
                     return;
                   }
+                  _cacheSelectedQuestionCount(effectiveQuestionCount.toInt());
                   context.push(
                     '/exam-session',
                     extra: {
                       'courseTitle': widget.courseTitle,
                       'examId': examId,
                       'questionCount': effectiveQuestionCount.toInt(),
+                      'selectedQuestionCount': effectiveQuestionCount.toInt(),
                       'effectivitySheetContent': widget.effectivitySheetContent,
                       'bodyOfKnowledgeContent': widget.bodyOfKnowledgeContent,
                       'timedMode': effectiveTimedMode,

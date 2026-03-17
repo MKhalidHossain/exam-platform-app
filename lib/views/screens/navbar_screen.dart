@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'history_tab.dart';
+import 'ebook_tab_screen.dart';
 import '../../models/plan_tier.dart';
 
 class NavbarScreen extends StatefulWidget {
   final PlanTier planTier;
   final Set<String> unlockedCourseIds;
+  final int initialIndex;
+  final String initialReferralCode;
+  final String initialProductId;
 
   const NavbarScreen({
     super.key,
     this.planTier = PlanTier.starter,
     this.unlockedCourseIds = const {},
+    this.initialIndex = 0,
+    this.initialReferralCode = '',
+    this.initialProductId = '',
   });
 
   @override
@@ -19,11 +26,16 @@ class NavbarScreen extends StatefulWidget {
 }
 
 class _NavbarScreenState extends State<NavbarScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex.clamp(0, 3);
+  }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       extendBody: true,
       backgroundColor: const Color(0xFFF2F5FF),
@@ -49,6 +61,10 @@ class _NavbarScreenState extends State<NavbarScreen> {
                     HomeScreen(
                       planTier: widget.planTier,
                       unlockedCourseIds: widget.unlockedCourseIds,
+                    ),
+                    EbookTabScreen(
+                      initialReferralCode: widget.initialReferralCode,
+                      initialProductId: widget.initialProductId,
                     ),
                     const HistoryTab(),
                     ProfileScreen(planTier: widget.planTier),
@@ -80,10 +96,7 @@ class _BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const _BottomNavBar({
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const _BottomNavBar({required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -112,14 +125,21 @@ class _BottomNavBar extends StatelessWidget {
           _NavItem(
             index: 1,
             currentIndex: currentIndex,
-            icon: Icons.history,
-            label: 'History',
+            icon: Icons.menu_book_rounded,
+            label: 'Ebook',
             onTap: onTap,
           ),
           _NavItem(
             index: 2,
             currentIndex: currentIndex,
-            icon: currentIndex == 2 ? Icons.person : Icons.person_outline,
+            icon: Icons.history,
+            label: 'History',
+            onTap: onTap,
+          ),
+          _NavItem(
+            index: 3,
+            currentIndex: currentIndex,
+            icon: currentIndex == 3 ? Icons.person : Icons.person_outline,
             label: 'Profile',
             onTap: onTap,
           ),

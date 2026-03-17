@@ -3,11 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../core/error/error_handler.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../controllers/user_controller.dart';
 import '../controllers/home_controller.dart';
+import '../utils/app_constants.dart';
 
 class AuthController extends GetxController {
   final ApiService _apiService = ApiService();
+  final StorageService _storageService = StorageService();
 
   final RxBool isLoading = false.obs;
 
@@ -48,7 +51,7 @@ class AuthController extends GetxController {
           isError: false,
           context: context,
         );
-        context.go('/home');
+        context.go(await _resolvePostAuthRoute());
       } else {
         final message = ErrorHandler.getMessageFromResponse(
           response,
@@ -76,6 +79,7 @@ class AuthController extends GetxController {
     required String email,
     required String password,
     required String confirmPassword,
+    String? referralCode,
   }) async {
     if (isLoading.value) return;
     isLoading.value = true;
@@ -86,6 +90,7 @@ class AuthController extends GetxController {
         email: email,
         password: password,
         confirmPassword: confirmPassword,
+        referralCode: referralCode,
       );
       if (!context.mounted) return;
 
@@ -113,6 +118,34 @@ class AuthController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  Future<String> _resolvePostAuthRoute() async {
+    final referralCode = await _storageService.getString(
+      AppConstants.pendingReferralCodeKey,
+    );
+    final productId = await _storageService.getString(
+      AppConstants.pendingReferralProductIdKey,
+    );
+
+    final trimmedReferralCode = referralCode?.trim() ?? '';
+    final trimmedProductId = productId?.trim() ?? '';
+    await _storageService.remove(AppConstants.pendingReferralProductIdKey);
+
+    if (trimmedProductId.isNotEmpty) {
+      final params = <String, String>{
+        'productId': trimmedProductId,
+        if (trimmedReferralCode.isNotEmpty) 'ref': trimmedReferralCode,
+      };
+
+      return Uri(path: '/ebook-detail', queryParameters: params).toString();
+    }
+
+    if (trimmedReferralCode.isEmpty) {
+      return '/home';
+    }
+
+    return '/home';
   }
 
   Future<void> forgotPassword(

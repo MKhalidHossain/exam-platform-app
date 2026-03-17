@@ -16,6 +16,10 @@ class ApiService {
   final StorageService _storageService = StorageService();
   static Completer<bool>? _refreshCompleter;
 
+  Future<void> _clearInvalidSession() async {
+    await _storageService.clearSessionData();
+  }
+
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storageService.getToken();
     final installationId = await _storageService.getOrCreateInstallationId();
@@ -37,6 +41,7 @@ class ApiService {
     try {
       final refreshToken = await _storageService.getRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) {
+        await _clearInvalidSession();
         completer.complete(false);
         return false;
       }
@@ -84,6 +89,7 @@ class ApiService {
       }
     }
 
+    await _clearInvalidSession();
     completer.complete(false);
     return false;
   }
@@ -435,15 +441,7 @@ class ApiService {
         T? parsedData;
         if (responseData != null && fromJson != null) {
           try {
-            // Ensure responseData is a Map before passing to fromJson
-            if (responseData is Map<String, dynamic>) {
-              parsedData = fromJson(responseData);
-            } else {
-              debugPrint(
-                '⚠️ Response data is not a Map: ${responseData.runtimeType}',
-              );
-              parsedData = fromJson(responseData);
-            }
+            parsedData = fromJson(responseData);
           } catch (e, stackTrace) {
             debugPrint('❌ Error parsing data with fromJson:');
             debugPrint('   Error: $e');
@@ -494,7 +492,9 @@ class ApiService {
     required String email,
     required String password,
     required String confirmPassword,
+    String? referralCode,
   }) async {
+    final trimmedReferralCode = referralCode?.trim() ?? '';
     final installationId = await _storageService.getOrCreateInstallationId();
     final body = {
       'phone': phone,
@@ -503,6 +503,7 @@ class ApiService {
       'password': password,
       'confirmPassword': confirmPassword,
       'installationId': installationId,
+      if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
     };
 
     // Convert to JSON string to show exact format
@@ -725,10 +726,22 @@ class ApiService {
   /// Create Stripe Payment Intent for professional plan + first exam unlock.
   /// POST {{base_url}}/api/v1/payments/plan/professional/stripe/create
   Future<ApiResponse<Map<String, dynamic>>>
-  createProfessionalPlanStripePaymentIntent(String examId) async {
+  createProfessionalPlanStripePaymentIntent(
+    String examId, {
+    String? addonProductId,
+    String? addonProductCode,
+  }) async {
+    final body = <String, dynamic>{'examId': examId};
+    if (addonProductId != null && addonProductId.trim().isNotEmpty) {
+      body['addonProductId'] = addonProductId.trim();
+    }
+    if (addonProductCode != null && addonProductCode.trim().isNotEmpty) {
+      body['addonProductCode'] = addonProductCode.trim();
+    }
+
     return post<Map<String, dynamic>>(
       ApiEndpoints.professionalPlanStripeCreate(),
-      body: {'examId': examId},
+      body: body,
       fromJson: (json) => json is Map<String, dynamic>
           ? json
           : Map<String, dynamic>.from(json as Map),
@@ -750,10 +763,21 @@ class ApiService {
 
   /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
   Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
-    String examId,
-  ) async {
+    String examId, {
+    String? addonProductId,
+    String? addonProductCode,
+  }) async {
+    final body = <String, dynamic>{};
+    if (addonProductId != null && addonProductId.trim().isNotEmpty) {
+      body['addonProductId'] = addonProductId.trim();
+    }
+    if (addonProductCode != null && addonProductCode.trim().isNotEmpty) {
+      body['addonProductCode'] = addonProductCode.trim();
+    }
+
     return post<Map<String, dynamic>>(
       ApiEndpoints.examStripeCreate(examId),
+      body: body.isEmpty ? null : body,
       fromJson: (json) => json is Map<String, dynamic>
           ? json
           : Map<String, dynamic>.from(json as Map),

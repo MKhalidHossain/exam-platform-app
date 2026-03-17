@@ -2,18 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../widgets/app_shimmer.dart';
 import '../../models/plan_tier.dart';
+import '../../models/professional_plan_model.dart';
+import '../../models/referral_model.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/unlock_exam_dialog.dart';
 import '../../services/exam_service.dart';
+import '../../services/referral_service.dart';
 import '../../services/storage_service.dart';
+import '../../utils/app_constants.dart';
 
 class HomeScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -197,6 +202,57 @@ class HomeDashboard extends StatelessWidget {
     }
   }
 
+  num? _parseCheckoutAmount(dynamic value) {
+    if (value is num) return value;
+    if (value == null) return null;
+    return num.tryParse(value.toString());
+  }
+
+  bool _didServerMissSelectedAddon({
+    required Map<String, dynamic> paymentData,
+    required _ExamUnlockCheckoutSelection selection,
+    required num examOnlyAmount,
+  }) {
+    final hasAddonSelection =
+        (selection.addonProductId?.trim().isNotEmpty ?? false) ||
+        (selection.addonProductCode?.trim().isNotEmpty ?? false);
+    if (!hasAddonSelection) return false;
+
+    final breakdownRaw = paymentData['breakdown'];
+    final breakdown = breakdownRaw is Map<String, dynamic>
+        ? breakdownRaw
+        : (breakdownRaw is Map
+              ? Map<String, dynamic>.from(breakdownRaw)
+              : const <String, dynamic>{});
+
+    final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
+    final totalAmount =
+        _parseCheckoutAmount(breakdown['totalAmount']) ??
+        _parseCheckoutAmount(paymentData['amount']) ??
+        0;
+
+    return (addonFinalPrice ?? 0) <= 0 || totalAmount <= examOnlyAmount;
+  }
+
+  Future<ReferralPublicCode?> _loadPendingExamReferralOffer() async {
+    final storageService = StorageService();
+    final referralCode = await storageService.getString(
+      AppConstants.pendingReferralCodeKey,
+    );
+    final trimmedReferralCode = referralCode?.trim() ?? '';
+    if (trimmedReferralCode.isEmpty) return null;
+
+    final response = await ReferralService().getPublicReferralCode(
+      trimmedReferralCode,
+    );
+    if (response.success && response.data != null) {
+      return response.data;
+    }
+
+    await storageService.remove(AppConstants.pendingReferralCodeKey);
+    return null;
+  }
+
   Future<void> _unlockExam(BuildContext context, ExamModel exam) async {
     final examId = exam.id.trim();
     if (examId.isEmpty) {
@@ -227,8 +283,15 @@ class HomeDashboard extends StatelessWidget {
     }
 
     try {
+      final selection = await _showExamUnlockAddOnSelectionDialog(context);
+      if (!context.mounted || selection == null) return;
+
       showLoading('Preparing secure checkout...');
-      final createRes = await apiService.createExamStripePaymentIntent(examId);
+      final createRes = await apiService.createExamStripePaymentIntent(
+        examId,
+        addonProductId: selection.addonProductId,
+        addonProductCode: selection.addonProductCode,
+      );
       if (!context.mounted) return;
       hideLoading();
 
@@ -274,6 +337,25 @@ class HomeDashboard extends StatelessWidget {
         return;
       }
 
+      final amountFromApi = createRes.data!['amount'];
+      final int amountPaid = amountFromApi is num
+          ? amountFromApi.round()
+          : int.tryParse(amountFromApi?.toString() ?? '') ??
+                (exam.unlockPrice?.round() ?? 150);
+      final examOnlyAmount = exam.unlockPrice ?? 150;
+      if (_didServerMissSelectedAddon(
+        paymentData: createRes.data!,
+        selection: selection,
+        examOnlyAmount: examOnlyAmount,
+      )) {
+        ErrorHandler.showSnackBar(
+          'The payment server returned exam-only pricing. Deploy the updated backend, then try again.',
+          isError: true,
+          context: context,
+        );
+        return;
+      }
+
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
@@ -295,6 +377,7 @@ class HomeDashboard extends StatelessWidget {
       hideLoading();
 
       if (confirmRes.success) {
+        await StorageService().remove(AppConstants.pendingReferralCodeKey);
         await userController.applyProfessionalUpgrade(examId: examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
@@ -306,7 +389,7 @@ class HomeDashboard extends StatelessWidget {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': 150,
+            'amountPaid': amountPaid,
           },
         );
       } else {
@@ -333,6 +416,74 @@ class HomeDashboard extends StatelessWidget {
         fallback: 'Payment failed. Please try again.',
       );
     }
+  }
+
+  Future<_ExamUnlockCheckoutSelection?> _showExamUnlockAddOnSelectionDialog(
+    BuildContext context,
+  ) async {
+    final ApiService apiService = ApiService();
+    final planRes = await apiService.getProfessionalPlan();
+    if (!context.mounted) return null;
+    if (!planRes.success || planRes.data == null) {
+      ErrorHandler.showFromResponse(
+        planRes,
+        context: context,
+        failureFallback: 'Failed to load add-on options.',
+      );
+      return null;
+    }
+
+    final options = planRes.data!.prePurchaseAddOnOptions;
+    final referralOffer = await _loadPendingExamReferralOffer();
+    if (options.isEmpty) {
+      return const _ExamUnlockCheckoutSelection(
+        addonProductId: null,
+        addonProductCode: null,
+      );
+    }
+
+    return showModalBottomSheet<_ExamUnlockCheckoutSelection>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ExamUnlockAddOnSheet(
+        options: options,
+        examPrice: planRes.data!.unlockExamPrice,
+        currency: planRes.data!.currency,
+        referralOffer: referralOffer,
+      ),
+    );
+  }
+
+  Future<void> _shareReferralInvite(BuildContext context) async {
+    final ReferralService referralService = ReferralService();
+    _showLoading(context, 'Preparing referral invite...');
+    final response = await referralService.getMyReferralProfile();
+    if (!context.mounted) return;
+    _hideLoading(context);
+
+    if (!response.success || response.data == null) {
+      ErrorHandler.showFromResponse(
+        response,
+        context: context,
+        failureFallback: 'Unable to load referral invite.',
+      );
+      return;
+    }
+
+    final profile = response.data!;
+    final referralLink = profile.referralLink.trim();
+    if (referralLink.isNotEmpty) {
+      await Share.share(referralLink);
+      return;
+    }
+
+    if (!context.mounted) return;
+    ErrorHandler.showSnackBar(
+      'Referral link is not ready yet.',
+      context: context,
+    );
   }
 
   @override
@@ -392,13 +543,41 @@ class HomeDashboard extends StatelessWidget {
                 ],
               );
             }),
-            Text(
-              'Welcome back, $displayName!',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF111827),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Hi, $displayName!',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF111827),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton(
+                  onPressed: () => _shareReferralInvite(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF1E4C9A),
+                    side: const BorderSide(color: Color(0xFFB8C9E8)),
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: const Text(
+                    'Referral Friend',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -929,6 +1108,364 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ExamUnlockCheckoutSelection {
+  final String? addonProductId;
+  final String? addonProductCode;
+
+  const _ExamUnlockCheckoutSelection({
+    required this.addonProductId,
+    required this.addonProductCode,
+  });
+}
+
+class _ExamUnlockAddOnSheet extends StatefulWidget {
+  final List<PlanAddOnOption> options;
+  final num examPrice;
+  final String currency;
+  final ReferralPublicCode? referralOffer;
+
+  const _ExamUnlockAddOnSheet({
+    required this.options,
+    required this.examPrice,
+    required this.currency,
+    required this.referralOffer,
+  });
+
+  @override
+  State<_ExamUnlockAddOnSheet> createState() => _ExamUnlockAddOnSheetState();
+}
+
+class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
+  String? _selectedValue;
+
+  PlanAddOnOption? get _selectedOption {
+    if (_selectedValue == null) return null;
+    for (final option in widget.options) {
+      if (option.selectionValue == _selectedValue) return option;
+    }
+    return null;
+  }
+
+  String _formatMoney(num amount) {
+    if (widget.currency.toUpperCase() == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
+    return '${widget.currency.toUpperCase()} ${amount.toStringAsFixed(2)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedOption = _selectedOption;
+    final referralDiscount = widget.referralOffer == null
+        ? 0
+        : widget.examPrice * (widget.referralOffer!.discountPercent / 100);
+    final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
+    final num totalPrice = widget.examPrice - referralDiscount + addonPrice;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF6F8FF),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Add an eBook Before Checkout',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+                color: const Color(0xFF374151),
+              ),
+            ],
+          ),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Choose one add-on guide, or continue with exam unlock only.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFDDE4F8)),
+            ),
+            child: Column(
+              children: [
+                _priceRow('Exam unlock', _formatMoney(widget.examPrice)),
+                if (referralDiscount > 0) ...[
+                  const SizedBox(height: 6),
+                  _priceRow(
+                    'Referral discount',
+                    '-${_formatMoney(referralDiscount)}',
+                  ),
+                ],
+                const SizedBox(height: 6),
+                _priceRow(
+                  'Selected eBook',
+                  selectedOption == null
+                      ? 'Not added'
+                      : _formatMoney(addonPrice),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1),
+                ),
+                _priceRow(
+                  'Total today',
+                  _formatMoney(totalPrice),
+                  isTotal: true,
+                ),
+              ],
+            ),
+          ),
+          if (widget.referralOffer != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF6D87A)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Referral ready for your first exam',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF7C4A03),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your first paid exam unlock.',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: widget.options.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final option = widget.options[index];
+                final optionValue = option.selectionValue;
+                final isSelected = _selectedValue == optionValue;
+
+                return InkWell(
+                  onTap: () => setState(() => _selectedValue = optionValue),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF2D4F88)
+                            : const Color(0xFFDDE4F8),
+                        width: isSelected ? 1.6 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 58,
+                            height: 78,
+                            child: option.coverImageUrl.trim().isNotEmpty
+                                ? Image.network(
+                                    option.coverImageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => _imageFallback(),
+                                  )
+                                : _imageFallback(),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                option.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                ),
+                              ),
+                              if (option.isBundle) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'Bundle',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFB91C1C),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 7),
+                              Row(
+                                children: [
+                                  Text(
+                                    option.upgradeDiscountPriceFormatted,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Text(
+                                    option.regularPriceFormatted,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF9CA3AF),
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Radio<String>(
+                          value: optionValue,
+                          groupValue: _selectedValue,
+                          activeColor: const Color(0xFF2D4F88),
+                          onChanged: (value) =>
+                              setState(() => _selectedValue = value),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(
+                const _ExamUnlockCheckoutSelection(
+                  addonProductId: null,
+                  addonProductCode: null,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2D4F88),
+                side: const BorderSide(color: Color(0xFF2D4F88)),
+              ),
+              child: const Text(
+                'Continue With Exam Only',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _selectedOption == null
+                  ? null
+                  : () => Navigator.of(context).pop(
+                      _ExamUnlockCheckoutSelection(
+                        addonProductId: _selectedOption!.id.trim().isEmpty
+                            ? null
+                            : _selectedOption!.id,
+                        addonProductCode: _selectedOption!.code.trim().isEmpty
+                            ? null
+                            : _selectedOption!.code,
+                      ),
+                    ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D4F88),
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                'Proceed With Add-On • ${_formatMoney(totalPrice)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imageFallback() {
+    return Container(
+      color: const Color(0xFFE5E7EB),
+      alignment: Alignment.center,
+      child: const Icon(Icons.menu_book_rounded, color: Color(0xFF64748B)),
+    );
+  }
+
+  Widget _priceRow(String label, String value, {bool isTotal = false}) {
+    final textStyle = TextStyle(
+      fontSize: isTotal ? 15 : 13.5,
+      fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+      color: const Color(0xFF111827),
+    );
+
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: textStyle)),
+        Text(value, style: textStyle),
+      ],
     );
   }
 }

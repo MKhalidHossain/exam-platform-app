@@ -9,9 +9,7 @@ class AuthService {
 
   /// Check if user is authenticated (design only - no API call)
   Future<bool> isAuthenticated() async {
-    final token = await _storageService.getToken();
-    final isLoggedIn = await _storageService.isLoggedIn();
-    return token != null && isLoggedIn;
+    return _storageService.hasValidSessionArtifacts();
   }
 
   /// Logout user (design only - clears local storage)

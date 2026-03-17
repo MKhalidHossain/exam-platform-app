@@ -25,13 +25,17 @@ import '../views/screens/mcq_screen.dart';
 import '../views/screens/exam_review_screen.dart';
 import '../views/screens/exam_unlock_success_screen.dart';
 import '../views/screens/history_detail_view.dart';
+import '../views/screens/referral_screen.dart';
+import '../views/screens/shared_ebook_redirect_screen.dart';
+import '../views/screens/shared_referral_redirect_screen.dart';
+import '../models/ebook_store_model.dart';
+import '../views/screens/ebook_category_screen.dart';
+import '../views/screens/ebook_detail_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
-
-
       return null;
     },
     routes: [
@@ -50,11 +54,13 @@ GoRouter getRouter() {
         name: 'login',
         builder: (context, state) => const LoginScreen(),
       ),
-     
+
       GoRoute(
         path: '/sign-up',
         name: 'sign-up',
-        builder: (context, state) => const SignUpScreen(),
+        builder: (context, state) => SignUpScreen(
+          initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+        ),
       ),
       GoRoute(
         path: '/forget-password',
@@ -83,10 +89,7 @@ GoRouter getRouter() {
         builder: (context, state) {
           if (state.extra is Map<String, dynamic>) {
             final data = state.extra as Map<String, dynamic>;
-            return ResetPasswordScreen(
-              email: data['email'],
-              otp: data['otp'],
-            );
+            return ResetPasswordScreen(email: data['email'], otp: data['otp']);
           } else {
             final email = state.extra as String?;
             return ResetPasswordScreen(email: email);
@@ -96,7 +99,58 @@ GoRouter getRouter() {
       GoRoute(
         path: '/home',
         name: 'home',
-        builder: (context, state) => const NavbarScreen(),
+        builder: (context, state) {
+          final tab = state.uri.queryParameters['tab'] ?? '';
+          final initialIndex = switch (tab) {
+            'ebook' => 1,
+            'history' => 2,
+            'profile' => 3,
+            _ => 0,
+          };
+
+          return NavbarScreen(
+            initialIndex: initialIndex,
+            initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+            initialProductId: state.uri.queryParameters['productId'] ?? '',
+          );
+        },
+      ),
+      GoRoute(
+        path: '/shared-referral',
+        name: 'shared-referral',
+        builder: (context, state) => SharedReferralRedirectScreen(
+          referralCode: state.uri.queryParameters['ref'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/shared-ebook',
+        name: 'shared-ebook',
+        builder: (context, state) => SharedEbookRedirectScreen(
+          referralCode: state.uri.queryParameters['ref'] ?? '',
+          productId: state.uri.queryParameters['productId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/ebook-category',
+        name: 'ebook-category',
+        builder: (context, state) {
+          final extra = state.extra;
+          final category = extra is Map ? extra['category'] : null;
+          return EbookCategoryScreen(
+            categoryId: state.uri.queryParameters['categoryId'] ?? '',
+            initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+            initialProductId: state.uri.queryParameters['productId'] ?? '',
+            initialCategory: category is EbookCategory ? category : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/ebook-detail',
+        name: 'ebook-detail',
+        builder: (context, state) => EbookDetailScreen(
+          productId: state.uri.queryParameters['productId'] ?? '',
+          initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+        ),
       ),
       GoRoute(
         path: '/edit-profile',
@@ -134,6 +188,11 @@ GoRouter getRouter() {
         builder: (context, state) => const ContactUsScreen(),
       ),
       GoRoute(
+        path: '/referral',
+        name: 'referral',
+        builder: (context, state) => const ReferralScreen(),
+      ),
+      GoRoute(
         path: '/professional-plan',
         name: 'professional-plan',
         builder: (context, state) => const ProfessionalPlanScreen(),
@@ -169,6 +228,7 @@ GoRouter getRouter() {
           String title = 'API 570 - Piping Inspector';
           String? examId;
           int? questionCount;
+          int? selectedQuestionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
 
@@ -183,15 +243,17 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
-            effectivitySheetContent =
-                extra['effectivitySheetContent']?.toString();
-            bodyOfKnowledgeContent =
-                extra['bodyOfKnowledgeContent']?.toString();
+            selectedQuestionCount = parseInt(extra['selectedQuestionCount']);
+            effectivitySheetContent = extra['effectivitySheetContent']
+                ?.toString();
+            bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
+                ?.toString();
           }
           return QuizSettingsScreen(
             courseTitle: title,
             examId: examId,
             questionCount: questionCount,
+            selectedQuestionCount: selectedQuestionCount,
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
           );
@@ -234,10 +296,10 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
-            effectivitySheetContent =
-                extra['effectivitySheetContent']?.toString();
-            bodyOfKnowledgeContent =
-                extra['bodyOfKnowledgeContent']?.toString();
+            effectivitySheetContent = extra['effectivitySheetContent']
+                ?.toString();
+            bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
+                ?.toString();
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
           }
           return ExamSessionScreen(
@@ -392,6 +454,7 @@ GoRouter getRouter() {
             }
             return fallback;
           }
+
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
@@ -414,9 +477,13 @@ GoRouter getRouter() {
             }
             final rawFlagged = extra['flagged'];
             if (rawFlagged is Set) {
-              flagged = rawFlagged.map((e) => int.tryParse(e.toString()) ?? 0).toSet();
+              flagged = rawFlagged
+                  .map((e) => int.tryParse(e.toString()) ?? 0)
+                  .toSet();
             } else if (rawFlagged is List) {
-              flagged = rawFlagged.map((e) => int.tryParse(e.toString()) ?? 0).toSet();
+              flagged = rawFlagged
+                  .map((e) => int.tryParse(e.toString()) ?? 0)
+                  .toSet();
             }
           }
           return ExamReviewScreen(
@@ -488,13 +555,13 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString() ?? '';
             questionCount = parseInt(extra['questionCount']);
-            effectivitySheetContent =
-                extra['effectivitySheetContent']?.toString();
-            bodyOfKnowledgeContent =
-                extra['bodyOfKnowledgeContent']?.toString();
+            effectivitySheetContent = extra['effectivitySheetContent']
+                ?.toString();
+            bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
+                ?.toString();
             amountPaid = parseInt(extra['amountPaid']) ?? amountPaid;
           }
-          
+
           return ExamUnlockSuccessScreen(
             courseTitle: title,
             examId: examId,
@@ -506,10 +573,7 @@ GoRouter getRouter() {
         },
       ),
     ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Text('Error: ${state.error}'),
-      ),
-    ),
+    errorBuilder: (context, state) =>
+        Scaffold(body: Center(child: Text('Error: ${state.error}'))),
   );
 }

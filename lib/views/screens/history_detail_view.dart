@@ -8,8 +8,10 @@ import 'history_testimonial_dialog.dart';
 import 'history_thank_you_dialog.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/api_disclaimer_section.dart';
+import '../../controllers/home_controller.dart';
 import '../../controllers/history_controller.dart';
 import '../../controllers/user_controller.dart';
+import '../../models/exam_model.dart';
 import '../../models/history_attempt_detail_model.dart';
 import '../../models/plan_tier.dart';
 
@@ -209,6 +211,34 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
           ),
         )
         .toList();
+  }
+
+  Exam? _findExamById(String examId) {
+    if (!Get.isRegistered<HomeController>()) return null;
+    final HomeController homeController = Get.find<HomeController>();
+    for (final exam in homeController.exams) {
+      if ((exam.id ?? '').trim() == examId) {
+        return exam;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _buildRetryExtra({
+    required String examName,
+    required String examId,
+    required int questionCount,
+  }) {
+    final Exam? exam = _findExamById(examId);
+    return {
+      'courseTitle': examName,
+      'examId': examId,
+      'questionCount': questionCount,
+      'selectedQuestionCount': questionCount,
+      'effectivitySheetContent': exam?.effectivitySheetContent,
+      'bodyOfKnowledgeContent': exam?.bodyOfKnowledgeContent,
+      'timedMode': true,
+    };
   }
 
   Widget _buildSectionMessage(
@@ -714,12 +744,30 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: () {
+                                      final examId = widget.entry.examId
+                                          ?.trim();
+                                      if (examId == null || examId.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Exam ID missing. Please try again.',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      final retryExtra = _buildRetryExtra(
+                                        examName: examName,
+                                        examId: examId,
+                                        questionCount:
+                                            safeRegenerateQuestionCount,
+                                      );
                                       context.push(
                                         '/quiz-settings',
-                                        extra: {
-                                          'courseTitle': examName,
-                                          'examId': widget.entry.examId,
-                                        },
+                                        extra: retryExtra,
                                       );
                                     },
                                     style: OutlinedButton.styleFrom(
