@@ -1358,7 +1358,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                               Row(
                                 children: [
                                   Text(
-                                    option.upgradeDiscountPriceFormatted,
+                                    option.regularPriceFormatted.toString(),
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -1367,7 +1367,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                                   ),
                                   const SizedBox(width: 7),
                                   Text(
-                                    option.regularPriceFormatted,
+                                    option.basePrice.toString(),
                                     style: const TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF9CA3AF),
