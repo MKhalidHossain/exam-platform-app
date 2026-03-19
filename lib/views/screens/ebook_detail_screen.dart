@@ -446,43 +446,71 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         useImage: true,
         child: SafeArea(
           child: _isLoading
-              ? const Center(child: AppShimmerCircle(size: 42))
+              ? _buildLoading()
               : _error != null
               ? _buildError()
               : product == null
-              ? const SizedBox.shrink()
+              ? _buildError(message: 'Unable to load resource.')
               : _buildBody(product),
         ),
       ),
     );
   }
 
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _error ?? 'Unable to load resource.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFFB91C1C),
-                fontWeight: FontWeight.w600,
+  Widget _buildLoading() {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+        children: const [
+          Padding(
+            padding: EdgeInsets.only(top: 170),
+            child: Center(child: AppShimmerCircle(size: 42)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError({String? message}) {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 120),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      message ?? _error ?? 'Unable to load resource.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFB91C1C),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton(
+                      onPressed: _loadData,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D4F88),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 14),
-            ElevatedButton(
-              onPressed: _loadData,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2D4F88),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -501,6 +529,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
         children: [
           Row(

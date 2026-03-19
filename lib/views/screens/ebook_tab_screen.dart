@@ -23,6 +23,8 @@ class EbookTabScreen extends StatefulWidget {
 
 class _EbookTabScreenState extends State<EbookTabScreen> {
   final EbookService _ebookService = EbookService();
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
+      GlobalKey<RefreshIndicatorState>();
 
   bool _isLoading = true;
   String? _error;
@@ -77,6 +79,15 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         );
       }
     });
+  }
+
+  Future<void> _triggerRefreshFromButton() async {
+    final refreshState = _refreshIndicatorKey.currentState;
+    if (refreshState != null) {
+      await refreshState.show();
+      return;
+    }
+    await _loadData();
   }
 
   bool _storeHasProducts(EbookStoreData store) {
@@ -149,7 +160,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                       ),
                     ),
                     IconButton(
-                      onPressed: _loadData,
+                      onPressed: _triggerRefreshFromButton,
                       icon: const Icon(Icons.refresh_rounded),
                       color: const Color(0xFF10213F),
                     ),
@@ -166,55 +177,23 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
   Widget _buildBody() {
     final store = _store;
-
-    if (_isLoading && store == null) {
-      return const Center(child: AppShimmerCircle(size: 42));
-    }
-
-    if (_error != null && store == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFB91C1C),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              ElevatedButton(
-                onPressed: _loadData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2D4F88),
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (store == null) {
-      return const SizedBox.shrink();
-    }
-
     final allCategories =
-        store.categories.where((item) => item.products.isNotEmpty).toList()
+        store == null
+              ? const <EbookCategory>[]
+              : store.categories
+                    .where((item) => item.products.isNotEmpty)
+                    .toList()
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final categories = _selectedCategoryId == null
-        ? allCategories
-        : allCategories
-              .where((item) => item.id == _selectedCategoryId)
-              .toList(growable: false);
+    final categories = store == null
+        ? const <EbookCategory>[]
+        : (_selectedCategoryId == null
+              ? allCategories
+              : allCategories
+                    .where((item) => item.id == _selectedCategoryId)
+                    .toList(growable: false));
 
     return RefreshIndicator(
+      key: _refreshIndicatorKey,
       onRefresh: _loadData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -222,23 +201,62 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         children: [
           _buildHeroSection(store),
           const SizedBox(height: 20),
-          _buildCategorySelector(allCategories),
-          const SizedBox(height: 18),
-          if (categories.isEmpty)
-            _emptyState()
-          else
-            ...categories.map(_buildCategoryCard),
+          if (_isLoading && store == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 60),
+              child: Center(child: AppShimmerCircle(size: 42)),
+            )
+          else if (_error != null && store == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 30),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFB91C1C),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ElevatedButton(
+                        onPressed: _loadData,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D4F88),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else if (store != null) ...[
+            _buildCategorySelector(allCategories),
+            const SizedBox(height: 18),
+            if (categories.isEmpty)
+              _emptyState()
+            else
+              ...categories.map(_buildCategoryCard),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildHeroSection(EbookStoreData store) {
-    final productCount = store.categories.fold<int>(
+  Widget _buildHeroSection(EbookStoreData? store) {
+    final categories = store?.categories ?? const <EbookCategory>[];
+    final productCount = categories.fold<int>(
       0,
       (sum, category) => sum + category.products.length,
     );
-    final bundleCount = store.categories.fold<int>(
+    final bundleCount = categories.fold<int>(
       0,
       (sum, category) =>
           sum + category.products.where((product) => product.isBundle).length,
@@ -269,7 +287,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
             runSpacing: 8,
             children: [
               _heroStat(label: 'Resources', value: '$productCount'),
-              _heroStat(label: 'Tracks', value: '${store.categories.length}'),
+              _heroStat(label: 'Tracks', value: '${categories.length}'),
               _heroStat(label: 'Bundles', value: '$bundleCount'),
             ],
           ),

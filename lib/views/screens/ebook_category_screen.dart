@@ -162,115 +162,117 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: AppShimmerCircle(size: 42));
-    }
-
-    if (_error != null || _category == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error ?? 'Unable to load category.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFB91C1C),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              ElevatedButton(
-                onPressed: _loadCategory,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2D4F88),
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final category = _category!;
-
     return RefreshIndicator(
       onRefresh: _loadCategory,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF10213F), Color(0xFF2D4F88)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 170),
+              child: Center(child: AppShimmerCircle(size: 42)),
+            )
+          else if (_error != null || _category == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 120),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _error ?? 'Unable to load category.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFB91C1C),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ElevatedButton(
+                        onPressed: _loadCategory,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D4F88),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1FFFFFFF),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    category.shortCode.trim().isEmpty
-                        ? 'CATEGORY'
-                        : category.shortCode,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+            )
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF10213F), Color(0xFF2D4F88)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1FFFFFFF),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _category!.shortCode.trim().isEmpty
+                          ? 'CATEGORY'
+                          : _category!.shortCode,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  category.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                  ),
-                ),
-                if (category.description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Text(
-                    category.description,
+                    _category!.title,
                     style: const TextStyle(
-                      color: Color(0xFFD6E4FF),
-                      height: 1.45,
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  if (_category!.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _category!.description,
+                      style: const TextStyle(
+                        color: Color(0xFFD6E4FF),
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Text(
+                    '${_category!.products.length} resource${_category!.products.length == 1 ? '' : 's'} in this certification',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
-                const SizedBox(height: 14),
-                Text(
-                  '${category.products.length} resource${category.products.length == 1 ? '' : 's'} in this certification',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          ...category.products.map(_buildProductCard),
+            const SizedBox(height: 18),
+            ..._category!.products.map(_buildProductCard),
+          ],
         ],
       ),
     );
@@ -278,194 +280,171 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
 
   Widget _buildProductCard(EbookProduct product) {
     final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
+    final subtitle = product.shortDescription.trim().isNotEmpty
+        ? product.shortDescription
+        : (product.isBundle ? 'Bundle resource' : 'Digital resource');
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _openProduct(product),
-          borderRadius: BorderRadius.circular(24),
-          child: Ink(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFFDCE7F7)),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: SizedBox(
-                    width: 78,
-                    height: 104,
-                    child: product.coverImageUrl.trim().isNotEmpty
-                        ? Image.network(
-                            product.coverImageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _coverFallback(product),
-                          )
-                        : _coverFallback(product),
-                  ),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => _openProduct(product),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFD9D9E3), width: 1),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: product.coverImageUrl.trim().isNotEmpty
+                      ? Image.network(
+                          product.coverImageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => _coverFallback(),
+                        )
+                      : _coverFallback(),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (product.isBundle)
-                            _tag(
-                              'Bundle',
-                              const Color(0xFFFFEDD5),
-                              const Color(0xFFB45309),
-                            ),
-                          _tag(
-                            isUnlocked ? 'Unlocked' : 'View details',
-                            isUnlocked
-                                ? const Color(0xFFE7F8EF)
-                                : const Color(0xFFE0EDFF),
-                            isUnlocked
-                                ? const Color(0xFF166534)
-                                : const Color(0xFF20437C),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (product.isBundle) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Bundle',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFB91C1C),
+                            fontWeight: FontWeight.w600,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        product.title,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          height: 1.15,
                         ),
                       ),
-                      if (product.shortDescription.trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          product.shortDescription,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF475569),
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            _currencyText(
-                              product.pricing.current,
-                              product.pricing.currency,
-                            ),
-                            style: const TextStyle(
-                              color: Color(0xFF10213F),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          if (product.pricing.original >
-                              product.pricing.current)
-                            Text(
-                              _currencyText(
-                                product.pricing.original,
-                                product.pricing.currency,
-                              ),
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                decoration: TextDecoration.lineThrough,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                        ],
-                      ),
+                      const SizedBox(height: 6),
                     ],
-                  ),
+                    Text(
+                      product.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              _buildProductStatus(product, isUnlocked),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _coverFallback(EbookProduct product) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF16304F), Color(0xFF4A79C8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0x26FFFFFF),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              product.code.trim().isEmpty
-                  ? 'RESOURCE'
-                  : product.code.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const Spacer(),
+  Widget _buildProductStatus(EbookProduct product, bool isUnlocked) {
+    if (isUnlocked) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          _StatusDot(color: Color(0xFF2DBD67), icon: Icons.check),
+          SizedBox(width: 6),
           Text(
-            product.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
+            'Unlocked',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2DBD67),
             ),
           ),
         ],
+      );
+    }
+
+    final currentPrice = product.pricing.current;
+    final actionLabel = currentPrice > 0
+        ? _formatUnlockLabel(currentPrice, product.pricing.currency)
+        : 'View details';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2DBD67),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        actionLabel,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
       ),
     );
   }
 
-  Widget _tag(String text, Color background, Color foreground) {
+  String _formatUnlockLabel(double price, String currency) {
+    return 'Unlock for ${_currencyText(price, currency)}';
+  }
+
+  Widget _coverFallback() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      color: const Color(0xFFE5E7EB),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.menu_book_rounded,
+        color: Color(0xFF64748B),
+        size: 24,
+      ),
+    );
+  }
+}
+
+class _StatusDot extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+
+  const _StatusDot({required this.color, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.15),
+        shape: BoxShape.circle,
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: foreground,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      child: Icon(icon, color: color, size: 14),
     );
   }
 }
