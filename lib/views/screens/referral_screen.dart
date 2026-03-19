@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/referral_model.dart';
 import '../../services/referral_service.dart';
+import '../../utils/referral_share_message.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/gradient_background.dart';
 
@@ -173,7 +174,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
   Future<void> _shareReferralInvite(ReferralProfile profile) async {
     final referralLink = profile.referralLink.trim();
     if (referralLink.isNotEmpty) {
-      await Share.share(referralLink);
+      final shareMessage = buildReferralShareMessage(profile);
+      await Share.share(shareMessage.isEmpty ? referralLink : shareMessage);
       return;
     }
 

@@ -79,7 +79,7 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
       _isLoading = false;
       _category = category;
       if (category == null) {
-        _error = 'Unable to find this ebook category.';
+        _error = 'Unable to find this resource category.';
       }
     });
   }
@@ -105,17 +105,10 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
   }
 
   void _openProduct(EbookProduct product) {
-    final scopedReferralCode = widget.initialProductId.trim() == product.id
-        ? widget.initialReferralCode.trim()
-        : '';
-
     context.push(
       Uri(
         path: '/ebook-detail',
-        queryParameters: {
-          'productId': product.id,
-          if (scopedReferralCode.isNotEmpty) 'ref': scopedReferralCode,
-        },
+        queryParameters: {'productId': product.id},
       ).toString(),
     );
   }
@@ -147,7 +140,7 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
                     ),
                     Expanded(
                       child: Text(
-                        _category?.title ?? 'Ebook Category',
+                        _category?.title ?? 'Resource Category',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Color(0xFF10213F),
@@ -266,7 +259,7 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
                 ],
                 const SizedBox(height: 14),
                 Text(
-                  '${category.products.length} eBook${category.products.length == 1 ? '' : 's'} in this category',
+                  '${category.products.length} resource${category.products.length == 1 ? '' : 's'} in this certification',
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -430,7 +423,7 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
             ),
             child: Text(
               product.code.trim().isEmpty
-                  ? 'EBOOK'
+                  ? 'RESOURCE'
                   : product.code.toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

@@ -40,13 +40,10 @@ class _SharedReferralRedirectScreenState
     await _storageService.remove(AppConstants.pendingReferralProductIdKey);
 
     final hasSession = await _storageService.hasValidSessionArtifacts();
-    if (hasSession) {
-      await _storageService.remove(AppConstants.pendingReferralCodeKey);
-    }
     if (!mounted) return;
 
     final nextRoute = hasSession
-        ? '/home'
+        ? '/subscribe'
         : Uri(
             path: '/sign-up',
             queryParameters: {if (referralCode.isNotEmpty) 'ref': referralCode},

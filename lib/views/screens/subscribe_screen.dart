@@ -97,7 +97,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return (addonFinalPrice ?? 0) <= 0 || totalAmount <= baseAmount;
   }
 
-  Future<ReferralPublicCode?> _loadPendingExamReferralOffer() async {
+  Future<ReferralPublicCode?> _loadPendingUpgradeReferralOffer() async {
     final storageService = StorageService();
     final referralCode = await storageService.getString(
       AppConstants.pendingReferralCodeKey,
@@ -319,7 +319,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
     if (isProfessionalActive) {
       final selection = await _showUpgradeAddOnSelectionDialog(
-        showReferralDiscount: true,
+        showReferralDiscount: false,
       );
       if (!mounted || selection == null) return;
       await _payForExamUnlockWithStripe(
@@ -329,7 +329,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       );
     } else {
       final selection = await _showUpgradeAddOnSelectionDialog(
-        showReferralDiscount: false,
+        showReferralDiscount: true,
       );
       if (!mounted || selection == null) return;
       await _payForProfessionalUpgradeWithStripe(
@@ -345,7 +345,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   }) async {
     final options = professionalPlan?.prePurchaseAddOnOptions ?? const [];
     final referralOffer = showReferralDiscount
-        ? await _loadPendingExamReferralOffer()
+        ? await _loadPendingUpgradeReferralOffer()
         : null;
     if (options.isEmpty) {
       return const _UpgradeCheckoutSelection(
@@ -361,9 +361,15 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _UpgradeAddOnSheet(
         options: options,
-        examPrice: professionalPlan?.unlockExamPrice ?? 0,
+        baseLabel: showReferralDiscount ? 'Professional plan' : 'Exam unlock',
+        basePrice: showReferralDiscount
+            ? professionalPlan?.price ?? 0
+            : professionalPlan?.unlockExamPrice ?? 0,
         currency: professionalPlan?.currency ?? 'USD',
         referralOffer: referralOffer,
+        continueLabel: showReferralDiscount
+            ? 'Continue With Plan Only'
+            : 'Continue With Exam Only',
       ),
     );
   }
@@ -1182,15 +1188,19 @@ class _UpgradeCheckoutSelection {
 
 class _UpgradeAddOnSheet extends StatefulWidget {
   final List<PlanAddOnOption> options;
-  final num examPrice;
+  final String baseLabel;
+  final num basePrice;
   final String currency;
   final ReferralPublicCode? referralOffer;
+  final String continueLabel;
 
   const _UpgradeAddOnSheet({
     required this.options,
-    required this.examPrice,
+    required this.baseLabel,
+    required this.basePrice,
     required this.currency,
     required this.referralOffer,
+    required this.continueLabel,
   });
 
   @override
@@ -1220,9 +1230,9 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
     final selectedOption = _selectedOption;
     final referralDiscount = widget.referralOffer == null
         ? 0
-        : widget.examPrice * (widget.referralOffer!.discountPercent / 100);
+        : widget.basePrice * (widget.referralOffer!.discountPercent / 100);
     final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
-    final num totalPrice = widget.examPrice - referralDiscount + addonPrice;
+    final num totalPrice = widget.basePrice - referralDiscount + addonPrice;
 
     return Container(
       decoration: const BoxDecoration(
@@ -1237,7 +1247,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             children: [
               const Expanded(
                 child: Text(
-                  'Add an eBook Before Checkout',
+                  'Add a Resource Before Checkout',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -1255,7 +1265,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one add-on guide, or continue without an ebook.',
+              'Choose one add-on resource, or continue without one.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1270,7 +1280,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             ),
             child: Column(
               children: [
-                _priceRow('Exam unlock', _formatMoney(widget.examPrice)),
+                _priceRow(widget.baseLabel, _formatMoney(widget.basePrice)),
                 if (referralDiscount > 0) ...[
                   const SizedBox(height: 6),
                   _priceRow(
@@ -1280,7 +1290,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 ],
                 const SizedBox(height: 6),
                 _priceRow(
-                  'Selected eBook',
+                  'Selected resource',
                   selectedOption == null
                       ? 'Not added'
                       : _formatMoney(addonPrice),
@@ -1311,7 +1321,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Referral ready for your first exam',
+                    'Referral ready for your upgrade',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -1320,7 +1330,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your first paid exam unlock.',
+                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your Professional Plan upgrade.',
                     style: const TextStyle(
                       fontSize: 13,
                       height: 1.45,
@@ -1466,9 +1476,9 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 foregroundColor: const Color(0xFF2D4F88),
                 side: const BorderSide(color: Color(0xFF2D4F88)),
               ),
-              child: const Text(
-                'Continue Without Add-On',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              child: Text(
+                widget.continueLabel,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ),

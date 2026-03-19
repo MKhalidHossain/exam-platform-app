@@ -4,9 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
-import '../../models/referral_model.dart';
 import '../../services/ebook_service.dart';
-import '../../services/referral_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
@@ -29,7 +27,6 @@ class EbookDetailScreen extends StatefulWidget {
 
 class _EbookDetailScreenState extends State<EbookDetailScreen> {
   final EbookService _ebookService = EbookService();
-  final ReferralService _referralService = ReferralService();
   final StorageService _storageService = StorageService();
 
   bool _isLoading = true;
@@ -37,7 +34,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   EbookStoreData? _store;
   EbookProduct? _product;
   String _productId = '';
-  String _sharedReferralCode = '';
   bool _isBuying = false;
 
   @override
@@ -47,9 +43,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Future<void> _primeSharedContext() async {
-    final pendingReferralCode = await _storageService.getString(
-      AppConstants.pendingReferralCodeKey,
-    );
     final pendingProductId = await _storageService.getString(
       AppConstants.pendingReferralProductIdKey,
     );
@@ -57,11 +50,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     _productId = widget.productId.trim().isNotEmpty
         ? widget.productId.trim()
         : pendingProductId?.trim() ?? '';
-    _sharedReferralCode = widget.initialReferralCode.trim().isNotEmpty
-        ? widget.initialReferralCode.trim()
-        : pendingReferralCode?.trim() ?? '';
-
-    await _storageService.remove(AppConstants.pendingReferralCodeKey);
     await _storageService.remove(AppConstants.pendingReferralProductIdKey);
   }
 
@@ -69,7 +57,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     if (_productId.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = 'Shared ebook is missing a product id.';
+        _error = 'Shared resource is missing a product id.';
       });
       return;
     }
@@ -81,7 +69,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
     final storeRes = await _ebookService.getEbookStore();
     final upgradeOptionsRes = await _ebookService.getUpgradeAddOnOptions();
-    final referralRes = await _referralService.getMyReferralProfile();
 
     if (!mounted) return;
 
@@ -111,12 +98,8 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       _isLoading = false;
       _store = store;
       _product = product;
-      if (referralRes.success && referralRes.data != null) {
-        _removeSelfReferral(referralRes.data!);
-      }
-
       if (product == null) {
-        _error = 'Unable to find this ebook.';
+        _error = 'Unable to find this resource.';
       }
     });
   }
@@ -166,15 +149,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     products.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return products;
   }
-
-  void _removeSelfReferral(ReferralProfile profile) {
-    if (profile.referralCode.trim().toUpperCase() ==
-        _sharedReferralCode.trim().toUpperCase()) {
-      _sharedReferralCode = '';
-    }
-  }
-
-  String get _scopedReferralCode => _sharedReferralCode.trim();
 
   Future<void> _openPreview(EbookProduct product) async {
     final url = product.previewUrl.trim();
@@ -248,7 +222,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         ErrorHandler.showFromResponse(
           contentRes,
           context: context,
-          failureFallback: 'You need to purchase this eBook first.',
+          failureFallback: 'You need to purchase this resource first.',
         );
         return;
       }
@@ -257,7 +231,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
     if (contentUrl.trim().isEmpty) {
       ErrorHandler.showSnackBar(
-        'PDF URL is not available for this eBook.',
+        'PDF URL is not available for this resource.',
         isError: true,
         context: context,
       );
@@ -273,16 +247,8 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     );
   }
 
-  Future<_DetailCheckoutDecision?> _showCheckoutSheet(
-    EbookProduct product,
-  ) async {
-    final scopedCode = _scopedReferralCode;
-    final referralDiscount = scopedCode.isNotEmpty
-        ? product.pricing.current * 0.10
-        : 0.0;
-    final payNow = product.pricing.current - referralDiscount;
-
-    return showModalBottomSheet<_DetailCheckoutDecision>(
+  Future<bool?> _showCheckoutSheet(EbookProduct product) async {
+    return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -332,70 +298,24 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       ),
                       valueColor: Colors.white,
                     ),
-                    if (referralDiscount > 0) ...[
-                      const SizedBox(height: 8),
-                      _summaryRow(
-                        'Referral discount',
-                        '-${_currencyText(referralDiscount, product.pricing.currency)}',
-                        valueColor: const Color(0xFFB8F1D9),
-                      ),
-                    ],
                     const Divider(color: Color(0x33FFFFFF), height: 22),
                     _summaryRow(
                       'Pay now',
-                      _currencyText(payNow, product.pricing.currency),
+                      _currencyText(
+                        product.pricing.current,
+                        product.pricing.currency,
+                      ),
                       valueColor: Colors.white,
                       isEmphasis: true,
                     ),
                   ],
                 ),
               ),
-              if (scopedCode.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFBEB),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFF6D87A)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Referral ready for this ebook',
-                        style: TextStyle(
-                          color: Color(0xFF7C4A03),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Code $_sharedReferralCode is locked to this ebook and can be used only once by this user.',
-                        style: const TextStyle(
-                          color: Color(0xFF92400E),
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(
-                      _DetailCheckoutDecision(
-                        referralCode: scopedCode,
-                        referralProductId: scopedCode.isNotEmpty
-                            ? product.id
-                            : '',
-                      ),
-                    );
-                  },
+                  onPressed: () => Navigator.of(context).pop(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF10213F),
                     foregroundColor: Colors.white,
@@ -404,11 +324,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),
-                  child: Text(
-                    scopedCode.isNotEmpty
-                        ? 'Buy This Ebook with 10% Off'
-                        : 'Continue to Payment',
-                  ),
+                  child: const Text('Continue to Payment'),
                 ),
               ),
             ],
@@ -418,19 +334,13 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     );
   }
 
-  Future<void> _buyWithStripe(
-    EbookProduct product, {
-    String referralCode = '',
-    String referralProductId = '',
-  }) async {
+  Future<void> _buyWithStripe(EbookProduct product) async {
     if (_isBuying) return;
     setState(() => _isBuying = true);
 
     try {
       final createRes = await _ebookService.createStripePaymentIntent(
         productId: product.id,
-        referralCode: referralCode,
-        referralProductId: referralProductId,
       );
 
       if (!mounted) return;
@@ -468,7 +378,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: 'EJ eBook Store',
+          merchantDisplayName: 'EJ Resource Store',
           returnURL: 'flutterstripe://redirect',
         ),
       );
@@ -484,9 +394,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       if (!mounted) return;
       setState(() {
         _isBuying = false;
-        if (referralCode.trim().isNotEmpty) {
-          _sharedReferralCode = '';
-        }
       });
 
       if (!confirmRes.success) {
@@ -499,7 +406,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       }
 
       ErrorHandler.showSnackBar(
-        'Purchase completed. eBook unlocked.',
+        'Purchase completed. Resource unlocked.',
         isError: false,
         context: context,
       );
@@ -525,13 +432,9 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Future<void> _startCheckout(EbookProduct product) async {
-    final decision = await _showCheckoutSheet(product);
-    if (!mounted || decision == null) return;
-    await _buyWithStripe(
-      product,
-      referralCode: decision.referralCode,
-      referralProductId: decision.referralProductId,
-    );
+    final shouldContinue = await _showCheckoutSheet(product);
+    if (!mounted || shouldContinue != true) return;
+    await _buyWithStripe(product);
   }
 
   @override
@@ -562,7 +465,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              _error ?? 'Unable to load ebook.',
+              _error ?? 'Unable to load resource.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Color(0xFFB91C1C),
@@ -586,11 +489,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
   Widget _buildBody(EbookProduct product) {
     final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
-    final scopedReferralCode = _scopedReferralCode;
-    final referralDiscount = scopedReferralCode.isNotEmpty
-        ? product.pricing.current * 0.10
-        : 0.0;
-    final discountedPrice = product.pricing.current - referralDiscount;
     final bundledProducts = product.isBundle
         ? _findProductsByCodes(
             _store,
@@ -614,7 +512,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
               ),
               const Expanded(
                 child: Text(
-                  'Ebook Details',
+                  'Resource Details',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFF10213F),
@@ -663,7 +561,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                         runSpacing: 8,
                         children: [
                           _detailPill(
-                            product.isBundle ? 'Bundle' : 'Single Ebook',
+                            product.isBundle ? 'Bundle' : 'Single Resource',
                             const Color(0x26F59E0B),
                             const Color(0xFFFFD9A6),
                           ),
@@ -676,12 +574,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                 ? const Color(0xFFCFFCEB)
                                 : const Color(0xFFE2E8F0),
                           ),
-                          if (scopedReferralCode.isNotEmpty)
-                            _detailPill(
-                              'Referral Ready',
-                              const Color(0x26FACC15),
-                              const Color(0xFFFDF08A),
-                            ),
                         ],
                       ),
                     ),
@@ -764,7 +656,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                           Text(
                             product.shortDescription.trim().isNotEmpty
                                 ? product.shortDescription
-                                : 'Professional ebook from the EJ store.',
+                                : 'Professional resource from the EJ store.',
                             style: const TextStyle(
                               color: Color(0xFFD9E5FF),
                               height: 1.5,
@@ -800,9 +692,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                   children: [
                                     Text(
                                       _currencyText(
-                                        scopedReferralCode.isNotEmpty
-                                            ? discountedPrice
-                                            : product.pricing.current,
+                                        product.pricing.current,
                                         product.pricing.currency,
                                       ),
                                       style: const TextStyle(
@@ -812,14 +702,10 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                       ),
                                     ),
                                     if (product.pricing.original >
-                                            product.pricing.current ||
-                                        scopedReferralCode.isNotEmpty)
+                                        product.pricing.current)
                                       Text(
                                         _currencyText(
-                                          product.pricing.original >
-                                                  product.pricing.current
-                                              ? product.pricing.original
-                                              : product.pricing.current,
+                                          product.pricing.original,
                                           product.pricing.currency,
                                         ),
                                         style: const TextStyle(
@@ -832,17 +718,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                       ),
                                   ],
                                 ),
-                                if (scopedReferralCode.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '10% discount is locked to this ebook only.',
-                                    style: const TextStyle(
-                                      color: Color(0xFFFDE68A),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
                           ),
@@ -856,22 +731,24 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           ),
           const SizedBox(height: 18),
           _sectionCard(
-            title: product.isBundle ? 'About This Bundle' : 'About This Ebook',
+            title: product.isBundle
+                ? 'About This Bundle'
+                : 'About This Resource',
             child: Text(
               product.fullDescription.trim().isNotEmpty
                   ? product.fullDescription
                   : product.shortDescription.trim().isNotEmpty
                   ? product.shortDescription
                   : product.isBundle
-                  ? 'This bundle groups multiple study guides into one purchase so every included ebook unlocks together.'
-                  : 'This ebook gives you practical study material, structured explanations, and a focused buying flow for certification preparation.',
+                  ? 'This bundle groups multiple study guides into one purchase so every included resource unlocks together.'
+                  : 'This resource gives you practical study material, structured explanations, and a focused buying flow for certification preparation.',
               style: const TextStyle(color: Color(0xFF475569), height: 1.65),
             ),
           ),
           if (product.bundleIncludes.isNotEmpty) ...[
             const SizedBox(height: 16),
             _sectionCard(
-              title: product.isBundle ? 'Bundle Ebooks' : 'What You Get',
+              title: product.isBundle ? 'Bundle Resources' : 'What You Get',
               child: bundleIsResolved
                   ? Column(
                       children: bundledProducts
@@ -918,8 +795,8 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 ),
                 child: Text(
                   isUnlocked
-                      ? 'This bundle purchase unlocks all ${bundledProducts.length} included ebook${bundledProducts.length == 1 ? '' : 's'}. Open each one from the list above.'
-                      : 'Buying this bundle will unlock all ${bundledProducts.length} included ebook${bundledProducts.length == 1 ? '' : 's'} together.',
+                      ? 'This bundle purchase unlocks all ${bundledProducts.length} included resource${bundledProducts.length == 1 ? '' : 's'}. Open each one from the list above.'
+                      : 'Buying this bundle will unlock all ${bundledProducts.length} included resource${bundledProducts.length == 1 ? '' : 's'} together.',
                   style: TextStyle(
                     color: isUnlocked
                         ? const Color(0xFF166534)
@@ -936,37 +813,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
             title: 'Purchase Actions',
             child: Column(
               children: [
-                if (scopedReferralCode.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFFBEB),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFF6D87A)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Referral Applied To This Ebook',
-                          style: TextStyle(
-                            color: Color(0xFF7C4A03),
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Code $scopedReferralCode can be used here one time only. It will not show on other ebooks.',
-                          style: const TextStyle(
-                            color: Color(0xFF92400E),
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (scopedReferralCode.isNotEmpty) const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -1005,8 +851,8 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                     ? 'Bundle Unlocked'
                                     : 'Purchase Bundle'
                               : isUnlocked
-                              ? 'Open eBook'
-                              : 'Purchase Now',
+                              ? 'Open Resource'
+                              : 'Purchase Resource',
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isUnlocked
@@ -1330,14 +1176,4 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         : currency.trim();
     return '$normalizedCurrency ${amount.toStringAsFixed(2)}';
   }
-}
-
-class _DetailCheckoutDecision {
-  final String referralCode;
-  final String referralProductId;
-
-  const _DetailCheckoutDecision({
-    required this.referralCode,
-    required this.referralProductId,
-  });
 }
