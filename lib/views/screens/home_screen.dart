@@ -6,19 +6,18 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
-import '../widgets/app_shimmer.dart';
 import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
-import '../../models/referral_model.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
+import '../../utils/referral_share_message.dart';
 import '../widgets/api_disclaimer_section.dart';
+import '../widgets/app_shimmer.dart';
 import '../widgets/unlock_exam_dialog.dart';
 import '../../services/exam_service.dart';
 import '../../services/referral_service.dart';
 import '../../services/storage_service.dart';
-import '../../utils/app_constants.dart';
 
 class HomeScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -234,25 +233,6 @@ class HomeDashboard extends StatelessWidget {
     return (addonFinalPrice ?? 0) <= 0 || totalAmount <= examOnlyAmount;
   }
 
-  Future<ReferralPublicCode?> _loadPendingExamReferralOffer() async {
-    final storageService = StorageService();
-    final referralCode = await storageService.getString(
-      AppConstants.pendingReferralCodeKey,
-    );
-    final trimmedReferralCode = referralCode?.trim() ?? '';
-    if (trimmedReferralCode.isEmpty) return null;
-
-    final response = await ReferralService().getPublicReferralCode(
-      trimmedReferralCode,
-    );
-    if (response.success && response.data != null) {
-      return response.data;
-    }
-
-    await storageService.remove(AppConstants.pendingReferralCodeKey);
-    return null;
-  }
-
   Future<void> _unlockExam(BuildContext context, ExamModel exam) async {
     final examId = exam.id.trim();
     if (examId.isEmpty) {
@@ -377,7 +357,6 @@ class HomeDashboard extends StatelessWidget {
       hideLoading();
 
       if (confirmRes.success) {
-        await StorageService().remove(AppConstants.pendingReferralCodeKey);
         await userController.applyProfessionalUpgrade(examId: examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
@@ -434,7 +413,6 @@ class HomeDashboard extends StatelessWidget {
     }
 
     final options = planRes.data!.prePurchaseAddOnOptions;
-    final referralOffer = await _loadPendingExamReferralOffer();
     if (options.isEmpty) {
       return const _ExamUnlockCheckoutSelection(
         addonProductId: null,
@@ -451,7 +429,6 @@ class HomeDashboard extends StatelessWidget {
         options: options,
         examPrice: planRes.data!.unlockExamPrice,
         currency: planRes.data!.currency,
-        referralOffer: referralOffer,
       ),
     );
   }
@@ -475,7 +452,8 @@ class HomeDashboard extends StatelessWidget {
     final profile = response.data!;
     final referralLink = profile.referralLink.trim();
     if (referralLink.isNotEmpty) {
-      await Share.share(referralLink);
+      final shareMessage = buildReferralShareMessage(profile);
+      await Share.share(shareMessage.isEmpty ? referralLink : shareMessage);
       return;
     }
 
@@ -1126,13 +1104,11 @@ class _ExamUnlockAddOnSheet extends StatefulWidget {
   final List<PlanAddOnOption> options;
   final num examPrice;
   final String currency;
-  final ReferralPublicCode? referralOffer;
 
   const _ExamUnlockAddOnSheet({
     required this.options,
     required this.examPrice,
     required this.currency,
-    required this.referralOffer,
   });
 
   @override
@@ -1160,11 +1136,8 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
   @override
   Widget build(BuildContext context) {
     final selectedOption = _selectedOption;
-    final referralDiscount = widget.referralOffer == null
-        ? 0
-        : widget.examPrice * (widget.referralOffer!.discountPercent / 100);
     final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
-    final num totalPrice = widget.examPrice - referralDiscount + addonPrice;
+    final num totalPrice = widget.examPrice + addonPrice;
 
     return Container(
       decoration: const BoxDecoration(
@@ -1179,7 +1152,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
             children: [
               const Expanded(
                 child: Text(
-                  'Add an eBook Before Checkout',
+                  'Add a Resource Before Checkout',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -1197,7 +1170,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one add-on guide, or continue with exam unlock only.',
+              'Choose one add-on resource, or continue with exam unlock only.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1213,16 +1186,9 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
             child: Column(
               children: [
                 _priceRow('Exam unlock', _formatMoney(widget.examPrice)),
-                if (referralDiscount > 0) ...[
-                  const SizedBox(height: 6),
-                  _priceRow(
-                    'Referral discount',
-                    '-${_formatMoney(referralDiscount)}',
-                  ),
-                ],
                 const SizedBox(height: 6),
                 _priceRow(
-                  'Selected eBook',
+                  'Selected resource',
                   selectedOption == null
                       ? 'Not added'
                       : _formatMoney(addonPrice),
@@ -1239,40 +1205,6 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
               ],
             ),
           ),
-          if (widget.referralOffer != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFBEB),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFF6D87A)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Referral ready for your first exam',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF7C4A03),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your first paid exam unlock.',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.45,
-                      color: Color(0xFF92400E),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           ConstrainedBox(
             constraints: BoxConstraints(
@@ -1358,7 +1290,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                               Row(
                                 children: [
                                   Text(
-                                    option.upgradeDiscountPriceFormatted,
+                                    option.regularPriceFormatted.toString(),
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -1367,7 +1299,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                                   ),
                                   const SizedBox(width: 7),
                                   Text(
-                                    option.regularPriceFormatted,
+                                    option.basePrice.toString(),
                                     style: const TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF9CA3AF),

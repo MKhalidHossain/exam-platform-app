@@ -32,6 +32,10 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  UserController get _userController => Get.isRegistered<UserController>()
+      ? Get.find<UserController>()
+      : Get.put(UserController());
+
   bool _isLimitMessage(String? message) {
     if (message == null) return false;
     final lowered = message.toLowerCase();
@@ -74,6 +78,11 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
 
   static const Duration _retryDelayWhileGenerating = Duration(seconds: 12);
 
+  void _handleLimitRedirect() {
+    final isPro = _userController.planTier.value == PlanTier.professional;
+    context.go(isPro ? '/home' : '/subscribe');
+  }
+
   Future<void> _startExam() async {
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {
@@ -85,10 +94,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
     }
 
     final int questionCount = widget.questionCount ?? 1;
-    final UserController userController = Get.isRegistered<UserController>()
-        ? Get.find<UserController>()
-        : Get.put(UserController());
-    final bool isPro = userController.planTier.value == PlanTier.professional;
+    final bool isPro = _userController.planTier.value == PlanTier.professional;
     final bool effectiveTimedMode = widget.timedMode && isPro;
 
     while (mounted) {
@@ -101,7 +107,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 403) {
-        context.go('/subscribe');
+        _handleLimitRedirect();
         return;
       }
 
@@ -241,7 +247,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
                   ElevatedButton(
                     onPressed: () {
                       if (_isLimitMessage(_errorMessage)) {
-                        context.go('/subscribe');
+                        _handleLimitRedirect();
                         return;
                       }
                       setState(() {

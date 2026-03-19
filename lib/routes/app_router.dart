@@ -103,6 +103,7 @@ GoRouter getRouter() {
           final tab = state.uri.queryParameters['tab'] ?? '';
           final initialIndex = switch (tab) {
             'ebook' => 1,
+            'resources' => 1,
             'history' => 2,
             'profile' => 3,
             _ => 0,

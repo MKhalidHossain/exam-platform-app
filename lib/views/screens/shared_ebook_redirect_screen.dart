@@ -53,10 +53,7 @@ class _SharedEbookRedirectScreenState extends State<SharedEbookRedirectScreen> {
     final nextRoute = hasSession
         ? Uri(
             path: '/ebook-detail',
-            queryParameters: {
-              if (productId.isNotEmpty) 'productId': productId,
-              if (referralCode.isNotEmpty) 'ref': referralCode,
-            },
+            queryParameters: {if (productId.isNotEmpty) 'productId': productId},
           ).toString()
         : Uri(
             path: '/sign-up',

@@ -133,11 +133,7 @@ class AuthController extends GetxController {
     await _storageService.remove(AppConstants.pendingReferralProductIdKey);
 
     if (trimmedProductId.isNotEmpty) {
-      final params = <String, String>{
-        'productId': trimmedProductId,
-        if (trimmedReferralCode.isNotEmpty) 'ref': trimmedReferralCode,
-      };
-
+      final params = <String, String>{'productId': trimmedProductId};
       return Uri(path: '/ebook-detail', queryParameters: params).toString();
     }
 
@@ -145,7 +141,7 @@ class AuthController extends GetxController {
       return '/home';
     }
 
-    return '/home';
+    return '/subscribe';
   }
 
   Future<void> forgotPassword(

@@ -126,7 +126,7 @@ class _BottomNavBar extends StatelessWidget {
             index: 1,
             currentIndex: currentIndex,
             icon: Icons.menu_book_rounded,
-            label: 'Ebook',
+            label: 'Resources',
             onTap: onTap,
           ),
           _NavItem(
