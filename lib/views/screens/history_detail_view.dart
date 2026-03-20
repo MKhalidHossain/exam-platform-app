@@ -228,13 +228,17 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
     required String examName,
     required String examId,
     required int questionCount,
+    required int selectedQuestionCount,
   }) {
     final Exam? exam = _findExamById(examId);
+    final int totalQuestionCount = exam?.questionCount ?? questionCount;
     return {
       'courseTitle': examName,
       'examId': examId,
-      'questionCount': questionCount,
-      'selectedQuestionCount': questionCount,
+      'questionCount': totalQuestionCount > 0
+          ? totalQuestionCount
+          : selectedQuestionCount,
+      'selectedQuestionCount': selectedQuestionCount,
       'effectivitySheetContent': exam?.effectivitySheetContent,
       'bodyOfKnowledgeContent': exam?.bodyOfKnowledgeContent,
       'timedMode': true,
@@ -763,6 +767,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                         examName: examName,
                                         examId: examId,
                                         questionCount:
+                                            _findExamById(examId)?.questionCount ??
+                                            safeRegenerateQuestionCount,
+                                        selectedQuestionCount:
                                             safeRegenerateQuestionCount,
                                       );
                                       context.push(

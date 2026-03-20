@@ -723,7 +723,7 @@ class ApiService {
     );
   }
 
-  /// Create Stripe Payment Intent for professional plan + first exam unlock.
+  /// Create Stripe Payment Intent for a professional plan upgrade.
   /// POST {{base_url}}/api/v1/payments/plan/professional/stripe/create
   Future<ApiResponse<Map<String, dynamic>>>
   createProfessionalPlanStripePaymentIntent(

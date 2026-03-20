@@ -23,8 +23,6 @@ class EbookTabScreen extends StatefulWidget {
 
 class _EbookTabScreenState extends State<EbookTabScreen> {
   final EbookService _ebookService = EbookService();
-  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
-      GlobalKey<RefreshIndicatorState>();
 
   bool _isLoading = true;
   String? _error;
@@ -37,7 +35,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool showFeedback = false}) async {
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -54,14 +52,17 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         storeRes.success &&
         storeRes.data != null &&
         _storeHasProducts(storeRes.data!);
+    final hasFallbackProducts =
+        upgradeOptionsRes.success &&
+        upgradeOptionsRes.data != null &&
+        upgradeOptionsRes.data!.isNotEmpty;
+    final loadedSuccessfully = hasStoreProducts || hasFallbackProducts;
 
     setState(() {
       _isLoading = false;
       if (hasStoreProducts) {
         _store = storeRes.data;
-      } else if (upgradeOptionsRes.success &&
-          upgradeOptionsRes.data != null &&
-          upgradeOptionsRes.data!.isNotEmpty) {
+      } else if (hasFallbackProducts) {
         _store = EbookStoreData.fromUpgradeAddOnOptions(
           upgradeOptionsRes.data!,
           storeRes.data?.userAccess ??
@@ -79,15 +80,20 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         );
       }
     });
+
+    if (showFeedback && mounted) {
+      ErrorHandler.showSnackBar(
+        loadedSuccessfully
+            ? 'Resources refreshed.'
+            : (_error ?? 'Failed to refresh resources.'),
+        isError: !loadedSuccessfully,
+        context: context,
+      );
+    }
   }
 
   Future<void> _triggerRefreshFromButton() async {
-    final refreshState = _refreshIndicatorKey.currentState;
-    if (refreshState != null) {
-      await refreshState.show();
-      return;
-    }
-    await _loadData();
+    await _loadData(showFeedback: true);
   }
 
   bool _storeHasProducts(EbookStoreData store) {
@@ -193,8 +199,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                     .toList(growable: false));
 
     return RefreshIndicator(
-      key: _refreshIndicatorKey,
-      onRefresh: _loadData,
+      onRefresh: () => _loadData(),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 6, 20, 120),
@@ -225,7 +230,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                       ),
                       const SizedBox(height: 14),
                       ElevatedButton(
-                        onPressed: _loadData,
+                        onPressed: () => _loadData(showFeedback: true),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2D4F88),
                           foregroundColor: Colors.white,

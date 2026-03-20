@@ -5,13 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../controllers/user_controller.dart';
 import '../../core/error/error_handler.dart';
+import '../../models/api_response.dart';
 import '../../models/exam_model.dart';
 import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
 import '../../models/referral_model.dart';
 import '../../services/api_service.dart';
 import '../../services/exam_service.dart';
-import '../../services/referral_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
@@ -28,6 +28,7 @@ class SubscribeScreen extends StatefulWidget {
 class _SubscribeScreenState extends State<SubscribeScreen> {
   final ExamService _examService = ExamService();
   final ApiService _apiService = ApiService();
+  final StorageService _storageService = StorageService();
   late final UserController _userController;
   bool _isPaymentLoading = false;
 
@@ -97,23 +98,31 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return (addonFinalPrice ?? 0) <= 0 || totalAmount <= baseAmount;
   }
 
-  Future<ReferralPublicCode?> _loadPendingUpgradeReferralOffer() async {
-    final storageService = StorageService();
-    final referralCode = await storageService.getString(
-      AppConstants.pendingReferralCodeKey,
-    );
-    final trimmedReferralCode = referralCode?.trim() ?? '';
-    if (trimmedReferralCode.isEmpty) return null;
+  Future<bool> _ensureCheckoutSession() async {
+    final hasValidSession = await _storageService.hasValidSessionArtifacts();
+    if (hasValidSession) return true;
+    if (!mounted) return false;
 
-    final response = await ReferralService().getPublicReferralCode(
-      trimmedReferralCode,
+    ErrorHandler.showSnackBar(
+      'Session expired. Please sign in again.',
+      isError: true,
+      context: context,
     );
-    if (response.success && response.data != null) {
-      return response.data;
-    }
+    context.go('/login');
+    return false;
+  }
 
-    await storageService.remove(AppConstants.pendingReferralCodeKey);
-    return null;
+  bool _handleCheckoutUnauthorized<T>(ApiResponse<T> response) {
+    if (response.statusCode != 401) return false;
+    if (!mounted) return true;
+
+    ErrorHandler.showSnackBar(
+      'Session expired. Please sign in again.',
+      isError: true,
+      context: context,
+    );
+    context.go('/login');
+    return true;
   }
 
   @override
@@ -344,8 +353,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     required bool showReferralDiscount,
   }) async {
     final options = professionalPlan?.prePurchaseAddOnOptions ?? const [];
-    final referralOffer = showReferralDiscount
-        ? await _loadPendingUpgradeReferralOffer()
+    final referralOffer =
+        showReferralDiscount && (professionalPlan?.referralEligible ?? false)
+        ? professionalPlan?.referralOffer
         : null;
     if (options.isEmpty) {
       return const _UpgradeCheckoutSelection(
@@ -379,6 +389,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     String? addonProductId,
     String? addonProductCode,
   }) async {
+    if (!await _ensureCheckoutSession()) return;
+
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
@@ -392,6 +404,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
+        if (_handleCheckoutUnauthorized(createRes)) return;
         ErrorHandler.showFromResponse(
           createRes,
           context: context,
@@ -452,7 +465,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
-        await StorageService().remove(AppConstants.pendingReferralCodeKey);
+        await _storageService.remove(AppConstants.pendingReferralCodeKey);
         await _userController.applyProfessionalUpgrade(examId: examId);
         await _userController.refreshProfile();
         await _loadProfessionalPlan();
@@ -469,6 +482,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           },
         );
       } else {
+        if (_handleCheckoutUnauthorized(confirmRes)) return;
         ErrorHandler.showFromResponse(
           confirmRes,
           context: context,
@@ -499,6 +513,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     String? addonProductId,
     String? addonProductCode,
   }) async {
+    if (!await _ensureCheckoutSession()) return;
+
     final examId = exam.id;
     setState(() => _isPaymentLoading = true);
 
@@ -511,6 +527,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
         setState(() => _isPaymentLoading = false);
+        if (_handleCheckoutUnauthorized(createRes)) return;
         ErrorHandler.showFromResponse(
           createRes,
           context: context,
@@ -611,6 +628,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           },
         );
       } else {
+        if (_handleCheckoutUnauthorized(confirmRes)) return;
         ErrorHandler.showFromResponse(
           confirmRes,
           context: context,

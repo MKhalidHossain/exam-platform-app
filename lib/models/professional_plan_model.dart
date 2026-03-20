@@ -3,6 +3,8 @@
 ///   "message": "...",
 ///   "data": { "plan": { ... }, "subscription": { ... } }
 /// }
+import 'referral_model.dart';
+
 class ProfessionalPlanModel {
   final String id;
   final String name;
@@ -12,6 +14,8 @@ class ProfessionalPlanModel {
   final PlanInterval interval;
   final String? description;
   final List<String> features;
+  final bool referralEligible;
+  final ReferralPublicCode? referralOffer;
   final List<PlanAddOnOption> prePurchaseAddOnOptions;
   final PlanSubscription? subscription;
 
@@ -24,6 +28,8 @@ class ProfessionalPlanModel {
     required this.interval,
     this.description,
     this.features = const [],
+    this.referralEligible = false,
+    this.referralOffer,
     this.prePurchaseAddOnOptions = const [],
     this.subscription,
   });
@@ -66,6 +72,15 @@ class ProfessionalPlanModel {
               .map((e) => PlanAddOnOption.fromJson(_asMap(e)))
               .toList(growable: false)
         : const <PlanAddOnOption>[];
+    final referralOfferRaw = planJson['referralOffer'];
+    final ReferralPublicCode? referralOffer =
+        referralOfferRaw is Map<String, dynamic>
+        ? ReferralPublicCode.fromJson(referralOfferRaw)
+        : (referralOfferRaw is Map
+              ? ReferralPublicCode.fromJson(
+                  Map<String, dynamic>.from(referralOfferRaw),
+                )
+              : null);
 
     return ProfessionalPlanModel(
       id: planJson['id'] as String? ?? 'professional',
@@ -86,6 +101,10 @@ class ProfessionalPlanModel {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      referralEligible:
+          _parseBool(planJson['referralEligible']) ||
+          (referralOffer?.discountPercent ?? 0) > 0,
+      referralOffer: referralOffer,
       prePurchaseAddOnOptions: addOnOptions,
       subscription: subscriptionJson != null
           ? PlanSubscription.fromJson(subscriptionJson)
@@ -102,6 +121,14 @@ class ProfessionalPlanModel {
     if (value == null) return null;
     if (value is num) return value;
     return num.tryParse(value.toString());
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final normalized = value.toString().trim().toLowerCase();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
   }
 
   static String _formatMoney(num amount, String currency) {
