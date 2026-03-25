@@ -340,6 +340,32 @@ class EbookPurchasedContent {
   }
 }
 
+class EbookResourcePreview {
+  final String id;
+  final String code;
+  final String title;
+  final String previewContent;
+  final String previewUrl;
+
+  const EbookResourcePreview({
+    required this.id,
+    required this.code,
+    required this.title,
+    required this.previewContent,
+    required this.previewUrl,
+  });
+
+  factory EbookResourcePreview.fromJson(Map<String, dynamic> json) {
+    return EbookResourcePreview(
+      id: _asString(json['id']),
+      code: _asString(json['code']),
+      title: _asString(json['title']),
+      previewContent: _asString(json['previewContent']),
+      previewUrl: _asString(json['previewUrl']),
+    );
+  }
+}
+
 Map<String, dynamic> _asMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);

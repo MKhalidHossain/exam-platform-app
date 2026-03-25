@@ -27,6 +27,15 @@ class EbookService {
     );
   }
 
+  Future<ApiResponse<EbookResourcePreview>> getResourcePreview({
+    required String productId,
+  }) {
+    return _apiService.get<EbookResourcePreview>(
+      ApiEndpoints.resourcePreview(productId),
+      fromJson: (json) => EbookResourcePreview.fromJson(_asMap(json)),
+    );
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> createStripePaymentIntent({
     required String productId,
   }) {

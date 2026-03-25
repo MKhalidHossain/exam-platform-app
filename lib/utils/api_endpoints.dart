@@ -46,6 +46,8 @@ class ApiEndpoints {
   static const String resourceStore = '$resources/store';
   static const String resourceUpgradeAddonOptions =
       '$resources/upgrade-addon-options';
+  static String resourcePreview(String productId) =>
+      '$resources/products/$productId/preview';
   static String resourcePurchasedContent(String productId) =>
       '$resources/products/$productId/content';
   static const String resourcePurchaseStripeCreate =

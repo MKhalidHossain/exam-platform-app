@@ -151,7 +151,26 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Future<void> _openPreview(EbookProduct product) async {
-    final url = product.previewUrl.trim();
+    final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
+    if (isUnlocked) {
+      await _openReader(product);
+      return;
+    }
+
+    var previewTitle = product.previewTitle.trim();
+    var previewContent = product.previewContent.trim();
+    var previewUrl = product.previewUrl.trim();
+
+    final previewRes = await _ebookService.getResourcePreview(productId: product.id);
+    if (!mounted) return;
+
+    if (previewRes.success && previewRes.data != null) {
+      previewTitle = previewRes.data!.title.trim();
+      previewContent = previewRes.data!.previewContent.trim();
+      previewUrl = previewRes.data!.previewUrl.trim();
+    }
+
+    final url = previewUrl;
     if (url.isNotEmpty) {
       final uri = Uri.tryParse(url);
       if (uri == null) {
@@ -162,16 +181,39 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         );
         return;
       }
+
+      if (_looksLikePdfUrl(uri)) {
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => EbookPdfViewerScreen(
+              title: previewTitle.isNotEmpty ? previewTitle : product.title,
+              pdfUrl: url,
+              isPreview: true,
+            ),
+          ),
+        );
+        return;
+      }
+
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return;
     }
 
-    if (product.previewContent.trim().isEmpty) {
-      ErrorHandler.showSnackBar(
-        'Preview is not available.',
-        isError: true,
-        context: context,
-      );
+    if (previewContent.isEmpty) {
+      if (!previewRes.success) {
+        ErrorHandler.showFromResponse(
+          previewRes,
+          context: context,
+          failureFallback: 'Preview is not available.',
+        );
+      } else {
+        ErrorHandler.showSnackBar(
+          'Preview is not available.',
+          isError: true,
+          context: context,
+        );
+      }
       return;
     }
 
@@ -188,9 +230,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  product.previewTitle.trim().isNotEmpty
-                      ? product.previewTitle
-                      : 'Preview',
+                  previewTitle.isNotEmpty ? previewTitle : 'Preview',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -199,7 +239,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  product.previewContent,
+                  previewContent,
                   style: const TextStyle(height: 1.5, color: Color(0xFF334155)),
                 ),
               ],
@@ -245,6 +285,11 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
             EbookPdfViewerScreen(title: product.title, pdfUrl: contentUrl),
       ),
     );
+  }
+
+  bool _looksLikePdfUrl(Uri uri) {
+    final path = uri.path.trim().toLowerCase();
+    return path.endsWith('.pdf') || path.contains('.pdf/');
   }
 
   Future<bool?> _showCheckoutSheet(EbookProduct product) async {
