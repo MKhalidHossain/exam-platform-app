@@ -33,15 +33,13 @@ class HistoryListView extends StatelessWidget {
         final double scale = (width / 375).clamp(0.85, 1.15);
         final double hPad = 16 * scale;
         final double titleSize = 16 * scale;
-        final double subtitleSize = 13 * scale;
+        final double subtitleSize = 11 * scale;
         final double headerSize = 11 * scale;
         final double rowTitleSize = 11 * scale;
         final double rowDateSize = 10 * scale;
         final double rowScoreSize = 11 * scale;
         final double topPad = 8 * scale;
         final double bottomPad = 12 * scale;
-        final double headerContentWidth = (width - (2 * hPad)).clamp(0.0, width);
-        final double filterMaxWidth = headerContentWidth * 0.55;
 
         final List<String> options = filterOptions.isNotEmpty
             ? filterOptions
@@ -63,7 +61,7 @@ class HistoryListView extends StatelessWidget {
                   ),
                   //
                   Text(
-                    'History',
+                    'Your Inspection Skills',
                     style: TextStyle(
                       fontSize: titleSize,
                       fontWeight: FontWeight.w700,
@@ -86,7 +84,8 @@ class HistoryListView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Consolidated Quiz History',
+                          // 'Consolidated Quiz History',
+                          'Go beyond practice. Master real inspection and reporting',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
