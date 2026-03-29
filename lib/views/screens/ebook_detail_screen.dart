@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
@@ -8,6 +7,7 @@ import '../../services/ebook_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
+import '../widgets/animated_refresh_button.dart';
 import '../widgets/gradient_background.dart';
 import 'ebook_pdf_viewer_screen.dart';
 
@@ -161,7 +161,9 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     var previewContent = product.previewContent.trim();
     var previewUrl = product.previewUrl.trim();
 
-    final previewRes = await _ebookService.getResourcePreview(productId: product.id);
+    final previewRes = await _ebookService.getResourcePreview(
+      productId: product.id,
+    );
     if (!mounted) return;
 
     if (previewRes.success && previewRes.data != null) {
@@ -182,21 +184,17 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         return;
       }
 
-      if (_looksLikePdfUrl(uri)) {
-        if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => EbookPdfViewerScreen(
-              title: previewTitle.isNotEmpty ? previewTitle : product.title,
-              pdfUrl: url,
-              isPreview: true,
-            ),
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => EbookPdfViewerScreen(
+            title: previewTitle.isNotEmpty ? previewTitle : product.title,
+            pdfUrl: uri.toString(),
+            isPreview: true,
+            onUnlockRequested: () => _startCheckout(product),
           ),
-        );
-        return;
-      }
-
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+        ),
+      );
       return;
     }
 
@@ -217,36 +215,10 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       return;
     }
 
-    await showModalBottomSheet<void>(
+    ErrorHandler.showSnackBar(
+      'Preview PDF is not available for this resource.',
+      isError: true,
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFF8FAFF),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  previewTitle.isNotEmpty ? previewTitle : 'Preview',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF10213F),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  previewContent,
-                  style: const TextStyle(height: 1.5, color: Color(0xFF334155)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -285,11 +257,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
             EbookPdfViewerScreen(title: product.title, pdfUrl: contentUrl),
       ),
     );
-  }
-
-  bool _looksLikePdfUrl(Uri uri) {
-    final path = uri.path.trim().toLowerCase();
-    return path.endsWith('.pdf') || path.contains('.pdf/');
   }
 
   Future<bool?> _showCheckoutSheet(EbookProduct product) async {
@@ -490,15 +457,55 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       body: GradientBackground(
         useImage: true,
         child: SafeArea(
-          child: _isLoading
-              ? _buildLoading()
-              : _error != null
-              ? _buildError()
-              : product == null
-              ? _buildError(message: 'Unable to load resource.')
-              : _buildBody(product),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: _buildHeader(),
+              ),
+              Expanded(
+                child: _isLoading
+                    ? _buildLoading()
+                    : _error != null
+                    ? _buildError()
+                    : product == null
+                    ? _buildError(message: 'Unable to load resource.')
+                    : _buildBody(product),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          color: const Color(0xFF10213F),
+        ),
+        const Expanded(
+          child: Text(
+            'Resource Details',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF10213F),
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        AnimatedRefreshButton(
+          onPressed: _loadData,
+          tooltip: 'Refresh resource details',
+          backgroundColor: const Color(0xFFF8FAFC),
+          borderColor: const Color(0x1F10213F),
+          shadowColor: const Color(0x1A10213F),
+        ),
+      ],
     );
   }
 
@@ -507,12 +514,19 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
       onRefresh: _loadData,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
-        children: const [
-          Padding(
-            padding: EdgeInsets.only(top: 170),
-            child: Center(child: AppShimmerCircle(size: 42)),
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
+        children: [
+          _buildLoadingHeroCard(),
+          const SizedBox(height: 18),
+          _buildLoadingSectionCard(
+            lineWidths: const [220, double.infinity, 240],
           ),
+          const SizedBox(height: 16),
+          _buildLoadingSectionCard(
+            lineWidths: const [180, double.infinity, double.infinity, 210],
+          ),
+          const SizedBox(height: 16),
+          _buildLoadingActionsCard(),
         ],
       ),
     );
@@ -560,6 +574,120 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     );
   }
 
+  Widget _buildLoadingHeroCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF10213F), Color(0xFF1C3867), Color(0xFF355B97)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(34),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x332D4F88),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          AppShimmerBox(height: 190, radius: 24),
+          SizedBox(height: 14),
+          Row(
+            children: [
+              AppShimmerBox(width: 108, height: 32, radius: 999),
+              SizedBox(width: 8),
+              AppShimmerBox(width: 96, height: 32, radius: 999),
+              Spacer(),
+              AppShimmerBox(width: 56, height: 30, radius: 999),
+            ],
+          ),
+          SizedBox(height: 14),
+          AppShimmerBox(width: double.infinity, height: 24, radius: 8),
+          SizedBox(height: 8),
+          AppShimmerBox(width: 220, height: 24, radius: 8),
+          SizedBox(height: 10),
+          AppShimmerBox(width: double.infinity, height: 14, radius: 6),
+          SizedBox(height: 8),
+          AppShimmerBox(width: 250, height: 14, radius: 6),
+          SizedBox(height: 14),
+          AppShimmerBox(width: double.infinity, height: 70, radius: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingSectionCard({required List<double> lineWidths}) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x142D4F88),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppShimmerBox(width: 170, height: 24, radius: 8),
+          const SizedBox(height: 18),
+          ...lineWidths.asMap().entries.map(
+            (entry) => Padding(
+              padding: EdgeInsets.only(
+                bottom: entry.key == lineWidths.length - 1 ? 0 : 10,
+              ),
+              child: AppShimmerBox(
+                width: entry.value == double.infinity
+                    ? double.infinity
+                    : entry.value,
+                height: 14,
+                radius: 6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingActionsCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x142D4F88),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppShimmerBox(width: 180, height: 24, radius: 8),
+          SizedBox(height: 18),
+          AppShimmerBox(width: double.infinity, height: 52, radius: 20),
+          SizedBox(height: 12),
+          AppShimmerBox(width: double.infinity, height: 52, radius: 18),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody(EbookProduct product) {
     final isUnlocked = product.unlocked || product.contentUrl.trim().isNotEmpty;
     final bundledProducts = product.isBundle
@@ -577,32 +705,6 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                color: const Color(0xFF10213F),
-              ),
-              const Expanded(
-                child: Text(
-                  'Resource Details',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xFF10213F),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: _loadData,
-                icon: const Icon(Icons.refresh_rounded),
-                color: const Color(0xFF10213F),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
@@ -627,6 +729,8 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _buildHeroCover(product),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -651,155 +755,35 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0x1FFFFFFF),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        product.pricing.currency,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+                    const SizedBox(width: 10),
+                    _heroCurrencyBadge(product.pricing.currency),
                   ],
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 132,
-                      height: 176,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(26),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x40000F2E),
-                            blurRadius: 20,
-                            offset: Offset(0, 14),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(26),
-                        child: product.coverImageUrl.trim().isEmpty
-                            ? Container(
-                                color: const Color(0xFFE2E8F0),
-                                child: const Icon(
-                                  Icons.menu_book_rounded,
-                                  size: 52,
-                                  color: Color(0xFF64748B),
-                                ),
-                              )
-                            : Image.network(
-                                product.coverImageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
-                                  color: const Color(0xFFE2E8F0),
-                                  child: const Icon(
-                                    Icons.menu_book_rounded,
-                                    size: 52,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
-                              height: 1.08,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            product.shortDescription.trim().isNotEmpty
-                                ? product.shortDescription
-                                : 'Professional resource from the EJ store.',
-                            style: const TextStyle(
-                              color: Color(0xFFD9E5FF),
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0x14FFFFFF),
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: const Color(0x1FFFFFFF),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Today\'s price',
-                                  style: TextStyle(
-                                    color: Color(0xFFD9E5FF),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      _currencyText(
-                                        product.pricing.current,
-                                        product.pricing.currency,
-                                      ),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    if (product.pricing.original >
-                                        product.pricing.current)
-                                      Text(
-                                        _currencyText(
-                                          product.pricing.original,
-                                          product.pricing.currency,
-                                        ),
-                                        style: const TextStyle(
-                                          color: Color(0xFFB8C7E6),
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          decoration:
-                                              TextDecoration.lineThrough,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 14),
+                Text(
+                  product.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  product.shortDescription.trim().isNotEmpty
+                      ? product.shortDescription
+                      : 'Professional resource from the EJ store.',
+                  style: const TextStyle(
+                    color: Color(0xFFD9E5FF),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 14),
+                _buildHeroPriceCard(product, isUnlocked: isUnlocked),
               ],
             ),
           ),
@@ -955,8 +939,15 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _openPreview(product),
-                          icon: const Icon(Icons.visibility_outlined, size: 18),
-                          label: const Text('Preview'),
+                          icon: Icon(
+                            isUnlocked
+                                ? Icons.download_rounded
+                                : Icons.visibility_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            isUnlocked ? 'Open & Download' : 'Preview 5 Pages',
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF2D4F88),
                             side: const BorderSide(color: Color(0xFFD8E3F5)),
@@ -1084,8 +1075,15 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       const SizedBox(width: 10),
                       OutlinedButton.icon(
                         onPressed: () => _openPreview(product),
-                        icon: const Icon(Icons.visibility_outlined, size: 17),
-                        label: const Text('Preview'),
+                        icon: Icon(
+                          isUnlocked
+                              ? Icons.download_rounded
+                              : Icons.visibility_outlined,
+                          size: 17,
+                        ),
+                        label: Text(
+                          isUnlocked ? 'Open & Download' : 'Preview 5 Pages',
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF2D4F88),
                           side: const BorderSide(color: Color(0xFFD8E3F5)),
@@ -1107,6 +1105,175 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroCover(EbookProduct product) {
+    return Container(
+      width: double.infinity,
+      height: 190,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0x2EFFFFFF), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000F2E),
+            blurRadius: 22,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: product.coverImageUrl.trim().isNotEmpty
+            ? Image.network(
+                product.coverImageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _heroCoverFallback(),
+              )
+            : _heroCoverFallback(),
+      ),
+    );
+  }
+
+  Widget _heroCoverFallback() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.menu_book_rounded,
+          size: 58,
+          color: Color(0xFF64748B),
+        ),
+      ),
+    );
+  }
+
+  Widget _heroCurrencyBadge(String currency) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0x1FFFFFFF),
+        border: Border.all(color: const Color(0x22FFFFFF)),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        currency,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroPriceCard(EbookProduct product, {required bool isUnlocked}) {
+    final currentPrice = _currencyText(
+      product.pricing.current,
+      product.pricing.currency,
+    );
+    final originalPrice = _currencyText(
+      product.pricing.original,
+      product.pricing.currency,
+    );
+    final hasDiscount = product.pricing.original > product.pricing.current;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0x16FFFFFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0x24FFFFFF)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Today\'s price',
+                  style: TextStyle(
+                    color: Color(0xFFD9E5FF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isUnlocked
+                      ? 'Already unlocked for your account'
+                      : 'One-time purchase with instant access',
+                  style: const TextStyle(
+                    color: Color(0xFFB8C7E6),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (hasDiscount)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AF59E0B),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Offer',
+                    style: TextStyle(
+                      color: Color(0xFFFFE0A3),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              Text(
+                currentPrice,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+              if (hasDiscount)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    originalPrice,
+                    style: const TextStyle(
+                      color: Color(0xFFB8C7E6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

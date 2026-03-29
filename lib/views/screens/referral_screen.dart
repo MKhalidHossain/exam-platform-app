@@ -7,6 +7,7 @@ import '../../models/referral_model.dart';
 import '../../services/referral_service.dart';
 import '../../utils/referral_share_message.dart';
 import '../widgets/app_shimmer.dart';
+import '../widgets/animated_refresh_button.dart';
 import '../widgets/gradient_background.dart';
 
 class ReferralScreen extends StatefulWidget {
@@ -226,10 +227,12 @@ class _ReferralScreenState extends State<ReferralScreen> {
                           icon: const Icon(Icons.share_outlined),
                           color: const Color(0xFF10213F),
                         ),
-                        IconButton(
+                        AnimatedRefreshButton(
                           onPressed: _loadAll,
-                          icon: const Icon(Icons.refresh_rounded),
-                          color: const Color(0xFF10213F),
+                          tooltip: 'Refresh referral data',
+                          backgroundColor: const Color(0xFFF8FAFC),
+                          borderColor: const Color(0x1F10213F),
+                          shadowColor: const Color(0x1A10213F),
                         ),
                       ],
                     ),
@@ -245,33 +248,61 @@ class _ReferralScreenState extends State<ReferralScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading && _profile == null) {
-      return const Center(child: AppShimmerCircle(size: 40));
+    if (_isLoading) {
+      return RefreshIndicator(
+        onRefresh: _loadAll,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+          children: [
+            _buildLoadingHero(),
+            const SizedBox(height: 16),
+            _buildLoadingActionBar(),
+            const SizedBox(height: 18),
+            _buildLoadingSection('Referred Buyers', cards: 2),
+            const SizedBox(height: 18),
+            _buildLoadingSection('Reward Ledger', cards: 2),
+            const SizedBox(height: 18),
+            _buildLoadingSection('Payout Requests', cards: 1),
+            const SizedBox(height: 18),
+            _buildLoadingSection('Credit Conversions', cards: 1),
+          ],
+        ),
+      );
     }
 
     if (_error != null && _profile == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFB91C1C)),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: _loadAll,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2D4F88),
-                  foregroundColor: Colors.white,
+      return RefreshIndicator(
+        onRefresh: _loadAll,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 80, 18, 28),
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFFB91C1C)),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _loadAll,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D4F88),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
-                child: const Text('Retry'),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -314,6 +345,85 @@ class _ReferralScreenState extends State<ReferralScreen> {
           _buildConversionLedger(ledger?.conversions ?? const []),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingHero() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF173B2E), Color(0xFF245B47), Color(0xFF4C9A7D)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x332D4F88),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppShimmerBox(width: 120, height: 14, radius: 6),
+          SizedBox(height: 10),
+          AppShimmerBox(width: 170, height: 30, radius: 8),
+          SizedBox(height: 10),
+          AppShimmerBox(width: double.infinity, height: 14, radius: 6),
+          SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(child: AppShimmerBox(height: 56, radius: 18)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 56, radius: 18)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 56, radius: 18)),
+            ],
+          ),
+          SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: AppShimmerBox(height: 38, radius: 12)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 38, radius: 12)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 38, radius: 12)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingActionBar() {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: List.generate(
+        4,
+        (_) => const AppShimmerBox(width: 120, height: 44, radius: 16),
+      ),
+    );
+  }
+
+  Widget _buildLoadingSection(String title, {required int cards}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(title),
+        const SizedBox(height: 10),
+        ...List.generate(
+          cards,
+          (_) => const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: _ReferralLoadingCard(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -872,5 +982,45 @@ class _ReferralScreenState extends State<ReferralScreen> {
       'Dec',
     ];
     return months[(month - 1).clamp(0, 11)];
+  }
+}
+
+class _ReferralLoadingCard extends StatelessWidget {
+  const _ReferralLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFDCE7F7)),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: AppShimmerBox(width: 140, height: 18, radius: 6)),
+              SizedBox(width: 12),
+              AppShimmerBox(width: 72, height: 26, radius: 999),
+            ],
+          ),
+          SizedBox(height: 10),
+          AppShimmerBox(width: 170, height: 12, radius: 6),
+          SizedBox(height: 8),
+          AppShimmerBox(width: 210, height: 12, radius: 6),
+          SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: AppShimmerBox(height: 44, radius: 14)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 44, radius: 14)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

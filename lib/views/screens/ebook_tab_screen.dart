@@ -5,6 +5,7 @@ import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
 import '../../services/ebook_service.dart';
 import '../widgets/app_shimmer.dart';
+import '../widgets/animated_refresh_button.dart';
 import '../widgets/gradient_background.dart';
 
 class EbookTabScreen extends StatefulWidget {
@@ -165,10 +166,12 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                         ],
                       ),
                     ),
-                    IconButton(
+                    AnimatedRefreshButton(
                       onPressed: _triggerRefreshFromButton,
-                      icon: const Icon(Icons.refresh_rounded),
-                      color: const Color(0xFF10213F),
+                      tooltip: 'Refresh resources',
+                      backgroundColor: const Color(0xFFF8FAFC),
+                      borderColor: const Color(0x1F10213F),
+                      shadowColor: const Color(0x1A10213F),
                     ),
                   ],
                 ),
@@ -204,14 +207,11 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 6, 20, 120),
         children: [
-          _buildHeroSection(store),
-          const SizedBox(height: 20),
-          if (_isLoading && store == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 60),
-              child: Center(child: AppShimmerCircle(size: 42)),
-            )
-          else if (_error != null && store == null)
+          if (_isLoading) ...[
+            _buildLoadingHeroSection(),
+            const SizedBox(height: 20),
+            _buildLoadingCategorySection(),
+          ] else if (_error != null && store == null)
             Padding(
               padding: const EdgeInsets.only(top: 30),
               child: Center(
@@ -243,6 +243,8 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
               ),
             )
           else if (store != null) ...[
+            _buildHeroSection(store),
+            const SizedBox(height: 20),
             _buildCategorySelector(allCategories),
             const SizedBox(height: 18),
             if (categories.isEmpty)
@@ -252,6 +254,79 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingHeroSection() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF173B2E), Color(0xFF245B47), Color(0xFF4C9A7D)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x332D4F88),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: AppShimmerBox(height: 54, radius: 18)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 54, radius: 18)),
+              SizedBox(width: 8),
+              Expanded(child: AppShimmerBox(height: 54, radius: 18)),
+            ],
+          ),
+          SizedBox(height: 18),
+          AppShimmerBox(width: 230, height: 26, radius: 8),
+          SizedBox(height: 10),
+          AppShimmerBox(width: double.infinity, height: 14, radius: 6),
+          SizedBox(height: 8),
+          AppShimmerBox(width: 250, height: 14, radius: 6),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingCategorySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppShimmerBox(width: 180, height: 20, radius: 8),
+        const SizedBox(height: 8),
+        const AppShimmerBox(width: 260, height: 14, radius: 6),
+        const SizedBox(height: 12),
+        const SizedBox(
+          height: 42,
+          child: Row(
+            children: [
+              AppShimmerBox(width: 72, height: 42, radius: 999),
+              SizedBox(width: 8),
+              AppShimmerBox(width: 92, height: 42, radius: 999),
+              SizedBox(width: 8),
+              AppShimmerBox(width: 108, height: 42, radius: 999),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        ...List.generate(
+          4,
+          (_) => const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: _EbookTabLoadingCard(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -608,6 +683,42 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EbookTabLoadingCard extends StatelessWidget {
+  const _EbookTabLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFD9D9E3), width: 1),
+      ),
+      child: const Row(
+        children: [
+          AppShimmerBox(width: 56, height: 56, radius: 12),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppShimmerBox(width: 150, height: 16, radius: 6),
+                SizedBox(height: 8),
+                AppShimmerBox(width: double.infinity, height: 12, radius: 6),
+                SizedBox(height: 6),
+                AppShimmerBox(width: 170, height: 12, radius: 6),
+              ],
+            ),
+          ),
+          SizedBox(width: 8),
+          AppShimmerBox(width: 56, height: 40, radius: 14),
         ],
       ),
     );

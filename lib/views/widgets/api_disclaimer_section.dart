@@ -25,12 +25,18 @@ class ApiDisclaimerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-
-          Text("Upgrade Your Inspection Skills",style: TextStyle(fontSize: 14,fontWeight: FontWeight.w700,),),
-             SizedBox(height: 10),
-          Text("Go beyond practice. Master real inspection and reporting."),
+          Text(
+            "Upgrade Your Inspection Skills",
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: 10),
+          Text(
+            "Go beyond practice. Master real inspection and reporting.",
+            textAlign: TextAlign.center,
+          ),
           SizedBox(height: 10),
           Text.rich(
             TextSpan(

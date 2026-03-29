@@ -169,10 +169,7 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
         children: [
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 170),
-              child: Center(child: AppShimmerCircle(size: 42)),
-            )
+            ..._buildLoadingContent()
           else if (_error != null || _category == null)
             Padding(
               padding: const EdgeInsets.only(top: 120),
@@ -276,6 +273,40 @@ class _EbookCategoryScreenState extends State<EbookCategoryScreen> {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildLoadingContent() {
+    return [
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF10213F), Color(0xFF2D4F88)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppShimmerBox(width: 82, height: 26, radius: 999),
+            SizedBox(height: 12),
+            AppShimmerBox(width: 220, height: 26, radius: 8),
+            SizedBox(height: 10),
+            AppShimmerBox(width: double.infinity, height: 14, radius: 6),
+            SizedBox(height: 8),
+            AppShimmerBox(width: 250, height: 14, radius: 6),
+          ],
+        ),
+      ),
+      const SizedBox(height: 18),
+      const _EbookCategoryLoadingCard(),
+      const SizedBox(height: 12),
+      const _EbookCategoryLoadingCard(),
+      const SizedBox(height: 12),
+      const _EbookCategoryLoadingCard(),
+    ];
   }
 
   Widget _buildProductCard(EbookProduct product) {
@@ -445,6 +476,42 @@ class _StatusDot extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 14),
+    );
+  }
+}
+
+class _EbookCategoryLoadingCard extends StatelessWidget {
+  const _EbookCategoryLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFD9D9E3), width: 1),
+      ),
+      child: const Row(
+        children: [
+          AppShimmerBox(width: 72, height: 92, radius: 16),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppShimmerBox(width: 160, height: 18, radius: 6),
+                SizedBox(height: 8),
+                AppShimmerBox(width: double.infinity, height: 12, radius: 6),
+                SizedBox(height: 6),
+                AppShimmerBox(width: 190, height: 12, radius: 6),
+                SizedBox(height: 12),
+                AppShimmerBox(width: 120, height: 28, radius: 999),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
