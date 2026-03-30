@@ -1,4 +1,4 @@
-package com.ej.khalid
+package com.khalid.inspectorspath
 
 import android.Manifest
 import android.content.ContentValues
@@ -26,7 +26,7 @@ import java.net.URL
 
 class MainActivity : FlutterFragmentActivity() {
     private val logTag = "PdfDownload"
-    private val downloadChannelName = "com.ej.khalid/downloads"
+    private val downloadChannelName = "com.khalid.inspectorspath/downloads"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingDownloadUrl: String? = null
     private var pendingDownloadFileName: String? = null
