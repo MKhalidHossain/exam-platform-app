@@ -1,18 +1,13 @@
-// Conditional import: dart:io on mobile/desktop, stub on web
-import 'app_constants_stub.dart'
-    if (dart.library.io) 'app_constants_io.dart'
-    as app_platform;
-
 class AppConstants {
   // App Info
   static const String appName = 'EJ Flutter App';
   static const String appVersion = '1.0.0';
 
   // API Constants
-  // static const String apiOrigin = 'http://187.77.10.158:5001';
-  static const String apiOrigin = 'http://localhost:5001';
-  static final String baseUrl = app_platform.getBaseUrl('$apiOrigin/api/v1');
-  static final String publicBaseUrl = app_platform.getPublicBaseUrl(apiOrigin);
+  static const String apiOrigin = 'http://187.77.10.158:5001';
+  // static const String apiOrigin = 'http://localhost:5001';
+  static const String baseUrl = '$apiOrigin/api/v1';
+  static const String publicBaseUrl = apiOrigin;
   static const Duration apiTimeout = Duration(seconds: 30);
   // null = no timeout (wait indefinitely).
   static const Duration? examGenerationTimeout = null;
