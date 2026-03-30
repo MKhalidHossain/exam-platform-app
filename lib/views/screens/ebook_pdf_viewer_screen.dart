@@ -33,7 +33,7 @@ class EbookPdfViewerScreen extends StatefulWidget {
 
 class _EbookPdfViewerScreenState extends State<EbookPdfViewerScreen> {
   static const MethodChannel _downloadChannel = MethodChannel(
-    'com.ej.khalid/downloads',
+    'com.khalid.inspectorspath/downloads',
   );
   final PdfViewerController _pdfViewerController = PdfViewerController();
 
