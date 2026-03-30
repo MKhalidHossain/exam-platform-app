@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
 import '../../controllers/auth_controller.dart';
+import '../../services/storage_service.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
 import '../widgets/custom_text_field.dart';
@@ -26,6 +27,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   late final TextEditingController _referralCodeController;
   final AuthController _authController = Get.find<AuthController>();
+  final StorageService _storageService = StorageService();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
@@ -34,8 +36,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
   void initState() {
     super.initState();
     _referralCodeController = TextEditingController(
-      text: widget.initialReferralCode,
+      text: widget.initialReferralCode.trim().toUpperCase(),
     );
+    _bootstrapReferralCode();
+  }
+
+  Future<void> _bootstrapReferralCode() async {
+    final initialCode = widget.initialReferralCode.trim().toUpperCase();
+    if (initialCode.isNotEmpty) {
+      await _storageService.savePendingReferralCode(initialCode);
+      return;
+    }
+
+    final storedCode = await _storageService.getPendingReferralCode();
+    if (!mounted || storedCode == null || storedCode.isEmpty) return;
+    if (_referralCodeController.text.trim().isNotEmpty) return;
+
+    _referralCodeController.text = storedCode;
   }
 
   @override

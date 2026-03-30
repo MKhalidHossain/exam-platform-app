@@ -107,6 +107,25 @@ class StorageService {
     await prefs.remove(key);
   }
 
+  Future<void> savePendingReferralCode(String referralCode) async {
+    final normalizedCode = referralCode.trim().toUpperCase();
+    if (normalizedCode.isEmpty) {
+      await clearPendingReferralCode();
+      return;
+    }
+    await saveString(AppConstants.pendingReferralCodeKey, normalizedCode);
+  }
+
+  Future<String?> getPendingReferralCode() async {
+    final code = await getString(AppConstants.pendingReferralCodeKey);
+    final normalizedCode = code?.trim().toUpperCase() ?? '';
+    return normalizedCode.isEmpty ? null : normalizedCode;
+  }
+
+  Future<void> clearPendingReferralCode() async {
+    await remove(AppConstants.pendingReferralCodeKey);
+  }
+
   Future<void> saveStringList(String key, List<String> value) async {
     final prefs = await _prefs;
     await prefs.setStringList(key, value);

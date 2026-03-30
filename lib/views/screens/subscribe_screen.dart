@@ -13,7 +13,6 @@ import '../../models/referral_model.dart';
 import '../../services/api_service.dart';
 import '../../services/exam_service.dart';
 import '../../services/storage_service.dart';
-import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/unlock_exam_dialog.dart';
@@ -246,6 +245,16 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     }
 
     final List<Widget> children = [];
+    final referralOffer =
+        !isProfessionalActive && (professionalPlan?.referralEligible ?? false)
+        ? professionalPlan?.referralOffer
+        : null;
+
+    if (referralOffer != null) {
+      children.add(_buildReferralReadyBanner(referralOffer));
+      children.add(const SizedBox(height: 20));
+    }
+
     children.add(
       _buildPlanCard(
         planTier: PlanTier.starter,
@@ -295,6 +304,52 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
     children.add(const SizedBox(height: 32));
     return Column(children: children);
+  }
+
+  Widget _buildReferralReadyBanner(ReferralPublicCode referralOffer) {
+    final percentText =
+        referralOffer.discountPercent.truncateToDouble() ==
+            referralOffer.discountPercent
+        ? referralOffer.discountPercent.toStringAsFixed(0)
+        : referralOffer.discountPercent.toStringAsFixed(1);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF6D87A)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$percentText% referral discount ready',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF7C4A03),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Code ${referralOffer.referralCode} from ${referralOffer.referrerName} will be applied automatically when you buy your first Professional Plan.',
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: Color(0xFF92400E),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openUnlockExamDialog({
@@ -465,7 +520,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
-        await _storageService.remove(AppConstants.pendingReferralCodeKey);
+        await _storageService.clearPendingReferralCode();
         await _userController.applyProfessionalUpgrade(examId: examId);
         await _userController.refreshProfile();
         await _loadProfessionalPlan();

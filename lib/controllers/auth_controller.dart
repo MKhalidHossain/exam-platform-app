@@ -83,14 +83,21 @@ class AuthController extends GetxController {
   }) async {
     if (isLoading.value) return;
     isLoading.value = true;
+    final trimmedReferralCode = referralCode?.trim().toUpperCase() ?? '';
     try {
+      if (trimmedReferralCode.isNotEmpty) {
+        await _storageService.savePendingReferralCode(trimmedReferralCode);
+      } else {
+        await _storageService.clearPendingReferralCode();
+      }
+
       final response = await _apiService.register(
         phone: phone,
         name: name,
         email: email,
         password: password,
         confirmPassword: confirmPassword,
-        referralCode: referralCode,
+        referralCode: trimmedReferralCode,
       );
       if (!context.mounted) return;
 
@@ -103,7 +110,13 @@ class AuthController extends GetxController {
           isError: false,
           context: context,
         );
-        context.go('/login');
+        final loginRoute = trimmedReferralCode.isEmpty
+            ? '/login'
+            : Uri(
+                path: '/login',
+                queryParameters: {'ref': trimmedReferralCode},
+              ).toString();
+        context.go(loginRoute);
       } else {
         ErrorHandler.showFromResponse(
           response,
@@ -121,9 +134,7 @@ class AuthController extends GetxController {
   }
 
   Future<String> _resolvePostAuthRoute() async {
-    final referralCode = await _storageService.getString(
-      AppConstants.pendingReferralCodeKey,
-    );
+    final referralCode = await _storageService.getPendingReferralCode();
     final productId = await _storageService.getString(
       AppConstants.pendingReferralProductIdKey,
     );

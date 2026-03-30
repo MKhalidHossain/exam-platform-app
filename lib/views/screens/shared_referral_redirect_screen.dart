@@ -29,12 +29,9 @@ class _SharedReferralRedirectScreenState
     final referralCode = widget.referralCode.trim();
 
     if (referralCode.isNotEmpty) {
-      await _storageService.saveString(
-        AppConstants.pendingReferralCodeKey,
-        referralCode,
-      );
+      await _storageService.savePendingReferralCode(referralCode);
     } else {
-      await _storageService.remove(AppConstants.pendingReferralCodeKey);
+      await _storageService.clearPendingReferralCode();
     }
 
     await _storageService.remove(AppConstants.pendingReferralProductIdKey);

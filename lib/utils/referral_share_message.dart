@@ -3,24 +3,31 @@ import '../models/referral_model.dart';
 String buildReferralShareMessage(ReferralProfile profile) {
   final customMessage = profile.program?.shareMessage.trim() ?? '';
   final referralLink = profile.referralLink.trim();
-  if (customMessage.isNotEmpty && referralLink.isNotEmpty) {
-    return '$customMessage\n\n$referralLink';
-  }
-  if (customMessage.isNotEmpty) {
-    return customMessage;
-  }
+  final referralCode = profile.referralCode.trim();
+  final referralDiscountPercent =
+      profile.program?.newUserDiscountPercent ??
+      profile.program?.referrerCommissionPercent ??
+      10;
+
   if (referralLink.isEmpty) {
     return '';
   }
 
-  final referralCode = profile.referralCode.trim();
+  if (customMessage.isNotEmpty) {
+    return customMessage.contains(referralLink)
+        ? customMessage
+        : '$customMessage\n\n$referralLink';
+  }
+
   final codeLine = referralCode.isEmpty
-      ? ''
-      : 'Use my referral code $referralCode when you upgrade to the Professional Plan.';
+      ? 'Open the invite link and the referral will be attached automatically.'
+      : 'Your referral code will be applied automatically: $referralCode';
 
   return [
-    'Upgrade to the EJ Professional Plan and unlock full inspection exam access.',
+    'Join EJ exam prep with my referral link.',
+    'You will get $referralDiscountPercent% off your first Professional Plan purchase after you register.',
     if (codeLine.isNotEmpty) codeLine,
+    'If the app is not installed yet, install it first and then open the same invite again to complete signup with the referral attached.',
     referralLink,
   ].join('\n\n');
 }
