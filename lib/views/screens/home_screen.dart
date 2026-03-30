@@ -207,14 +207,27 @@ class HomeDashboard extends StatelessWidget {
     return num.tryParse(value.toString());
   }
 
+  num _roundCheckoutAmount(num value) {
+    return (value * 100).round() / 100;
+  }
+
+  String _normalizeAddonSelection(String? value) {
+    return value?.trim().toLowerCase() ?? '';
+  }
+
   bool _didServerMissSelectedAddon({
     required Map<String, dynamic> paymentData,
     required _ExamUnlockCheckoutSelection selection,
-    required num examOnlyAmount,
   }) {
+    final normalizedAddonProductId = _normalizeAddonSelection(
+      selection.addonProductId,
+    );
+    final normalizedAddonProductCode = _normalizeAddonSelection(
+      selection.addonProductCode,
+    );
     final hasAddonSelection =
-        (selection.addonProductId?.trim().isNotEmpty ?? false) ||
-        (selection.addonProductCode?.trim().isNotEmpty ?? false);
+        normalizedAddonProductId.isNotEmpty ||
+        normalizedAddonProductCode.isNotEmpty;
     if (!hasAddonSelection) return false;
 
     final breakdownRaw = paymentData['breakdown'];
@@ -224,13 +237,27 @@ class HomeDashboard extends StatelessWidget {
               ? Map<String, dynamic>.from(breakdownRaw)
               : const <String, dynamic>{});
 
+    final returnedAddonProductCode = _normalizeAddonSelection(
+      breakdown['addonProductCode']?.toString() ??
+          paymentData['addonProductCode']?.toString(),
+    );
     final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
-    final totalAmount =
+    final returnedTotalAmount =
         _parseCheckoutAmount(breakdown['totalAmount']) ??
         _parseCheckoutAmount(paymentData['amount']) ??
         0;
 
-    return (addonFinalPrice ?? 0) <= 0 || totalAmount <= examOnlyAmount;
+    final selectionMatched = normalizedAddonProductCode.isNotEmpty
+        ? returnedAddonProductCode == normalizedAddonProductCode
+        : returnedAddonProductCode.isNotEmpty;
+
+    if (!selectionMatched && (addonFinalPrice ?? 0) <= 0) {
+      return true;
+    }
+
+    if (selection.expectedTotalAmount == null) return false;
+    return _roundCheckoutAmount(returnedTotalAmount) !=
+        _roundCheckoutAmount(selection.expectedTotalAmount!);
   }
 
   Future<void> _unlockExam(BuildContext context, ExamModel exam) async {
@@ -322,11 +349,9 @@ class HomeDashboard extends StatelessWidget {
           ? amountFromApi.round()
           : int.tryParse(amountFromApi?.toString() ?? '') ??
                 (exam.unlockPrice?.round() ?? 150);
-      final examOnlyAmount = exam.unlockPrice ?? 150;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         selection: selection,
-        examOnlyAmount: examOnlyAmount,
       )) {
         ErrorHandler.showSnackBar(
           'The payment server returned exam-only pricing. Deploy the updated backend, then try again.',
@@ -417,6 +442,7 @@ class HomeDashboard extends StatelessWidget {
       return const _ExamUnlockCheckoutSelection(
         addonProductId: null,
         addonProductCode: null,
+        expectedTotalAmount: null,
       );
     }
 
@@ -1093,10 +1119,12 @@ class _EmptyState extends StatelessWidget {
 class _ExamUnlockCheckoutSelection {
   final String? addonProductId;
   final String? addonProductCode;
+  final num? expectedTotalAmount;
 
   const _ExamUnlockCheckoutSelection({
     required this.addonProductId,
     required this.addonProductCode,
+    required this.expectedTotalAmount,
   });
 }
 
@@ -1136,7 +1164,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
   @override
   Widget build(BuildContext context) {
     final selectedOption = _selectedOption;
-    final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
+    final num addonPrice = selectedOption?.effectiveUpgradePrice ?? 0;
     final num totalPrice = widget.examPrice + addonPrice;
 
     return Container(
@@ -1290,22 +1318,25 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                               Row(
                                 children: [
                                   Text(
-                                    option.regularPriceFormatted.toString(),
+                                    option.effectiveUpgradePriceFormatted,
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFF1E3A8A),
                                     ),
                                   ),
-                                  const SizedBox(width: 7),
-                                  Text(
-                                    option.basePrice.toString(),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF9CA3AF),
-                                      decoration: TextDecoration.lineThrough,
+                                  if (option.basePrice >
+                                      option.effectiveUpgradePrice) ...[
+                                    const SizedBox(width: 7),
+                                    Text(
+                                      option.basePriceFormatted,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF9CA3AF),
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ],
@@ -1334,6 +1365,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 const _ExamUnlockCheckoutSelection(
                   addonProductId: null,
                   addonProductCode: null,
+                  expectedTotalAmount: null,
                 ),
               ),
               style: OutlinedButton.styleFrom(
@@ -1361,6 +1393,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                         addonProductCode: _selectedOption!.code.trim().isEmpty
                             ? null
                             : _selectedOption!.code,
+                        expectedTotalAmount: totalPrice,
                       ),
                     ),
               style: ElevatedButton.styleFrom(

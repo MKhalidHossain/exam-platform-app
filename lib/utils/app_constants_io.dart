@@ -1,13 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
+const String _debugApiOrigin = 'http://localhost:5001';
+
 String getBaseUrl(String defaultUrl) {
-  if (Platform.isAndroid) {
-    return kDebugMode ? 'http://10.10.5.80:5001/api/v1' : defaultUrl;
-  }
-  if (Platform.isIOS) {
-    return kDebugMode ? 'http://127.0.0.1:5001/api/v1' : defaultUrl;
-  }
-  return defaultUrl;
+  return kDebugMode ? '$_debugApiOrigin/api/v1' : defaultUrl;
+}
+
+String getPublicBaseUrl(String defaultUrl) {
+  return kDebugMode ? _debugApiOrigin : defaultUrl;
 }

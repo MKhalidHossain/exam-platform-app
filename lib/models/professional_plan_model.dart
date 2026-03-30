@@ -184,9 +184,17 @@ class PlanAddOnOption {
     return '${currency.toUpperCase()} ${amount.toStringAsFixed(2)}';
   }
 
+  num get effectiveUpgradePrice {
+    if (upgradeDiscountPrice > 0) return upgradeDiscountPrice;
+    if (regularPrice > 0) return regularPrice;
+    return basePrice;
+  }
+
   String get basePriceFormatted => formatMoney(basePrice);
   String get regularPriceFormatted => formatMoney(regularPrice);
   String get upgradeDiscountPriceFormatted => formatMoney(upgradeDiscountPrice);
+  String get effectiveUpgradePriceFormatted =>
+      formatMoney(effectiveUpgradePrice);
   String get selectionValue {
     final normalizedId = id.trim();
     if (normalizedId.isNotEmpty) return normalizedId;

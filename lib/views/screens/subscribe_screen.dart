@@ -70,15 +70,27 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return num.tryParse(value.toString());
   }
 
+  num _roundCheckoutAmount(num value) {
+    return (value * 100).round() / 100;
+  }
+
+  String _normalizeAddonSelection(String? value) {
+    return value?.trim().toLowerCase() ?? '';
+  }
+
   bool _didServerMissSelectedAddon({
     required Map<String, dynamic> paymentData,
     required String? addonProductId,
     required String? addonProductCode,
-    required num baseAmount,
+    required num? expectedTotalAmount,
   }) {
+    final normalizedAddonProductId = _normalizeAddonSelection(addonProductId);
+    final normalizedAddonProductCode = _normalizeAddonSelection(
+      addonProductCode,
+    );
     final hasAddonSelection =
-        (addonProductId?.trim().isNotEmpty ?? false) ||
-        (addonProductCode?.trim().isNotEmpty ?? false);
+        normalizedAddonProductId.isNotEmpty ||
+        normalizedAddonProductCode.isNotEmpty;
     if (!hasAddonSelection) return false;
 
     final breakdownRaw = paymentData['breakdown'];
@@ -88,13 +100,27 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               ? Map<String, dynamic>.from(breakdownRaw)
               : const <String, dynamic>{});
 
+    final returnedAddonProductCode = _normalizeAddonSelection(
+      breakdown['addonProductCode']?.toString() ??
+          paymentData['addonProductCode']?.toString(),
+    );
     final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
-    final totalAmount =
+    final returnedTotalAmount =
         _parseCheckoutAmount(breakdown['totalAmount']) ??
         _parseCheckoutAmount(paymentData['amount']) ??
         0;
 
-    return (addonFinalPrice ?? 0) <= 0 || totalAmount <= baseAmount;
+    final selectionMatched = normalizedAddonProductCode.isNotEmpty
+        ? returnedAddonProductCode == normalizedAddonProductCode
+        : returnedAddonProductCode.isNotEmpty;
+
+    if (!selectionMatched && (addonFinalPrice ?? 0) <= 0) {
+      return true;
+    }
+
+    if (expectedTotalAmount == null) return false;
+    return _roundCheckoutAmount(returnedTotalAmount) !=
+        _roundCheckoutAmount(expectedTotalAmount);
   }
 
   Future<bool> _ensureCheckoutSession() async {
@@ -340,7 +366,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Code ${referralOffer.referralCode} from ${referralOffer.referrerName} will be applied automatically when you buy your first Professional Plan.',
+            'Code ${referralOffer.referralCode} from ${referralOffer.referrerName} will be applied automatically when you buy your first Professional Plan, including any add-on selected before checkout.',
             style: const TextStyle(
               fontSize: 13,
               height: 1.45,
@@ -390,6 +416,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         result.exam,
         addonProductId: selection.addonProductId,
         addonProductCode: selection.addonProductCode,
+        expectedTotalAmount: selection.expectedTotalAmount,
       );
     } else {
       final selection = await _showUpgradeAddOnSelectionDialog(
@@ -400,6 +427,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         result.exam,
         addonProductId: selection.addonProductId,
         addonProductCode: selection.addonProductCode,
+        expectedTotalAmount: selection.expectedTotalAmount,
       );
     }
   }
@@ -416,6 +444,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       return const _UpgradeCheckoutSelection(
         addonProductId: null,
         addonProductCode: null,
+        expectedTotalAmount: null,
       );
     }
 
@@ -443,6 +472,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     ExamModel exam, {
     String? addonProductId,
     String? addonProductCode,
+    num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
 
@@ -485,12 +515,11 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final int amountPaid = amountFromApi is num
           ? amountFromApi.round()
           : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
-      final professionalBaseAmount = professionalPlan?.price ?? 180;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         addonProductId: addonProductId,
         addonProductCode: addonProductCode,
-        baseAmount: professionalBaseAmount,
+        expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
         ErrorHandler.showSnackBar(
@@ -567,6 +596,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     ExamModel exam, {
     String? addonProductId,
     String? addonProductCode,
+    num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
 
@@ -636,7 +666,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         paymentData: createRes.data!,
         addonProductId: addonProductId,
         addonProductCode: addonProductCode,
-        baseAmount: professionalPlan?.unlockExamPrice ?? 150,
+        expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
         ErrorHandler.showSnackBar(
@@ -1252,10 +1282,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 class _UpgradeCheckoutSelection {
   final String? addonProductId;
   final String? addonProductCode;
+  final num? expectedTotalAmount;
 
   const _UpgradeCheckoutSelection({
     required this.addonProductId,
     required this.addonProductCode,
+    required this.expectedTotalAmount,
   });
 }
 
@@ -1301,11 +1333,13 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
   @override
   Widget build(BuildContext context) {
     final selectedOption = _selectedOption;
+    final num addonPrice = selectedOption?.effectiveUpgradePrice ?? 0;
+    final subtotalBeforeReferral = widget.basePrice + addonPrice;
     final referralDiscount = widget.referralOffer == null
         ? 0
-        : widget.basePrice * (widget.referralOffer!.discountPercent / 100);
-    final num addonPrice = selectedOption?.upgradeDiscountPrice ?? 0;
-    final num totalPrice = widget.basePrice - referralDiscount + addonPrice;
+        : subtotalBeforeReferral *
+              (widget.referralOffer!.discountPercent / 100);
+    final num totalPrice = subtotalBeforeReferral - referralDiscount;
 
     return Container(
       decoration: const BoxDecoration(
@@ -1354,13 +1388,6 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             child: Column(
               children: [
                 _priceRow(widget.baseLabel, _formatMoney(widget.basePrice)),
-                if (referralDiscount > 0) ...[
-                  const SizedBox(height: 6),
-                  _priceRow(
-                    'Referral discount',
-                    '-${_formatMoney(referralDiscount)}',
-                  ),
-                ],
                 const SizedBox(height: 6),
                 _priceRow(
                   'Selected resource',
@@ -1368,6 +1395,13 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                       ? 'Not added'
                       : _formatMoney(addonPrice),
                 ),
+                if (referralDiscount > 0) ...[
+                  const SizedBox(height: 6),
+                  _priceRow(
+                    'Referral discount',
+                    '-${_formatMoney(referralDiscount)}',
+                  ),
+                ],
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: Divider(height: 1),
@@ -1403,7 +1437,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to your Professional Plan upgrade.',
+                    'Code ${widget.referralOffer!.referralCode} from ${widget.referralOffer!.referrerName} will be applied automatically to today\'s Professional Plan checkout, including any selected add-on.',
                     style: const TextStyle(
                       fontSize: 13,
                       height: 1.45,
@@ -1499,7 +1533,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                               Row(
                                 children: [
                                   Text(
-                                    option.upgradeDiscountPriceFormatted,
+                                    option.effectiveUpgradePriceFormatted,
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -1507,14 +1541,16 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                                     ),
                                   ),
                                   const SizedBox(width: 7),
-                                  Text(
-                                    option.regularPriceFormatted,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF9CA3AF),
-                                      decoration: TextDecoration.lineThrough,
+                                  if (option.basePrice >
+                                      option.effectiveUpgradePrice)
+                                    Text(
+                                      option.basePriceFormatted,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF9CA3AF),
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ],
@@ -1543,6 +1579,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 const _UpgradeCheckoutSelection(
                   addonProductId: null,
                   addonProductCode: null,
+                  expectedTotalAmount: null,
                 ),
               ),
               style: OutlinedButton.styleFrom(
@@ -1570,6 +1607,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                         addonProductCode: _selectedOption!.code.trim().isEmpty
                             ? null
                             : _selectedOption!.code,
+                        expectedTotalAmount: totalPrice,
                       ),
                     ),
               style: ElevatedButton.styleFrom(
