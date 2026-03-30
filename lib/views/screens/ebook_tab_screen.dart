@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
 import '../../services/ebook_service.dart';
+import '../../utils/app_navigation.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/animated_refresh_button.dart';
 import '../widgets/gradient_background.dart';
@@ -36,7 +37,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
     _loadData();
   }
 
-  Future<void> _loadData({bool showFeedback = false}) async {
+  Future<void> _loadData() async {
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -57,8 +58,6 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         upgradeOptionsRes.success &&
         upgradeOptionsRes.data != null &&
         upgradeOptionsRes.data!.isNotEmpty;
-    final loadedSuccessfully = hasStoreProducts || hasFallbackProducts;
-
     setState(() {
       _isLoading = false;
       if (hasStoreProducts) {
@@ -81,20 +80,10 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
         );
       }
     });
-
-    if (showFeedback && mounted) {
-      ErrorHandler.showSnackBar(
-        loadedSuccessfully
-            ? 'Resources refreshed.'
-            : (_error ?? 'Failed to refresh resources.'),
-        isError: !loadedSuccessfully,
-        context: context,
-      );
-    }
   }
 
   Future<void> _triggerRefreshFromButton() async {
-    await _loadData(showFeedback: true);
+    await _loadData();
   }
 
   bool _storeHasProducts(EbookStoreData store) {
@@ -230,7 +219,7 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
                       ),
                       const SizedBox(height: 14),
                       ElevatedButton(
-                        onPressed: () => _loadData(showFeedback: true),
+                        onPressed: _loadData,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2D4F88),
                           foregroundColor: Colors.white,
@@ -372,13 +361,16 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
-            'Upgrade Your Inspection Skills',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              height: 1.1,
+          GestureDetector(
+            onTap: () => openResourcesTab(context),
+            child: const Text(
+              'Upgrade Your Inspection Skills',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                height: 1.1,
+              ),
             ),
           ),
           const SizedBox(height: 10),

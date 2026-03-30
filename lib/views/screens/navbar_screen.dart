@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_navigation.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'history_tab.dart';
@@ -32,6 +33,32 @@ class _NavbarScreenState extends State<NavbarScreen> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, 3);
+    appTabNavigationController.addListener(_handleOpenResourcesTab);
+  }
+
+  @override
+  void didUpdateWidget(covariant NavbarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextIndex = widget.initialIndex.clamp(0, 3);
+    if (oldWidget.initialIndex != widget.initialIndex &&
+        _currentIndex != nextIndex) {
+      setState(() {
+        _currentIndex = nextIndex;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    appTabNavigationController.removeListener(_handleOpenResourcesTab);
+    super.dispose();
+  }
+
+  void _handleOpenResourcesTab() {
+    if (!mounted || _currentIndex == 1) return;
+    setState(() {
+      _currentIndex = 1;
+    });
   }
 
   @override

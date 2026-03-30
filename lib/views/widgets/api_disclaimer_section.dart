@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/app_navigation.dart';
 import 'api_disclaimer_dialog.dart';
 
 class ApiDisclaimerSection extends StatelessWidget {
@@ -28,9 +29,17 @@ class ApiDisclaimerSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            "Upgrade Your Inspection Skills",
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          GestureDetector(
+            onTap: () => openResourcesTab(context),
+            child: const Text(
+              "Upgrade Your Inspection Skills",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2F6DE0),
+              ),
+            ),
           ),
           SizedBox(height: 10),
           Text(

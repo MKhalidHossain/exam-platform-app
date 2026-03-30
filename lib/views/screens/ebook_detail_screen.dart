@@ -25,11 +25,22 @@ class EbookDetailScreen extends StatefulWidget {
   State<EbookDetailScreen> createState() => _EbookDetailScreenState();
 }
 
+class _CachedEbookDetailData {
+  final EbookStoreData store;
+  final EbookProduct product;
+
+  const _CachedEbookDetailData({required this.store, required this.product});
+}
+
 class _EbookDetailScreenState extends State<EbookDetailScreen> {
+  static final Map<String, _CachedEbookDetailData> _detailCache = {};
+
   final EbookService _ebookService = EbookService();
   final StorageService _storageService = StorageService();
 
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _isFetching = false;
   String? _error;
   EbookStoreData? _store;
   EbookProduct? _product;
@@ -39,7 +50,14 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _primeSharedContext().then((_) => _loadData());
+    _initializeScreen();
+  }
+
+  Future<void> _initializeScreen() async {
+    await _primeSharedContext();
+    if (!mounted) return;
+    _restoreCachedData();
+    await _loadData(showLoader: _product == null);
   }
 
   Future<void> _primeSharedContext() async {
@@ -53,55 +71,107 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     await _storageService.remove(AppConstants.pendingReferralProductIdKey);
   }
 
-  Future<void> _loadData() async {
+  void _restoreCachedData() {
+    if (_productId.isEmpty) return;
+
+    final cached = _detailCache[_productId];
+    if (cached == null) return;
+
+    setState(() {
+      _store = cached.store;
+      _product = cached.product;
+      _isLoading = false;
+      _isRefreshing = false;
+      _error = null;
+    });
+  }
+
+  void _cacheCurrentData(EbookStoreData store, EbookProduct product) {
+    if (_productId.isEmpty) return;
+    _detailCache[_productId] = _CachedEbookDetailData(
+      store: store,
+      product: product,
+    );
+  }
+
+  Future<void> _loadData({
+    bool showLoader = false,
+    bool showRefreshIndicator = false,
+  }) async {
+    if (_isFetching) return;
+
     if (_productId.isEmpty) {
       setState(() {
         _isLoading = false;
+        _isRefreshing = false;
         _error = 'Shared resource is missing a product id.';
       });
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    final hasExistingContent = _store != null && _product != null;
+    _isFetching = true;
 
-    final storeRes = await _ebookService.getEbookStore();
-    final upgradeOptionsRes = await _ebookService.getUpgradeAddOnOptions();
-
-    if (!mounted) return;
-
-    EbookStoreData? store;
-    if (storeRes.success &&
-        storeRes.data != null &&
-        _storeHasProducts(storeRes.data!)) {
-      store = storeRes.data;
-    } else if (upgradeOptionsRes.success &&
-        upgradeOptionsRes.data != null &&
-        upgradeOptionsRes.data!.isNotEmpty) {
-      store = EbookStoreData.fromUpgradeAddOnOptions(
-        upgradeOptionsRes.data!,
-        storeRes.data?.userAccess ??
-            const EbookUserAccess(
-              hasApi510InspectionGuide: false,
-              hasApi510ReportGuide: false,
-              hasApi510Bundle: false,
-              resourceUnlocks: [],
-            ),
-      );
+    if (mounted) {
+      setState(() {
+        if (showLoader || !hasExistingContent) {
+          _isLoading = true;
+          _error = null;
+        } else if (showRefreshIndicator) {
+          _isRefreshing = true;
+        }
+      });
     }
 
-    final product = _findProductById(store, _productId);
+    try {
+      final storeRes = await _ebookService.getEbookStore();
+      final upgradeOptionsRes = await _ebookService.getUpgradeAddOnOptions();
 
-    setState(() {
-      _isLoading = false;
-      _store = store;
-      _product = product;
-      if (product == null) {
-        _error = 'Unable to find this resource.';
+      if (!mounted) return;
+
+      EbookStoreData? store;
+      if (storeRes.success &&
+          storeRes.data != null &&
+          _storeHasProducts(storeRes.data!)) {
+        store = storeRes.data;
+      } else if (upgradeOptionsRes.success &&
+          upgradeOptionsRes.data != null &&
+          upgradeOptionsRes.data!.isNotEmpty) {
+        store = EbookStoreData.fromUpgradeAddOnOptions(
+          upgradeOptionsRes.data!,
+          storeRes.data?.userAccess ??
+              const EbookUserAccess(
+                hasApi510InspectionGuide: false,
+                hasApi510ReportGuide: false,
+                hasApi510Bundle: false,
+                resourceUnlocks: [],
+              ),
+        );
       }
-    });
+
+      final product = _findProductById(store, _productId);
+
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+
+        if (product != null) {
+          _store = store;
+          _product = product;
+          _error = null;
+          _cacheCurrentData(store!, product);
+          return;
+        }
+
+        if (!hasExistingContent) {
+          _store = store;
+          _product = null;
+          _error = 'Unable to find this resource.';
+        }
+      });
+    } finally {
+      _isFetching = false;
+    }
   }
 
   bool _storeHasProducts(EbookStoreData store) {
@@ -463,6 +533,20 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: _buildHeader(),
               ),
+              if (_isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 6, 20, 0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      backgroundColor: Color(0x1A10213F),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF2D4F88),
+                      ),
+                    ),
+                  ),
+                ),
               Expanded(
                 child: _isLoading
                     ? _buildLoading()
@@ -499,7 +583,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           ),
         ),
         AnimatedRefreshButton(
-          onPressed: _loadData,
+          onPressed: () => _loadData(showRefreshIndicator: true),
           tooltip: 'Refresh resource details',
           backgroundColor: const Color(0xFFF8FAFC),
           borderColor: const Color(0x1F10213F),
@@ -511,7 +595,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
   Widget _buildLoading() {
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: () => _loadData(showRefreshIndicator: true),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
@@ -534,7 +618,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
   Widget _buildError({String? message}) {
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: () => _loadData(showRefreshIndicator: true),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
@@ -700,7 +784,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
     final bundleIsResolved = bundledProducts.isNotEmpty;
 
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: () => _loadData(showRefreshIndicator: true),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
