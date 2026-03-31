@@ -78,19 +78,29 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return value?.trim().toLowerCase() ?? '';
   }
 
+  List<String> _normalizeAddonSelections(List<String>? values) {
+    return (values ?? const [])
+        .map(_normalizeAddonSelection)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
   bool _didServerMissSelectedAddon({
     required Map<String, dynamic> paymentData,
-    required String? addonProductId,
-    required String? addonProductCode,
+    required List<String> addonProductIds,
+    required List<String> addonProductCodes,
     required num? expectedTotalAmount,
   }) {
-    final normalizedAddonProductId = _normalizeAddonSelection(addonProductId);
-    final normalizedAddonProductCode = _normalizeAddonSelection(
-      addonProductCode,
+    final normalizedAddonProductIds = _normalizeAddonSelections(
+      addonProductIds,
+    );
+    final normalizedAddonProductCodes = _normalizeAddonSelections(
+      addonProductCodes,
     );
     final hasAddonSelection =
-        normalizedAddonProductId.isNotEmpty ||
-        normalizedAddonProductCode.isNotEmpty;
+        normalizedAddonProductIds.isNotEmpty ||
+        normalizedAddonProductCodes.isNotEmpty;
     if (!hasAddonSelection) return false;
 
     final breakdownRaw = paymentData['breakdown'];
@@ -100,19 +110,35 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               ? Map<String, dynamic>.from(breakdownRaw)
               : const <String, dynamic>{});
 
-    final returnedAddonProductCode = _normalizeAddonSelection(
-      breakdown['addonProductCode']?.toString() ??
-          paymentData['addonProductCode']?.toString(),
-    );
+    final returnedAddonProductCodes = <String>[
+      ..._normalizeAddonSelections(
+        (breakdown['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      ..._normalizeAddonSelections(
+        (paymentData['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      _normalizeAddonSelection(
+        breakdown['addonProductCode']?.toString() ??
+            paymentData['addonProductCode']?.toString(),
+      ),
+    ].where((value) => value.isNotEmpty).toSet().toList(growable: false);
     final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
     final returnedTotalAmount =
         _parseCheckoutAmount(breakdown['totalAmount']) ??
         _parseCheckoutAmount(paymentData['amount']) ??
         0;
 
-    final selectionMatched = normalizedAddonProductCode.isNotEmpty
-        ? returnedAddonProductCode == normalizedAddonProductCode
-        : returnedAddonProductCode.isNotEmpty;
+    final selectionMatched = normalizedAddonProductCodes.isNotEmpty
+        ? normalizedAddonProductCodes.every(
+                returnedAddonProductCodes.contains,
+              ) &&
+              returnedAddonProductCodes.length ==
+                  normalizedAddonProductCodes.length
+        : returnedAddonProductCodes.length == normalizedAddonProductIds.length;
 
     if (!selectionMatched && (addonFinalPrice ?? 0) <= 0) {
       return true;
@@ -462,8 +488,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted || selection == null) return;
       await _payForExamUnlockWithStripe(
         result.exam,
-        addonProductId: selection.addonProductId,
-        addonProductCode: selection.addonProductCode,
+        addonProductIds: selection.addonProductIds,
+        addonProductCodes: selection.addonProductCodes,
         expectedTotalAmount: selection.expectedTotalAmount,
       );
     } else {
@@ -473,8 +499,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted || selection == null) return;
       await _payForProfessionalUpgradeWithStripe(
         result.exam,
-        addonProductId: selection.addonProductId,
-        addonProductCode: selection.addonProductCode,
+        addonProductIds: selection.addonProductIds,
+        addonProductCodes: selection.addonProductCodes,
         expectedTotalAmount: selection.expectedTotalAmount,
       );
     }
@@ -490,8 +516,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         : null;
     if (options.isEmpty) {
       return const _UpgradeCheckoutSelection(
-        addonProductId: null,
-        addonProductCode: null,
+        addonProductIds: <String>[],
+        addonProductCodes: <String>[],
         expectedTotalAmount: null,
       );
     }
@@ -518,8 +544,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   Future<void> _payForProfessionalUpgradeWithStripe(
     ExamModel exam, {
-    String? addonProductId,
-    String? addonProductCode,
+    List<String> addonProductIds = const [],
+    List<String> addonProductCodes = const [],
     num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
@@ -531,8 +557,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final createRes = await _apiService
           .createProfessionalPlanStripePaymentIntent(
             examId,
-            addonProductId: addonProductId,
-            addonProductCode: addonProductCode,
+            addonProductIds: addonProductIds,
+            addonProductCodes: addonProductCodes,
           );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
@@ -565,8 +591,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
         expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
@@ -653,8 +679,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   Future<void> _payForExamUnlockWithStripe(
     ExamModel exam, {
-    String? addonProductId,
-    String? addonProductCode,
+    List<String> addonProductIds = const [],
+    List<String> addonProductCodes = const [],
     num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
@@ -665,8 +691,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     try {
       final createRes = await _apiService.createExamStripePaymentIntent(
         examId,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
       );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
@@ -723,8 +749,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           : int.tryParse(amountFromApi?.toString() ?? '') ?? fallbackAmount;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
         expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
@@ -1339,13 +1365,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 }
 
 class _UpgradeCheckoutSelection {
-  final String? addonProductId;
-  final String? addonProductCode;
+  final List<String> addonProductIds;
+  final List<String> addonProductCodes;
   final num? expectedTotalAmount;
 
   const _UpgradeCheckoutSelection({
-    required this.addonProductId,
-    required this.addonProductCode,
+    required this.addonProductIds,
+    required this.addonProductCodes,
     required this.expectedTotalAmount,
   });
 }
@@ -1372,15 +1398,11 @@ class _UpgradeAddOnSheet extends StatefulWidget {
 }
 
 class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
-  String? _selectedValue;
+  final Set<String> _selectedValues = <String>{};
 
-  PlanAddOnOption? get _selectedOption {
-    if (_selectedValue == null) return null;
-    for (final option in widget.options) {
-      if (option.selectionValue == _selectedValue) return option;
-    }
-    return null;
-  }
+  List<PlanAddOnOption> get _selectedOptions => widget.options
+      .where((option) => _selectedValues.contains(option.selectionValue))
+      .toList(growable: false);
 
   String _formatMoney(num amount) {
     if (widget.currency.toUpperCase() == 'USD') {
@@ -1391,8 +1413,11 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedOption = _selectedOption;
-    final num addonPrice = selectedOption?.effectiveUpgradePrice ?? 0;
+    final selectedOptions = _selectedOptions;
+    final num addonPrice = selectedOptions.fold<num>(
+      0,
+      (sum, option) => sum + option.effectiveUpgradePrice,
+    );
     final subtotalBeforeReferral = widget.basePrice + addonPrice;
     final referralDiscount = widget.referralOffer == null
         ? 0
@@ -1431,7 +1456,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one add-on resource, or continue without one.',
+              'Choose one or more add-on resources, or continue without any.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1449,10 +1474,10 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 _priceRow(widget.baseLabel, _formatMoney(widget.basePrice)),
                 const SizedBox(height: 6),
                 _priceRow(
-                  'Selected resource',
-                  selectedOption == null
+                  'Selected resources',
+                  selectedOptions.isEmpty
                       ? 'Not added'
-                      : _formatMoney(addonPrice),
+                      : '${selectedOptions.length} selected • ${_formatMoney(addonPrice)}',
                 ),
                 if (referralDiscount > 0) ...[
                   const SizedBox(height: 6),
@@ -1519,10 +1544,16 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
               itemBuilder: (context, index) {
                 final option = widget.options[index];
                 final optionValue = option.selectionValue;
-                final isSelected = _selectedValue == optionValue;
+                final isSelected = _selectedValues.contains(optionValue);
 
                 return InkWell(
-                  onTap: () => setState(() => _selectedValue = optionValue),
+                  onTap: () => setState(() {
+                    if (isSelected) {
+                      _selectedValues.remove(optionValue);
+                    } else {
+                      _selectedValues.add(optionValue);
+                    }
+                  }),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -1615,12 +1646,16 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                             ],
                           ),
                         ),
-                        Radio<String>(
-                          value: optionValue,
-                          groupValue: _selectedValue,
+                        Checkbox(
+                          value: isSelected,
                           activeColor: const Color(0xFF2D4F88),
-                          onChanged: (value) =>
-                              setState(() => _selectedValue = value),
+                          onChanged: (_) => setState(() {
+                            if (isSelected) {
+                              _selectedValues.remove(optionValue);
+                            } else {
+                              _selectedValues.add(optionValue);
+                            }
+                          }),
                         ),
                       ],
                     ),
@@ -1636,8 +1671,8 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             child: OutlinedButton(
               onPressed: () => Navigator.of(context).pop(
                 const _UpgradeCheckoutSelection(
-                  addonProductId: null,
-                  addonProductCode: null,
+                  addonProductIds: <String>[],
+                  addonProductCodes: <String>[],
                   expectedTotalAmount: null,
                 ),
               ),
@@ -1656,16 +1691,20 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _selectedOption == null
+              onPressed: selectedOptions.isEmpty
                   ? null
                   : () => Navigator.of(context).pop(
                       _UpgradeCheckoutSelection(
-                        addonProductId: _selectedOption!.id.trim().isEmpty
-                            ? null
-                            : _selectedOption!.id,
-                        addonProductCode: _selectedOption!.code.trim().isEmpty
-                            ? null
-                            : _selectedOption!.code,
+                        addonProductIds: selectedOptions
+                            .map((option) => option.id.trim())
+                            .where((id) => id.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
+                        addonProductCodes: selectedOptions
+                            .map((option) => option.code.trim())
+                            .where((code) => code.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
                         expectedTotalAmount: totalPrice,
                       ),
                     ),
@@ -1674,7 +1713,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                'Proceed With Add-On • ${_formatMoney(totalPrice)}',
+                'Proceed With ${selectedOptions.length} Add-On${selectedOptions.length == 1 ? '' : 's'} • ${_formatMoney(totalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
