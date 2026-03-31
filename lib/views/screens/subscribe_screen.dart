@@ -150,6 +150,54 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return true;
   }
 
+  bool _isDuplicateResourcePurchaseResponse<T>(ApiResponse<T> response) {
+    final message = response.message?.toLowerCase() ?? '';
+    return message.contains('resource purchase id already exists');
+  }
+
+  Future<void> _completeProfessionalUpgradeSuccess(
+    ExamModel exam, {
+    required String examId,
+    required int amountPaid,
+  }) async {
+    await _storageService.clearPendingReferralCode();
+    await _userController.applyProfessionalUpgrade(examId: examId);
+    await _userController.refreshProfile();
+    await _loadProfessionalPlan();
+    if (!mounted) return;
+    context.push(
+      '/exam-unlock-success',
+      extra: {
+        'courseTitle': exam.name,
+        'examId': examId,
+        'questionCount': exam.questionCount,
+        'effectivitySheetContent': exam.effectivitySheetContent,
+        'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+        'amountPaid': amountPaid,
+      },
+    );
+  }
+
+  Future<bool> _recoverProfessionalUpgradeFromDuplicateConfirm({
+    required String examId,
+  }) async {
+    await _userController.refreshProfile();
+    await _loadProfessionalPlan();
+    if (!mounted) return false;
+
+    final subscriptionTier =
+        _userController.user.value?.subscriptionTier?.trim().toLowerCase() ??
+        '';
+    final recovered =
+        _userController.planTier.value == PlanTier.professional ||
+        subscriptionTier == 'professional';
+    if (!recovered) return false;
+
+    await _storageService.clearPendingReferralCode();
+    await _userController.applyProfessionalUpgrade(examId: examId);
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -549,24 +597,35 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
-        await _storageService.clearPendingReferralCode();
-        await _userController.applyProfessionalUpgrade(examId: examId);
-        await _userController.refreshProfile();
-        await _loadProfessionalPlan();
-        if (!mounted) return;
-        context.push(
-          '/exam-unlock-success',
-          extra: {
-            'courseTitle': exam.name,
-            'examId': examId,
-            'questionCount': exam.questionCount,
-            'effectivitySheetContent': exam.effectivitySheetContent,
-            'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': amountPaid,
-          },
+        await _completeProfessionalUpgradeSuccess(
+          exam,
+          examId: examId,
+          amountPaid: amountPaid,
         );
       } else {
         if (_handleCheckoutUnauthorized(confirmRes)) return;
+        if (_isDuplicateResourcePurchaseResponse(confirmRes)) {
+          final recovered =
+              await _recoverProfessionalUpgradeFromDuplicateConfirm(
+                examId: examId,
+              );
+          if (!mounted) return;
+          if (recovered) {
+            await _completeProfessionalUpgradeSuccess(
+              exam,
+              examId: examId,
+              amountPaid: amountPaid,
+            );
+            return;
+          }
+
+          ErrorHandler.showSnackBar(
+            'Payment appears to have succeeded, but the server reported a duplicate purchase record. Please refresh once, and if your plan is still not upgraded contact support with your payment reference.',
+            isError: true,
+            context: context,
+          );
+          return;
+        }
         ErrorHandler.showFromResponse(
           confirmRes,
           context: context,
@@ -1141,7 +1200,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               child: Text(
                 'Unlock another exam for $unlockLabel',
                 style: const TextStyle(
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
