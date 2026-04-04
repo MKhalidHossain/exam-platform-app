@@ -7,6 +7,7 @@ import '../../controllers/user_controller.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/api_response.dart';
 import '../../models/exam_model.dart';
+import '../../models/payment_success_details.dart';
 import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
 import '../../models/referral_model.dart';
@@ -184,7 +185,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   Future<void> _completeProfessionalUpgradeSuccess(
     ExamModel exam, {
     required String examId,
-    required int amountPaid,
+    required PaymentSuccessDetails paymentDetails,
   }) async {
     await _storageService.clearPendingReferralCode();
     await _userController.applyProfessionalUpgrade(examId: examId);
@@ -199,7 +200,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         'questionCount': exam.questionCount,
         'effectivitySheetContent': exam.effectivitySheetContent,
         'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-        'amountPaid': amountPaid,
+        'paymentSummary': paymentDetails.toJson(),
       },
     );
   }
@@ -585,10 +586,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         );
         return;
       }
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ?? 180;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         addonProductIds: addonProductIds,
@@ -623,10 +622,28 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'plan',
+              fallbackAmount: amountPaid,
+              fallbackTitle: professionalPlan?.name ?? 'Professional Plan',
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ??
+                          professionalPlan?.currency ??
+                          'USD')
+                      .toUpperCase(),
+              fallbackBillingCycleLabel:
+                  professionalPlan?.subscription?.billingCycle?.label ??
+                  professionalPlan?.interval.label,
+              fallbackNextBillingDate:
+                  _userController.user.value?.subscriptionExpiresAt ??
+                  professionalPlan?.subscription?.nextBillingDate,
+            );
         await _completeProfessionalUpgradeSuccess(
           exam,
           examId: examId,
-          amountPaid: amountPaid,
+          paymentDetails: paymentDetails,
         );
       } else {
         if (_handleCheckoutUnauthorized(confirmRes)) return;
@@ -637,10 +654,28 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               );
           if (!mounted) return;
           if (recovered) {
+            final PaymentSuccessDetails paymentDetails =
+                PaymentSuccessDetails.fromPayload(
+                  confirmRes.data,
+                  purchaseType: 'plan',
+                  fallbackAmount: amountPaid,
+                  fallbackTitle: professionalPlan?.name ?? 'Professional Plan',
+                  fallbackCurrency:
+                      (createRes.data?['currency']?.toString() ??
+                              professionalPlan?.currency ??
+                              'USD')
+                          .toUpperCase(),
+                  fallbackBillingCycleLabel:
+                      professionalPlan?.subscription?.billingCycle?.label ??
+                      professionalPlan?.interval.label,
+                  fallbackNextBillingDate:
+                      _userController.user.value?.subscriptionExpiresAt ??
+                      professionalPlan?.subscription?.nextBillingDate,
+                );
             await _completeProfessionalUpgradeSuccess(
               exam,
               examId: examId,
-              amountPaid: amountPaid,
+              paymentDetails: paymentDetails,
             );
             return;
           }
@@ -741,12 +776,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         return;
       }
 
-      final int fallbackAmount =
-          professionalPlan?.unlockExamPrice.round() ?? 150;
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ?? fallbackAmount;
+      final num fallbackAmount = professionalPlan?.unlockExamPrice ?? 150;
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ?? fallbackAmount;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         addonProductIds: addonProductIds,
@@ -786,6 +818,16 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         await _userController.refreshProfile();
         await _loadProfessionalPlan();
         if (!mounted) return;
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'exam',
+              fallbackAmount: amountPaid,
+              fallbackTitle: exam.name,
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ?? 'USD')
+                      .toUpperCase(),
+            );
         context.push(
           '/exam-unlock-success',
           extra: {
@@ -794,7 +836,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': amountPaid,
+            'paymentSummary': paymentDetails.toJson(),
           },
         );
       } else {

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/payment_success_details.dart';
+
 class ExamUnlockSuccessScreen extends StatelessWidget {
   final String courseTitle;
   final String examId;
   final int? questionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
-  final int amountPaid;
+  final PaymentSuccessDetails paymentDetails;
 
   const ExamUnlockSuccessScreen({
     super.key,
@@ -16,13 +18,53 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
     this.questionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
-    this.amountPaid = 150,
+    required this.paymentDetails,
   });
 
   @override
   Widget build(BuildContext context) {
-    final String amountLabel =
-        '\$${amountPaid.toDouble().toStringAsFixed(2)}';
+    final bool isPlanPurchase = paymentDetails.purchaseType == 'plan';
+    final String purchaseTitle = paymentDetails.title.trim().isEmpty
+        ? (isPlanPurchase ? 'Professional Plan' : courseTitle)
+        : paymentDetails.title.trim();
+    final String amountLabel = _formatMoney(
+      paymentDetails.amountPaid,
+      paymentDetails.currency,
+    );
+    final List<MapEntry<String, String>> summaryRows =
+        <MapEntry<String, String>>[
+          MapEntry(isPlanPurchase ? 'Plan' : 'Exam', isPlanPurchase
+              ? purchaseTitle
+              : courseTitle),
+          MapEntry(
+            isPlanPurchase ? 'Amount Paid Today' : 'Amount Paid',
+            amountLabel,
+          ),
+          if (isPlanPurchase &&
+              (paymentDetails.billingCycleLabel?.trim().isNotEmpty ?? false))
+            MapEntry('Billing Cycle', paymentDetails.billingCycleLabel!.trim()),
+          if (isPlanPurchase && paymentDetails.nextBillingDate != null)
+            MapEntry(
+              'Next Billing Date',
+              _formatDate(paymentDetails.nextBillingDate!),
+            ),
+          if (paymentDetails.paymentMethodLabel?.trim().isNotEmpty ?? false)
+            MapEntry(
+              'Payment Method',
+              paymentDetails.paymentMethodLabel!.trim(),
+            ),
+          if (paymentDetails.receiptNumber?.trim().isNotEmpty ?? false)
+            MapEntry('Receipt #', paymentDetails.receiptNumber!.trim()),
+          if ((paymentDetails.transactionReference?.trim().isNotEmpty ?? false) &&
+              paymentDetails.transactionReference?.trim() !=
+                  paymentDetails.receiptNumber?.trim())
+            MapEntry(
+              'Transaction ID',
+              paymentDetails.transactionReference!.trim(),
+            ),
+          if (paymentDetails.paidAt != null)
+            MapEntry('Paid On', _formatDate(paymentDetails.paidAt!)),
+        ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFEAF0FF),
@@ -39,7 +81,7 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
                 ),
                 const Expanded(
                   child: Text(
-                    'Upgrade successfully',
+                    'Payment successful',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 18,
@@ -61,7 +103,7 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
                     height: 140,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFF2DBD67).withOpacity(0.15),
+                      color: const Color(0xFF2DBD67).withValues(alpha: 0.15),
                     ),
                   ),
                   Container(
@@ -81,9 +123,11 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Center(
+            Center(
               child: Text(
-                'Upgrade successfully',
+                isPlanPurchase
+                    ? 'Upgrade successfully'
+                    : 'Exam unlocked successfully',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -92,11 +136,13 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const Center(
+            Center(
               child: Text(
-                'You’re now on the Professional Plan. Your Subscription is\nactive and premium Features are unlocked.',
+                isPlanPurchase
+                    ? 'You’re now on the $purchaseTitle. Your subscription is\nactive and premium features are unlocked.'
+                    : 'Your payment is complete. This exam is now unlocked\nand ready to start.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: Color(0xFF6B7280),
@@ -114,11 +160,9 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _SummaryRow(label: 'Plan', value: 'Professional'),
-            _SummaryRow(label: 'Amount Paid Today', value: amountLabel),
-            const _SummaryRow(label: 'Next Billing Date', value: '6 Month'),
-            const _SummaryRow(label: 'Payment Method', value: 'Card **** 1234'),
-            const _SummaryRow(label: 'Receipt #', value: 'INV - 000124'),
+            ...summaryRows.map(
+              (row) => _SummaryRow(label: row.key, value: row.value),
+            ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
               onPressed: () {
@@ -153,6 +197,34 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
       ),
     );
   }
+
+  static String _formatMoney(num amount, String currency) {
+    final String upperCurrency = currency.toUpperCase();
+    if (upperCurrency == 'USD') {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
+    return '$upperCurrency ${amount.toStringAsFixed(2)}';
+  }
+
+  static String _formatDate(DateTime date) {
+    final local = date.toLocal();
+    const months = <String>[
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final month = months[local.month - 1];
+    return '$month ${local.day}, ${local.year}';
+  }
 }
 
 class _SummaryRow extends StatelessWidget {
@@ -166,22 +238,30 @@ class _SummaryRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF6B7280),
+          Expanded(
+            flex: 4,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF6B7280),
+              ),
             ),
           ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF111827),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 5,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111827),
+              ),
             ),
           ),
         ],

@@ -7,6 +7,7 @@ import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../models/payment_success_details.dart';
 import '../../models/professional_plan_model.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
@@ -368,11 +369,10 @@ class HomeDashboard extends StatelessWidget {
         return;
       }
 
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ??
-                (exam.unlockPrice?.round() ?? 150);
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ??
+          exam.unlockPrice ??
+          150;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         selection: selection,
@@ -409,6 +409,16 @@ class HomeDashboard extends StatelessWidget {
         await userController.applyProfessionalUpgrade(examId: examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'exam',
+              fallbackAmount: amountPaid,
+              fallbackTitle: exam.name,
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ?? 'USD')
+                      .toUpperCase(),
+            );
         context.push(
           '/exam-unlock-success',
           extra: {
@@ -417,7 +427,7 @@ class HomeDashboard extends StatelessWidget {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': amountPaid,
+            'paymentSummary': paymentDetails.toJson(),
           },
         );
       } else {
@@ -716,6 +726,7 @@ class HomeDashboard extends StatelessWidget {
                           ),
                         ).then((result) {
                           if (result == null) return;
+                          if (!context.mounted) return;
                           if (result.alreadyUnlocked) {
                             context.push(
                               '/quiz-settings',
@@ -1067,7 +1078,7 @@ class _StatusDot extends StatelessWidget {
       width: 22,
       height: 22,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 14),

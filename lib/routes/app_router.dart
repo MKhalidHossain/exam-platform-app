@@ -29,6 +29,7 @@ import '../views/screens/referral_screen.dart';
 import '../views/screens/shared_ebook_redirect_screen.dart';
 import '../views/screens/shared_referral_redirect_screen.dart';
 import '../models/ebook_store_model.dart';
+import '../models/payment_success_details.dart';
 import '../views/screens/ebook_category_screen.dart';
 import '../views/screens/ebook_detail_screen.dart';
 
@@ -543,24 +544,46 @@ GoRouter getRouter() {
           int? questionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
-          int amountPaid = 150;
+          PaymentSuccessDetails paymentDetails =
+              const PaymentSuccessDetails(
+                purchaseType: 'plan',
+                title: 'Professional Plan',
+                amountPaid: 150,
+                currency: 'USD',
+              );
 
-          int? parseInt(dynamic value) {
+          num? parseNum(dynamic value) {
             if (value == null) return null;
-            if (value is int) return value;
-            if (value is num) return value.toInt();
-            return int.tryParse(value.toString());
+            if (value is num) return value;
+            return num.tryParse(value.toString());
           }
 
           if (extra is Map) {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString() ?? '';
-            questionCount = parseInt(extra['questionCount']);
+            questionCount = parseNum(extra['questionCount'])?.toInt();
             effectivitySheetContent = extra['effectivitySheetContent']
                 ?.toString();
             bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
                 ?.toString();
-            amountPaid = parseInt(extra['amountPaid']) ?? amountPaid;
+            final dynamic paymentSummary = extra['paymentSummary'];
+            if (paymentSummary is Map<String, dynamic>) {
+              paymentDetails = PaymentSuccessDetails.fromJson(paymentSummary);
+            } else if (paymentSummary is Map) {
+              paymentDetails = PaymentSuccessDetails.fromJson(
+                Map<String, dynamic>.from(paymentSummary),
+              );
+            } else {
+              final purchaseType =
+                  extra['purchaseType']?.toString().trim().toLowerCase() ??
+                  'plan';
+              paymentDetails = PaymentSuccessDetails(
+                purchaseType: purchaseType,
+                title: purchaseType == 'plan' ? 'Professional Plan' : title,
+                amountPaid: parseNum(extra['amountPaid']) ?? 150,
+                currency: (extra['currency']?.toString() ?? 'USD').toUpperCase(),
+              );
+            }
           }
 
           return ExamUnlockSuccessScreen(
@@ -569,7 +592,7 @@ GoRouter getRouter() {
             questionCount: questionCount,
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
-            amountPaid: amountPaid,
+            paymentDetails: paymentDetails,
           );
         },
       ),
