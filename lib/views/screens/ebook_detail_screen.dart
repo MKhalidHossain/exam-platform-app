@@ -1019,19 +1019,17 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    if (!product.isBundle && product.previewAvailable) ...[
+                    if (!product.isBundle &&
+                        product.previewAvailable &&
+                        !isUnlocked) ...[
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _openPreview(product),
-                          icon: Icon(
-                            isUnlocked
-                                ? Icons.download_rounded
-                                : Icons.visibility_outlined,
+                          icon: const Icon(
+                            Icons.visibility_outlined,
                             size: 18,
                           ),
-                          label: Text(
-                            isUnlocked ? 'Open & Download' : 'Preview 5 Pages',
-                          ),
+                          label: const Text('Preview 5 Pages'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF2D4F88),
                             side: const BorderSide(color: Color(0xFFD8E3F5)),
@@ -1155,19 +1153,15 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                         ),
                       ),
                     ),
-                    if (product.previewAvailable) ...[
+                    if (product.previewAvailable && !isUnlocked) ...[
                       const SizedBox(width: 10),
                       OutlinedButton.icon(
                         onPressed: () => _openPreview(product),
-                        icon: Icon(
-                          isUnlocked
-                              ? Icons.download_rounded
-                              : Icons.visibility_outlined,
+                        icon: const Icon(
+                          Icons.visibility_outlined,
                           size: 17,
                         ),
-                        label: Text(
-                          isUnlocked ? 'Open & Download' : 'Preview 5 Pages',
-                        ),
+                        label: const Text('Preview 5 Pages'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF2D4F88),
                           side: const BorderSide(color: Color(0xFFD8E3F5)),

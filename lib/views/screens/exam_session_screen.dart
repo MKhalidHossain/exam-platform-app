@@ -20,165 +20,22 @@ class ExamSessionScreen extends StatelessWidget {
     this.timedMode = true,
   });
 
-  void _showInstructions(BuildContext context, String sessionLabel) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        final effectivity = effectivitySheetContent?.trim() ?? '';
-        final bodyOfKnowledge = bodyOfKnowledgeContent?.trim() ?? '';
+  void _startQuiz(BuildContext context) {
+    final id = examId?.trim();
+    if (id == null || id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exam ID missing. Please try again.')),
+      );
+      return;
+    }
 
-        return Dialog(
-          backgroundColor: Colors.white,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 24,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Instructions for $courseTitle',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Review the key knowledge areas for this exam before you begin.',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'This $sessionLabel session focuses on practical application of the API body of knowledge. Expect questions that cover inspection planning, pressure integrity, corrosion assessment, and repair methods. Familiarity with code references and terminology will help you move efficiently through the quiz.\n\nUse the allotted time wisely and review each question carefully before submitting.',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    height: 1.4,
-                    color: Color(0xFF4B5563),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Effectivity Sheet',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  effectivity.isNotEmpty
-                      ? effectivity
-                      : 'No effectivity sheet content available.',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    height: 1.4,
-                    color: Color(0xFF4B5563),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Body of Knowledge',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  bodyOfKnowledge.isNotEmpty
-                      ? bodyOfKnowledge
-                      : 'No body of knowledge content available.',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    height: 1.4,
-                    color: Color(0xFF4B5563),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF2D4F88)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text(
-                          'Back',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF2D4F88),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final id = examId?.trim();
-                          if (id == null || id.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Exam ID missing. Please try again.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          Navigator.of(dialogContext).pop();
-                          context.push(
-                            '/exam-loading',
-                            extra: {
-                              'courseTitle': courseTitle,
-                              'examId': id,
-                              'questionCount': questionCount ?? 1,
-                              'timedMode': timedMode,
-                            },
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F3A7D),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text(
-                          'Start Quiz',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const ApiDisclaimerSection(),
-              ],
-            ),
-          ),
-        );
+    context.push(
+      '/exam-loading',
+      extra: {
+        'courseTitle': courseTitle,
+        'examId': id,
+        'questionCount': questionCount ?? 1,
+        'timedMode': timedMode,
       },
     );
   }
@@ -237,7 +94,7 @@ class ExamSessionScreen extends StatelessWidget {
               description:
                   'Begin your full exam simulation with timed closed-book and open-book sections.',
               isPrimary: true,
-              onTap: () => _showInstructions(context, 'Full Exam'),
+              onTap: () => _startQuiz(context),
             ),
             const SizedBox(height: 12),
             IntrinsicHeight(

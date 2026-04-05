@@ -7,6 +7,7 @@ import '../../controllers/user_controller.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/api_response.dart';
 import '../../models/exam_model.dart';
+import '../../models/payment_success_details.dart';
 import '../../models/plan_tier.dart';
 import '../../models/professional_plan_model.dart';
 import '../../models/referral_model.dart';
@@ -78,19 +79,29 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     return value?.trim().toLowerCase() ?? '';
   }
 
+  List<String> _normalizeAddonSelections(List<String>? values) {
+    return (values ?? const [])
+        .map(_normalizeAddonSelection)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
   bool _didServerMissSelectedAddon({
     required Map<String, dynamic> paymentData,
-    required String? addonProductId,
-    required String? addonProductCode,
+    required List<String> addonProductIds,
+    required List<String> addonProductCodes,
     required num? expectedTotalAmount,
   }) {
-    final normalizedAddonProductId = _normalizeAddonSelection(addonProductId);
-    final normalizedAddonProductCode = _normalizeAddonSelection(
-      addonProductCode,
+    final normalizedAddonProductIds = _normalizeAddonSelections(
+      addonProductIds,
+    );
+    final normalizedAddonProductCodes = _normalizeAddonSelections(
+      addonProductCodes,
     );
     final hasAddonSelection =
-        normalizedAddonProductId.isNotEmpty ||
-        normalizedAddonProductCode.isNotEmpty;
+        normalizedAddonProductIds.isNotEmpty ||
+        normalizedAddonProductCodes.isNotEmpty;
     if (!hasAddonSelection) return false;
 
     final breakdownRaw = paymentData['breakdown'];
@@ -100,19 +111,35 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               ? Map<String, dynamic>.from(breakdownRaw)
               : const <String, dynamic>{});
 
-    final returnedAddonProductCode = _normalizeAddonSelection(
-      breakdown['addonProductCode']?.toString() ??
-          paymentData['addonProductCode']?.toString(),
-    );
+    final returnedAddonProductCodes = <String>[
+      ..._normalizeAddonSelections(
+        (breakdown['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      ..._normalizeAddonSelections(
+        (paymentData['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      _normalizeAddonSelection(
+        breakdown['addonProductCode']?.toString() ??
+            paymentData['addonProductCode']?.toString(),
+      ),
+    ].where((value) => value.isNotEmpty).toSet().toList(growable: false);
     final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
     final returnedTotalAmount =
         _parseCheckoutAmount(breakdown['totalAmount']) ??
         _parseCheckoutAmount(paymentData['amount']) ??
         0;
 
-    final selectionMatched = normalizedAddonProductCode.isNotEmpty
-        ? returnedAddonProductCode == normalizedAddonProductCode
-        : returnedAddonProductCode.isNotEmpty;
+    final selectionMatched = normalizedAddonProductCodes.isNotEmpty
+        ? normalizedAddonProductCodes.every(
+                returnedAddonProductCodes.contains,
+              ) &&
+              returnedAddonProductCodes.length ==
+                  normalizedAddonProductCodes.length
+        : returnedAddonProductCodes.length == normalizedAddonProductIds.length;
 
     if (!selectionMatched && (addonFinalPrice ?? 0) <= 0) {
       return true;
@@ -158,7 +185,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   Future<void> _completeProfessionalUpgradeSuccess(
     ExamModel exam, {
     required String examId,
-    required int amountPaid,
+    required PaymentSuccessDetails paymentDetails,
   }) async {
     await _storageService.clearPendingReferralCode();
     await _userController.applyProfessionalUpgrade(examId: examId);
@@ -173,7 +200,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         'questionCount': exam.questionCount,
         'effectivitySheetContent': exam.effectivitySheetContent,
         'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-        'amountPaid': amountPaid,
+        'paymentSummary': paymentDetails.toJson(),
       },
     );
   }
@@ -462,8 +489,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted || selection == null) return;
       await _payForExamUnlockWithStripe(
         result.exam,
-        addonProductId: selection.addonProductId,
-        addonProductCode: selection.addonProductCode,
+        addonProductIds: selection.addonProductIds,
+        addonProductCodes: selection.addonProductCodes,
         expectedTotalAmount: selection.expectedTotalAmount,
       );
     } else {
@@ -473,8 +500,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       if (!mounted || selection == null) return;
       await _payForProfessionalUpgradeWithStripe(
         result.exam,
-        addonProductId: selection.addonProductId,
-        addonProductCode: selection.addonProductCode,
+        addonProductIds: selection.addonProductIds,
+        addonProductCodes: selection.addonProductCodes,
         expectedTotalAmount: selection.expectedTotalAmount,
       );
     }
@@ -490,8 +517,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         : null;
     if (options.isEmpty) {
       return const _UpgradeCheckoutSelection(
-        addonProductId: null,
-        addonProductCode: null,
+        addonProductIds: <String>[],
+        addonProductCodes: <String>[],
         expectedTotalAmount: null,
       );
     }
@@ -518,8 +545,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   Future<void> _payForProfessionalUpgradeWithStripe(
     ExamModel exam, {
-    String? addonProductId,
-    String? addonProductCode,
+    List<String> addonProductIds = const [],
+    List<String> addonProductCodes = const [],
     num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
@@ -531,8 +558,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       final createRes = await _apiService
           .createProfessionalPlanStripePaymentIntent(
             examId,
-            addonProductId: addonProductId,
-            addonProductCode: addonProductCode,
+            addonProductIds: addonProductIds,
+            addonProductCodes: addonProductCodes,
           );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
@@ -559,14 +586,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         );
         return;
       }
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ?? 180;
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ?? 180;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
         expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
@@ -597,10 +622,34 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       setState(() => _isPaymentLoading = false);
 
       if (confirmRes.success) {
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'plan',
+              fallbackAmount: amountPaid,
+              fallbackTitle: professionalPlan?.name ?? 'Professional Plan',
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ??
+                          professionalPlan?.currency ??
+                          'USD')
+                      .toUpperCase(),
+              fallbackBillingCycleLabel:
+                  professionalPlan?.subscription?.billingCycle?.label ??
+                  professionalPlan?.interval.label,
+              fallbackNextBillingDate:
+                  _userController.user.value?.subscriptionExpiresAt ??
+                  professionalPlan?.subscription?.nextBillingDate,
+              fallbackPaymentMethodLabel: 'Card',
+              fallbackPaidAt: DateTime.now(),
+              fallbackProvider: 'stripe',
+              fallbackSubscriptionStartedAt:
+                  _userController.user.value?.subscriptionStartedAt,
+              fallbackStatus: 'successful',
+            );
         await _completeProfessionalUpgradeSuccess(
           exam,
           examId: examId,
-          amountPaid: amountPaid,
+          paymentDetails: paymentDetails,
         );
       } else {
         if (_handleCheckoutUnauthorized(confirmRes)) return;
@@ -611,10 +660,34 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               );
           if (!mounted) return;
           if (recovered) {
+            final PaymentSuccessDetails paymentDetails =
+                PaymentSuccessDetails.fromPayload(
+                  confirmRes.data,
+                  purchaseType: 'plan',
+                  fallbackAmount: amountPaid,
+                  fallbackTitle: professionalPlan?.name ?? 'Professional Plan',
+                  fallbackCurrency:
+                      (createRes.data?['currency']?.toString() ??
+                              professionalPlan?.currency ??
+                              'USD')
+                          .toUpperCase(),
+                  fallbackBillingCycleLabel:
+                      professionalPlan?.subscription?.billingCycle?.label ??
+                      professionalPlan?.interval.label,
+                  fallbackNextBillingDate:
+                      _userController.user.value?.subscriptionExpiresAt ??
+                      professionalPlan?.subscription?.nextBillingDate,
+                  fallbackPaymentMethodLabel: 'Card',
+                  fallbackPaidAt: DateTime.now(),
+                  fallbackProvider: 'stripe',
+                  fallbackSubscriptionStartedAt:
+                      _userController.user.value?.subscriptionStartedAt,
+                  fallbackStatus: 'successful',
+                );
             await _completeProfessionalUpgradeSuccess(
               exam,
               examId: examId,
-              amountPaid: amountPaid,
+              paymentDetails: paymentDetails,
             );
             return;
           }
@@ -653,8 +726,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 
   Future<void> _payForExamUnlockWithStripe(
     ExamModel exam, {
-    String? addonProductId,
-    String? addonProductCode,
+    List<String> addonProductIds = const [],
+    List<String> addonProductCodes = const [],
     num? expectedTotalAmount,
   }) async {
     if (!await _ensureCheckoutSession()) return;
@@ -665,8 +738,8 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     try {
       final createRes = await _apiService.createExamStripePaymentIntent(
         examId,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
       );
       if (!mounted) return;
       if (!createRes.success || createRes.data == null) {
@@ -715,16 +788,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         return;
       }
 
-      final int fallbackAmount =
-          professionalPlan?.unlockExamPrice.round() ?? 150;
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ?? fallbackAmount;
+      final num fallbackAmount = professionalPlan?.unlockExamPrice ?? 150;
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ?? fallbackAmount;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
-        addonProductId: addonProductId,
-        addonProductCode: addonProductCode,
+        addonProductIds: addonProductIds,
+        addonProductCodes: addonProductCodes,
         expectedTotalAmount: expectedTotalAmount,
       )) {
         setState(() => _isPaymentLoading = false);
@@ -760,6 +830,20 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         await _userController.refreshProfile();
         await _loadProfessionalPlan();
         if (!mounted) return;
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'exam',
+              fallbackAmount: amountPaid,
+              fallbackTitle: exam.name,
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ?? 'USD')
+                      .toUpperCase(),
+              fallbackPaymentMethodLabel: 'Card',
+              fallbackPaidAt: DateTime.now(),
+              fallbackProvider: 'stripe',
+              fallbackStatus: 'successful',
+            );
         context.push(
           '/exam-unlock-success',
           extra: {
@@ -768,7 +852,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': amountPaid,
+            'paymentSummary': paymentDetails.toJson(),
           },
         );
       } else {
@@ -1061,6 +1145,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     required ProfessionalPlanModel? plan,
     VoidCallback? onUnlockAnotherExam,
   }) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final bool isSmallScreen = screenWidth < 380;
+    final double primaryButtonHeight = isSmallScreen ? 68 : 56;
+    final double secondaryButtonHeight = isSmallScreen ? 52 : 56;
+    final double primaryButtonFontSize = isSmallScreen ? 13 : 15;
+    final double secondaryButtonFontSize = isSmallScreen ? 14 : 16;
     final subscription = plan?.subscription;
     final profileUser = _userController.user.value;
     final billingCycle =
@@ -1186,22 +1276,30 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            height: 56,
+            height: primaryButtonHeight,
             child: ElevatedButton(
               onPressed: onUnlockAnotherExam,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF184A99),
                 foregroundColor: Colors.white,
                 elevation: 0,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 12 : 18,
+                  vertical: isSmallScreen ? 8 : 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
               child: Text(
                 'Unlock another exam for $unlockLabel',
-                style: const TextStyle(
-                  fontSize: 15,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: primaryButtonFontSize,
                   fontWeight: FontWeight.w600,
+                  height: 1.2,
                 ),
               ),
             ),
@@ -1209,19 +1307,29 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
-            height: 56,
+            height: secondaryButtonHeight,
             child: OutlinedButton(
               onPressed: _onCancelSubscriptionTap,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF184A99),
                 side: const BorderSide(color: Color(0xFF184A99), width: 2),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 12 : 18,
+                  vertical: isSmallScreen ? 8 : 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
-              child: const Text(
+              child: Text(
                 'Cancel Subscription',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: secondaryButtonFontSize,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -1339,13 +1447,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
 }
 
 class _UpgradeCheckoutSelection {
-  final String? addonProductId;
-  final String? addonProductCode;
+  final List<String> addonProductIds;
+  final List<String> addonProductCodes;
   final num? expectedTotalAmount;
 
   const _UpgradeCheckoutSelection({
-    required this.addonProductId,
-    required this.addonProductCode,
+    required this.addonProductIds,
+    required this.addonProductCodes,
     required this.expectedTotalAmount,
   });
 }
@@ -1374,13 +1482,9 @@ class _UpgradeAddOnSheet extends StatefulWidget {
 class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
   String? _selectedValue;
 
-  PlanAddOnOption? get _selectedOption {
-    if (_selectedValue == null) return null;
-    for (final option in widget.options) {
-      if (option.selectionValue == _selectedValue) return option;
-    }
-    return null;
-  }
+  List<PlanAddOnOption> get _selectedOptions => widget.options
+      .where((option) => option.selectionValue == _selectedValue)
+      .toList(growable: false);
 
   String _formatMoney(num amount) {
     if (widget.currency.toUpperCase() == 'USD') {
@@ -1391,8 +1495,11 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedOption = _selectedOption;
-    final num addonPrice = selectedOption?.effectiveUpgradePrice ?? 0;
+    final selectedOptions = _selectedOptions;
+    final num addonPrice = selectedOptions.fold<num>(
+      0,
+      (sum, option) => sum + option.effectiveUpgradePrice,
+    );
     final subtotalBeforeReferral = widget.basePrice + addonPrice;
     final referralDiscount = widget.referralOffer == null
         ? 0
@@ -1431,7 +1538,7 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one add-on resource, or continue without one.',
+              'Choose only 1 add-on resource, or continue without any.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1450,9 +1557,9 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 const SizedBox(height: 6),
                 _priceRow(
                   'Selected resource',
-                  selectedOption == null
+                  selectedOptions.isEmpty
                       ? 'Not added'
-                      : _formatMoney(addonPrice),
+                      : '${selectedOptions.first.title} • ${_formatMoney(addonPrice)}',
                 ),
                 if (referralDiscount > 0) ...[
                   const SizedBox(height: 6),
@@ -1522,7 +1629,13 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 final isSelected = _selectedValue == optionValue;
 
                 return InkWell(
-                  onTap: () => setState(() => _selectedValue = optionValue),
+                  onTap: () => setState(() {
+                    if (isSelected) {
+                      _selectedValue = null;
+                    } else {
+                      _selectedValue = optionValue;
+                    }
+                  }),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -1615,12 +1728,14 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                             ],
                           ),
                         ),
-                        Radio<String>(
-                          value: optionValue,
-                          groupValue: _selectedValue,
-                          activeColor: const Color(0xFF2D4F88),
-                          onChanged: (value) =>
-                              setState(() => _selectedValue = value),
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: isSelected
+                              ? const Color(0xFF2D4F88)
+                              : const Color(0xFF6B7280),
+                          size: 28,
                         ),
                       ],
                     ),
@@ -1636,8 +1751,8 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             child: OutlinedButton(
               onPressed: () => Navigator.of(context).pop(
                 const _UpgradeCheckoutSelection(
-                  addonProductId: null,
-                  addonProductCode: null,
+                  addonProductIds: <String>[],
+                  addonProductCodes: <String>[],
                   expectedTotalAmount: null,
                 ),
               ),
@@ -1656,16 +1771,20 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _selectedOption == null
+              onPressed: selectedOptions.isEmpty
                   ? null
                   : () => Navigator.of(context).pop(
                       _UpgradeCheckoutSelection(
-                        addonProductId: _selectedOption!.id.trim().isEmpty
-                            ? null
-                            : _selectedOption!.id,
-                        addonProductCode: _selectedOption!.code.trim().isEmpty
-                            ? null
-                            : _selectedOption!.code,
+                        addonProductIds: selectedOptions
+                            .map((option) => option.id.trim())
+                            .where((id) => id.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
+                        addonProductCodes: selectedOptions
+                            .map((option) => option.code.trim())
+                            .where((code) => code.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
                         expectedTotalAmount: totalPrice,
                       ),
                     ),
@@ -1674,7 +1793,9 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                'Proceed With Add-On • ${_formatMoney(totalPrice)}',
+                selectedOptions.isEmpty
+                    ? 'Proceed With 1 Add-On • ${_formatMoney(totalPrice)}'
+                    : 'Proceed With Add-On • ${_formatMoney(totalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -1700,9 +1821,28 @@ class _UpgradeAddOnSheetState extends State<_UpgradeAddOnSheet> {
     );
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(label, style: textStyle)),
-        Text(value, style: textStyle),
+        Expanded(
+          flex: 3,
+          child: Text(
+            label,
+            style: textStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 4,
+          child: Text(
+            value,
+            style: textStyle,
+            textAlign: TextAlign.right,
+            maxLines: isTotal ? 1 : 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

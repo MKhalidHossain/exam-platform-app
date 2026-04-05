@@ -728,10 +728,28 @@ class ApiService {
   Future<ApiResponse<Map<String, dynamic>>>
   createProfessionalPlanStripePaymentIntent(
     String examId, {
+    List<String>? addonProductIds,
+    List<String>? addonProductCodes,
     String? addonProductId,
     String? addonProductCode,
   }) async {
     final body = <String, dynamic>{'examId': examId};
+    final normalizedAddonProductIds = (addonProductIds ?? const [])
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final normalizedAddonProductCodes = (addonProductCodes ?? const [])
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedAddonProductIds.isNotEmpty) {
+      body['addonProductIds'] = normalizedAddonProductIds;
+    }
+    if (normalizedAddonProductCodes.isNotEmpty) {
+      body['addonProductCodes'] = normalizedAddonProductCodes;
+    }
     if (addonProductId != null && addonProductId.trim().isNotEmpty) {
       body['addonProductId'] = addonProductId.trim();
     }
@@ -764,10 +782,28 @@ class ApiService {
   /// Create Stripe Payment Intent for exam unlock. POST {{base_url}}/api/v1/payments/exam/:examId/stripe/create
   Future<ApiResponse<Map<String, dynamic>>> createExamStripePaymentIntent(
     String examId, {
+    List<String>? addonProductIds,
+    List<String>? addonProductCodes,
     String? addonProductId,
     String? addonProductCode,
   }) async {
     final body = <String, dynamic>{};
+    final normalizedAddonProductIds = (addonProductIds ?? const [])
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final normalizedAddonProductCodes = (addonProductCodes ?? const [])
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedAddonProductIds.isNotEmpty) {
+      body['addonProductIds'] = normalizedAddonProductIds;
+    }
+    if (normalizedAddonProductCodes.isNotEmpty) {
+      body['addonProductCodes'] = normalizedAddonProductCodes;
+    }
     if (addonProductId != null && addonProductId.trim().isNotEmpty) {
       body['addonProductId'] = addonProductId.trim();
     }

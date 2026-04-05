@@ -18,6 +18,7 @@ class AuthController extends GetxController {
     BuildContext context, {
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     if (isLoading.value) return;
     isLoading.value = true;
@@ -29,6 +30,15 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
+        if (rememberMe) {
+          await _storageService.saveRememberedLogin(
+            email: email,
+            password: password,
+          );
+        } else {
+          await _storageService.clearRememberedLogin();
+        }
+
         final UserController userController = Get.isRegistered<UserController>()
             ? Get.find<UserController>()
             : Get.put(UserController());

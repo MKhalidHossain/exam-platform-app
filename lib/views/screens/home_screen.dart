@@ -7,6 +7,7 @@ import '../../core/error/error_handler.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../models/payment_success_details.dart';
 import '../../models/professional_plan_model.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
@@ -215,19 +216,27 @@ class HomeDashboard extends StatelessWidget {
     return value?.trim().toLowerCase() ?? '';
   }
 
+  List<String> _normalizeAddonSelections(List<String>? values) {
+    return (values ?? const [])
+        .map(_normalizeAddonSelection)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
   bool _didServerMissSelectedAddon({
     required Map<String, dynamic> paymentData,
     required _ExamUnlockCheckoutSelection selection,
   }) {
-    final normalizedAddonProductId = _normalizeAddonSelection(
-      selection.addonProductId,
+    final normalizedAddonProductIds = _normalizeAddonSelections(
+      selection.addonProductIds,
     );
-    final normalizedAddonProductCode = _normalizeAddonSelection(
-      selection.addonProductCode,
+    final normalizedAddonProductCodes = _normalizeAddonSelections(
+      selection.addonProductCodes,
     );
     final hasAddonSelection =
-        normalizedAddonProductId.isNotEmpty ||
-        normalizedAddonProductCode.isNotEmpty;
+        normalizedAddonProductIds.isNotEmpty ||
+        normalizedAddonProductCodes.isNotEmpty;
     if (!hasAddonSelection) return false;
 
     final breakdownRaw = paymentData['breakdown'];
@@ -237,19 +246,35 @@ class HomeDashboard extends StatelessWidget {
               ? Map<String, dynamic>.from(breakdownRaw)
               : const <String, dynamic>{});
 
-    final returnedAddonProductCode = _normalizeAddonSelection(
-      breakdown['addonProductCode']?.toString() ??
-          paymentData['addonProductCode']?.toString(),
-    );
+    final returnedAddonProductCodes = <String>[
+      ..._normalizeAddonSelections(
+        (breakdown['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      ..._normalizeAddonSelections(
+        (paymentData['addonProductCodes'] as List<dynamic>?)
+            ?.map((item) => item.toString())
+            .toList(),
+      ),
+      _normalizeAddonSelection(
+        breakdown['addonProductCode']?.toString() ??
+            paymentData['addonProductCode']?.toString(),
+      ),
+    ].where((value) => value.isNotEmpty).toSet().toList(growable: false);
     final addonFinalPrice = _parseCheckoutAmount(breakdown['addonFinalPrice']);
     final returnedTotalAmount =
         _parseCheckoutAmount(breakdown['totalAmount']) ??
         _parseCheckoutAmount(paymentData['amount']) ??
         0;
 
-    final selectionMatched = normalizedAddonProductCode.isNotEmpty
-        ? returnedAddonProductCode == normalizedAddonProductCode
-        : returnedAddonProductCode.isNotEmpty;
+    final selectionMatched = normalizedAddonProductCodes.isNotEmpty
+        ? normalizedAddonProductCodes.every(
+                returnedAddonProductCodes.contains,
+              ) &&
+              returnedAddonProductCodes.length ==
+                  normalizedAddonProductCodes.length
+        : returnedAddonProductCodes.length == normalizedAddonProductIds.length;
 
     if (!selectionMatched && (addonFinalPrice ?? 0) <= 0) {
       return true;
@@ -296,8 +321,8 @@ class HomeDashboard extends StatelessWidget {
       showLoading('Preparing secure checkout...');
       final createRes = await apiService.createExamStripePaymentIntent(
         examId,
-        addonProductId: selection.addonProductId,
-        addonProductCode: selection.addonProductCode,
+        addonProductIds: selection.addonProductIds,
+        addonProductCodes: selection.addonProductCodes,
       );
       if (!context.mounted) return;
       hideLoading();
@@ -344,11 +369,10 @@ class HomeDashboard extends StatelessWidget {
         return;
       }
 
-      final amountFromApi = createRes.data!['amount'];
-      final int amountPaid = amountFromApi is num
-          ? amountFromApi.round()
-          : int.tryParse(amountFromApi?.toString() ?? '') ??
-                (exam.unlockPrice?.round() ?? 150);
+      final num amountPaid =
+          _parseCheckoutAmount(createRes.data!['amount']) ??
+          exam.unlockPrice ??
+          150;
       if (_didServerMissSelectedAddon(
         paymentData: createRes.data!,
         selection: selection,
@@ -385,6 +409,20 @@ class HomeDashboard extends StatelessWidget {
         await userController.applyProfessionalUpgrade(examId: examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
+        final PaymentSuccessDetails paymentDetails =
+            PaymentSuccessDetails.fromPayload(
+              confirmRes.data,
+              purchaseType: 'exam',
+              fallbackAmount: amountPaid,
+              fallbackTitle: exam.name,
+              fallbackCurrency:
+                  (createRes.data?['currency']?.toString() ?? 'USD')
+                      .toUpperCase(),
+              fallbackPaymentMethodLabel: 'Card',
+              fallbackPaidAt: DateTime.now(),
+              fallbackProvider: 'stripe',
+              fallbackStatus: 'successful',
+            );
         context.push(
           '/exam-unlock-success',
           extra: {
@@ -393,7 +431,7 @@ class HomeDashboard extends StatelessWidget {
             'questionCount': exam.questionCount,
             'effectivitySheetContent': exam.effectivitySheetContent,
             'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
-            'amountPaid': amountPaid,
+            'paymentSummary': paymentDetails.toJson(),
           },
         );
       } else {
@@ -440,8 +478,8 @@ class HomeDashboard extends StatelessWidget {
     final options = planRes.data!.prePurchaseAddOnOptions;
     if (options.isEmpty) {
       return const _ExamUnlockCheckoutSelection(
-        addonProductId: null,
-        addonProductCode: null,
+        addonProductIds: <String>[],
+        addonProductCodes: <String>[],
         expectedTotalAmount: null,
       );
     }
@@ -692,6 +730,7 @@ class HomeDashboard extends StatelessWidget {
                           ),
                         ).then((result) {
                           if (result == null) return;
+                          if (!context.mounted) return;
                           if (result.alreadyUnlocked) {
                             context.push(
                               '/quiz-settings',
@@ -1043,7 +1082,7 @@ class _StatusDot extends StatelessWidget {
       width: 22,
       height: 22,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 14),
@@ -1117,13 +1156,13 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ExamUnlockCheckoutSelection {
-  final String? addonProductId;
-  final String? addonProductCode;
+  final List<String> addonProductIds;
+  final List<String> addonProductCodes;
   final num? expectedTotalAmount;
 
   const _ExamUnlockCheckoutSelection({
-    required this.addonProductId,
-    required this.addonProductCode,
+    required this.addonProductIds,
+    required this.addonProductCodes,
     required this.expectedTotalAmount,
   });
 }
@@ -1146,13 +1185,9 @@ class _ExamUnlockAddOnSheet extends StatefulWidget {
 class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
   String? _selectedValue;
 
-  PlanAddOnOption? get _selectedOption {
-    if (_selectedValue == null) return null;
-    for (final option in widget.options) {
-      if (option.selectionValue == _selectedValue) return option;
-    }
-    return null;
-  }
+  List<PlanAddOnOption> get _selectedOptions => widget.options
+      .where((option) => option.selectionValue == _selectedValue)
+      .toList(growable: false);
 
   String _formatMoney(num amount) {
     if (widget.currency.toUpperCase() == 'USD') {
@@ -1163,8 +1198,11 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedOption = _selectedOption;
-    final num addonPrice = selectedOption?.effectiveUpgradePrice ?? 0;
+    final selectedOptions = _selectedOptions;
+    final num addonPrice = selectedOptions.fold<num>(
+      0,
+      (sum, option) => sum + option.effectiveUpgradePrice,
+    );
     final num totalPrice = widget.examPrice + addonPrice;
 
     return Container(
@@ -1198,7 +1236,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one add-on resource, or continue with exam unlock only.',
+              'Choose only 1 add-on resource, or continue with exam unlock only.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1217,9 +1255,9 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 const SizedBox(height: 6),
                 _priceRow(
                   'Selected resource',
-                  selectedOption == null
+                  selectedOptions.isEmpty
                       ? 'Not added'
-                      : _formatMoney(addonPrice),
+                      : '${selectedOptions.first.title} • ${_formatMoney(addonPrice)}',
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10),
@@ -1248,7 +1286,13 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 final isSelected = _selectedValue == optionValue;
 
                 return InkWell(
-                  onTap: () => setState(() => _selectedValue = optionValue),
+                  onTap: () => setState(() {
+                    if (isSelected) {
+                      _selectedValue = null;
+                    } else {
+                      _selectedValue = optionValue;
+                    }
+                  }),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -1342,12 +1386,14 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                             ],
                           ),
                         ),
-                        Radio<String>(
-                          value: optionValue,
-                          groupValue: _selectedValue,
-                          activeColor: const Color(0xFF2D4F88),
-                          onChanged: (value) =>
-                              setState(() => _selectedValue = value),
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: isSelected
+                              ? const Color(0xFF2D4F88)
+                              : const Color(0xFF6B7280),
+                          size: 28,
                         ),
                       ],
                     ),
@@ -1363,8 +1409,8 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
             child: OutlinedButton(
               onPressed: () => Navigator.of(context).pop(
                 const _ExamUnlockCheckoutSelection(
-                  addonProductId: null,
-                  addonProductCode: null,
+                  addonProductIds: <String>[],
+                  addonProductCodes: <String>[],
                   expectedTotalAmount: null,
                 ),
               ),
@@ -1383,16 +1429,20 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _selectedOption == null
+              onPressed: selectedOptions.isEmpty
                   ? null
                   : () => Navigator.of(context).pop(
                       _ExamUnlockCheckoutSelection(
-                        addonProductId: _selectedOption!.id.trim().isEmpty
-                            ? null
-                            : _selectedOption!.id,
-                        addonProductCode: _selectedOption!.code.trim().isEmpty
-                            ? null
-                            : _selectedOption!.code,
+                        addonProductIds: selectedOptions
+                            .map((option) => option.id.trim())
+                            .where((id) => id.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
+                        addonProductCodes: selectedOptions
+                            .map((option) => option.code.trim())
+                            .where((code) => code.isNotEmpty)
+                            .toSet()
+                            .toList(growable: false),
                         expectedTotalAmount: totalPrice,
                       ),
                     ),
@@ -1401,7 +1451,9 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                'Proceed With Add-On • ${_formatMoney(totalPrice)}',
+                selectedOptions.isEmpty
+                    ? 'Proceed With 1 Add-On • ${_formatMoney(totalPrice)}'
+                    : 'Proceed With Add-On • ${_formatMoney(totalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -1427,9 +1479,28 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
     );
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(label, style: textStyle)),
-        Text(value, style: textStyle),
+        Expanded(
+          flex: 3,
+          child: Text(
+            label,
+            style: textStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 4,
+          child: Text(
+            value,
+            style: textStyle,
+            textAlign: TextAlign.right,
+            maxLines: isTotal ? 1 : 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }
