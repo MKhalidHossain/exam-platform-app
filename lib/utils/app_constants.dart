@@ -33,6 +33,9 @@ class AppConstants {
   static const String pendingReferralCodeKey = 'pending_referral_code';
   static const String pendingReferralProductIdKey =
       'pending_referral_product_id';
+  static const String rememberMeKey = 'remember_me';
+  static const String rememberedEmailKey = 'remembered_email';
+  static const String rememberedPasswordKey = 'remembered_password';
 
   // Pagination
   static const int defaultPageSize = 20;

@@ -418,6 +418,10 @@ class HomeDashboard extends StatelessWidget {
               fallbackCurrency:
                   (createRes.data?['currency']?.toString() ?? 'USD')
                       .toUpperCase(),
+              fallbackPaymentMethodLabel: 'Card',
+              fallbackPaidAt: DateTime.now(),
+              fallbackProvider: 'stripe',
+              fallbackStatus: 'successful',
             );
         context.push(
           '/exam-unlock-success',
@@ -1179,10 +1183,10 @@ class _ExamUnlockAddOnSheet extends StatefulWidget {
 }
 
 class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
-  final Set<String> _selectedValues = <String>{};
+  String? _selectedValue;
 
   List<PlanAddOnOption> get _selectedOptions => widget.options
-      .where((option) => _selectedValues.contains(option.selectionValue))
+      .where((option) => option.selectionValue == _selectedValue)
       .toList(growable: false);
 
   String _formatMoney(num amount) {
@@ -1232,7 +1236,7 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Choose one or more add-on resources, or continue with exam unlock only.',
+              'Choose only 1 add-on resource, or continue with exam unlock only.',
               style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
             ),
           ),
@@ -1250,10 +1254,10 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 _priceRow('Exam unlock', _formatMoney(widget.examPrice)),
                 const SizedBox(height: 6),
                 _priceRow(
-                  'Selected resources',
+                  'Selected resource',
                   selectedOptions.isEmpty
                       ? 'Not added'
-                      : '${selectedOptions.length} selected • ${_formatMoney(addonPrice)}',
+                      : '${selectedOptions.first.title} • ${_formatMoney(addonPrice)}',
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10),
@@ -1279,14 +1283,14 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
               itemBuilder: (context, index) {
                 final option = widget.options[index];
                 final optionValue = option.selectionValue;
-                final isSelected = _selectedValues.contains(optionValue);
+                final isSelected = _selectedValue == optionValue;
 
                 return InkWell(
                   onTap: () => setState(() {
                     if (isSelected) {
-                      _selectedValues.remove(optionValue);
+                      _selectedValue = null;
                     } else {
-                      _selectedValues.add(optionValue);
+                      _selectedValue = optionValue;
                     }
                   }),
                   borderRadius: BorderRadius.circular(14),
@@ -1382,16 +1386,14 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                             ],
                           ),
                         ),
-                        Checkbox(
-                          value: isSelected,
-                          activeColor: const Color(0xFF2D4F88),
-                          onChanged: (_) => setState(() {
-                            if (isSelected) {
-                              _selectedValues.remove(optionValue);
-                            } else {
-                              _selectedValues.add(optionValue);
-                            }
-                          }),
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: isSelected
+                              ? const Color(0xFF2D4F88)
+                              : const Color(0xFF6B7280),
+                          size: 28,
                         ),
                       ],
                     ),
@@ -1449,7 +1451,9 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                'Proceed With ${selectedOptions.length} Add-On${selectedOptions.length == 1 ? '' : 's'} • ${_formatMoney(totalPrice)}',
+                selectedOptions.isEmpty
+                    ? 'Proceed With 1 Add-On • ${_formatMoney(totalPrice)}'
+                    : 'Proceed With Add-On • ${_formatMoney(totalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
@@ -1475,9 +1479,28 @@ class _ExamUnlockAddOnSheetState extends State<_ExamUnlockAddOnSheet> {
     );
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(label, style: textStyle)),
-        Text(value, style: textStyle),
+        Expanded(
+          flex: 3,
+          child: Text(
+            label,
+            style: textStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 4,
+          child: Text(
+            value,
+            style: textStyle,
+            textAlign: TextAlign.right,
+            maxLines: isTotal ? 1 : 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
@@ -8,6 +7,7 @@ import '../widgets/gradient_background.dart';
 import '../widgets/app_logo_header.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/primary_button.dart';
+import '../../services/storage_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,8 +21,26 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthController _authController = Get.find<AuthController>();
+  final StorageService _storageService = StorageService();
   bool _obscurePassword = true;
   bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedLogin();
+  }
+
+  Future<void> _loadRememberedLogin() async {
+    final rememberedLogin = await _storageService.getRememberedLogin();
+    if (!mounted || rememberedLogin == null) return;
+
+    setState(() {
+      _rememberMe = true;
+      _emailController.text = rememberedLogin['email'] ?? '';
+      _passwordController.text = rememberedLogin['password'] ?? '';
+    });
+  }
 
   @override
   void dispose() {
@@ -37,12 +55,12 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       email: _emailController.text.trim(),
       password: _passwordController.text,
+      rememberMe: _rememberMe,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: GradientBackground(
         useImage: false,
@@ -55,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 20),
-                  
+
                   // Back Button
                   Align(
                     alignment: Alignment.centerLeft,
@@ -75,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       constraints: const BoxConstraints(),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 20),
 
                   // Logo and App Name
@@ -173,7 +191,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               });
                             },
                             activeColor: AppColors.primaryBlue,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                             visualDensity: VisualDensity.compact,
                           ),
                           const Text(
@@ -206,8 +225,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   Obx(
                     () => PrimaryButton(
                       text: 'Sign in',
-                      onPressed:
-                          _authController.isLoading.value ? null : _handleLogin,
+                      onPressed: _authController.isLoading.value
+                          ? null
+                          : _handleLogin,
                       isLoading: _authController.isLoading.value,
                       borderRadius: 30,
                     ),

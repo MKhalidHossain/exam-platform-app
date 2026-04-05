@@ -146,6 +146,39 @@ class StorageService {
     return prefs.getBool(key);
   }
 
+  Future<void> saveRememberedLogin({
+    required String email,
+    required String password,
+  }) async {
+    final prefs = await _prefs;
+    await prefs.setBool(AppConstants.rememberMeKey, true);
+    await prefs.setString(AppConstants.rememberedEmailKey, email);
+    await prefs.setString(AppConstants.rememberedPasswordKey, password);
+  }
+
+  Future<Map<String, String>?> getRememberedLogin() async {
+    final prefs = await _prefs;
+    final rememberMe = prefs.getBool(AppConstants.rememberMeKey) ?? false;
+    if (!rememberMe) return null;
+
+    final email =
+        prefs.getString(AppConstants.rememberedEmailKey)?.trim() ?? '';
+    final password = prefs.getString(AppConstants.rememberedPasswordKey) ?? '';
+
+    if (email.isEmpty || password.isEmpty) {
+      return null;
+    }
+
+    return {'email': email, 'password': password};
+  }
+
+  Future<void> clearRememberedLogin() async {
+    final prefs = await _prefs;
+    await prefs.remove(AppConstants.rememberMeKey);
+    await prefs.remove(AppConstants.rememberedEmailKey);
+    await prefs.remove(AppConstants.rememberedPasswordKey);
+  }
+
   Future<void> saveInt(String key, int value) async {
     final prefs = await _prefs;
     await prefs.setInt(key, value);

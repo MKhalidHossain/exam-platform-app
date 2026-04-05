@@ -31,39 +31,64 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
       paymentDetails.amountPaid,
       paymentDetails.currency,
     );
+    final String providerLabel =
+        _formatProvider(paymentDetails.provider) ?? 'Stripe';
+    final String paymentMethodLabel =
+        paymentDetails.paymentMethodLabel?.trim().isNotEmpty ?? false
+        ? paymentDetails.paymentMethodLabel!.trim()
+        : (providerLabel == 'PayPal' ? 'PayPal' : 'Card');
+    final String receiptLabel =
+        paymentDetails.receiptNumber?.trim().isNotEmpty ?? false
+        ? paymentDetails.receiptNumber!.trim()
+        : 'Pending';
+    final String transactionLabel =
+        paymentDetails.transactionReference?.trim().isNotEmpty ?? false
+        ? paymentDetails.transactionReference!.trim()
+        : 'Pending';
+    final String statusLabel = paymentDetails.status?.trim().isNotEmpty ?? false
+        ? _titleCase(paymentDetails.status!)
+        : 'Successful';
+    final DateTime paidAt = paymentDetails.paidAt ?? DateTime.now();
+    final String durationLabel = isPlanPurchase
+        ? (paymentDetails.billingCycleLabel?.trim().isNotEmpty ?? false
+              ? paymentDetails.billingCycleLabel!.trim()
+              : 'Pending')
+        : 'Lifetime access';
+    final DateTime? resolvedNextBillingDate =
+        paymentDetails.nextBillingDate ??
+        _inferNextBillingDate(
+          startDate: paymentDetails.subscriptionStartedAt ?? paidAt,
+          durationLabel: paymentDetails.billingCycleLabel,
+        );
+    final String nextBillingLabel = isPlanPurchase
+        ? (resolvedNextBillingDate != null
+              ? _formatDate(resolvedNextBillingDate)
+              : 'Pending')
+        : 'Not applicable';
     final List<MapEntry<String, String>> summaryRows =
         <MapEntry<String, String>>[
-          MapEntry(isPlanPurchase ? 'Plan' : 'Exam', isPlanPurchase
-              ? purchaseTitle
-              : courseTitle),
+          MapEntry(
+            isPlanPurchase ? 'Plan' : 'Exam',
+            isPlanPurchase ? purchaseTitle : courseTitle,
+          ),
           MapEntry(
             isPlanPurchase ? 'Amount Paid Today' : 'Amount Paid',
             amountLabel,
           ),
-          if (isPlanPurchase &&
-              (paymentDetails.billingCycleLabel?.trim().isNotEmpty ?? false))
-            MapEntry('Billing Cycle', paymentDetails.billingCycleLabel!.trim()),
-          if (isPlanPurchase && paymentDetails.nextBillingDate != null)
+          MapEntry('Duration', durationLabel),
+          if (isPlanPurchase && paymentDetails.subscriptionStartedAt != null)
             MapEntry(
-              'Next Billing Date',
-              _formatDate(paymentDetails.nextBillingDate!),
+              'Activated On',
+              _formatDate(paymentDetails.subscriptionStartedAt!),
             ),
-          if (paymentDetails.paymentMethodLabel?.trim().isNotEmpty ?? false)
-            MapEntry(
-              'Payment Method',
-              paymentDetails.paymentMethodLabel!.trim(),
-            ),
-          if (paymentDetails.receiptNumber?.trim().isNotEmpty ?? false)
-            MapEntry('Receipt #', paymentDetails.receiptNumber!.trim()),
-          if ((paymentDetails.transactionReference?.trim().isNotEmpty ?? false) &&
-              paymentDetails.transactionReference?.trim() !=
-                  paymentDetails.receiptNumber?.trim())
-            MapEntry(
-              'Transaction ID',
-              paymentDetails.transactionReference!.trim(),
-            ),
-          if (paymentDetails.paidAt != null)
-            MapEntry('Paid On', _formatDate(paymentDetails.paidAt!)),
+          MapEntry('Next Billing Date', nextBillingLabel),
+          MapEntry('Payment Method', paymentMethodLabel),
+          MapEntry('Provider', providerLabel),
+          MapEntry('Receipt #', receiptLabel),
+          if (transactionLabel != receiptLabel)
+            MapEntry('Transaction ID', transactionLabel),
+          MapEntry('Paid On', _formatDate(paidAt)),
+          MapEntry('Status', statusLabel),
         ];
 
     return Scaffold(
@@ -224,6 +249,81 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
     ];
     final month = months[local.month - 1];
     return '$month ${local.day}, ${local.year}';
+  }
+
+  static DateTime? _inferNextBillingDate({
+    required DateTime startDate,
+    required String? durationLabel,
+  }) {
+    final text = durationLabel?.trim().toLowerCase() ?? '';
+    if (text.isEmpty) return null;
+
+    final match = RegExp(
+      r'(\d+)\s+(day|days|month|months|year|years)',
+    ).firstMatch(text);
+    if (match == null) return null;
+
+    final count = int.tryParse(match.group(1) ?? '');
+    final unit = match.group(2) ?? '';
+    if (count == null || count <= 0) return null;
+
+    switch (unit) {
+      case 'day':
+      case 'days':
+        return startDate.add(Duration(days: count));
+      case 'month':
+      case 'months':
+        return DateTime(
+          startDate.year,
+          startDate.month + count,
+          startDate.day,
+          startDate.hour,
+          startDate.minute,
+          startDate.second,
+          startDate.millisecond,
+          startDate.microsecond,
+        );
+      case 'year':
+      case 'years':
+        return DateTime(
+          startDate.year + count,
+          startDate.month,
+          startDate.day,
+          startDate.hour,
+          startDate.minute,
+          startDate.second,
+          startDate.millisecond,
+          startDate.microsecond,
+        );
+      default:
+        return null;
+    }
+  }
+
+  static String? _formatProvider(String? provider) {
+    final normalized = provider?.trim().toLowerCase() ?? '';
+    if (normalized.isEmpty) return null;
+    switch (normalized) {
+      case 'stripe':
+        return 'Stripe';
+      case 'paypal':
+        return 'PayPal';
+      case 'manual':
+        return 'Manual';
+      default:
+        return _titleCase(normalized);
+    }
+  }
+
+  static String _titleCase(String value) {
+    return value
+        .split(RegExp(r'[_\s-]+'))
+        .where((part) => part.isNotEmpty)
+        .map(
+          (part) =>
+              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
+        .join(' ');
   }
 }
 

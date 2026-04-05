@@ -10,6 +10,8 @@ class PaymentSuccessDetails {
   final String? transactionReference;
   final DateTime? paidAt;
   final String? provider;
+  final DateTime? subscriptionStartedAt;
+  final String? status;
 
   const PaymentSuccessDetails({
     required this.purchaseType,
@@ -23,6 +25,8 @@ class PaymentSuccessDetails {
     this.transactionReference,
     this.paidAt,
     this.provider,
+    this.subscriptionStartedAt,
+    this.status,
   });
 
   factory PaymentSuccessDetails.fromJson(Map<String, dynamic> json) {
@@ -43,8 +47,9 @@ class PaymentSuccessDetails {
           _parseNum(json['totalAmount']) ??
           0,
       currency: (json['currency']?.toString() ?? 'USD').toUpperCase(),
-      billingCycleLabel:
-          _normalizeText(json['billingCycleLabel'] ?? json['billingCycle']),
+      billingCycleLabel: _normalizeText(
+        json['billingCycleLabel'] ?? json['billingCycle'],
+      ),
       nextBillingDate: _parseDateTime(
         json['nextBillingDate'] ?? json['subscriptionExpiresAt'],
       ),
@@ -53,6 +58,10 @@ class PaymentSuccessDetails {
       transactionReference: _normalizeText(json['transactionReference']),
       paidAt: _parseDateTime(json['paidAt'] ?? json['purchasedAt']),
       provider: _normalizeText(json['provider']),
+      subscriptionStartedAt: _parseDateTime(
+        json['subscriptionStartedAt'] ?? json['startedAt'],
+      ),
+      status: _normalizeText(json['status'] ?? json['subscriptionStatus']),
     );
   }
 
@@ -69,6 +78,8 @@ class PaymentSuccessDetails {
     String? fallbackTransactionReference,
     DateTime? fallbackPaidAt,
     String? fallbackProvider,
+    DateTime? fallbackSubscriptionStartedAt,
+    String? fallbackStatus,
   }) {
     final dynamic rawPaymentSummary = payload?['paymentSummary'];
     if (rawPaymentSummary is Map<String, dynamic>) {
@@ -92,8 +103,8 @@ class PaymentSuccessDetails {
           _parseNum(payload?['amount']) ??
           _parseNum(pricingBreakdown?['totalAmount']) ??
           fallbackAmount,
-      currency:
-          (payload?['currency']?.toString() ?? fallbackCurrency).toUpperCase(),
+      currency: (payload?['currency']?.toString() ?? fallbackCurrency)
+          .toUpperCase(),
       billingCycleLabel:
           _normalizeText(payload?['billingCycleLabel']) ??
           fallbackBillingCycleLabel,
@@ -114,6 +125,16 @@ class PaymentSuccessDetails {
           _parseDateTime(payload?['paidAt'] ?? payload?['purchasedAt']) ??
           fallbackPaidAt,
       provider: _normalizeText(payload?['provider']) ?? fallbackProvider,
+      subscriptionStartedAt:
+          _parseDateTime(
+            payload?['subscriptionStartedAt'] ?? payload?['startedAt'],
+          ) ??
+          fallbackSubscriptionStartedAt,
+      status:
+          _normalizeText(
+            payload?['status'] ?? payload?['subscriptionStatus'],
+          ) ??
+          fallbackStatus,
     );
   }
 
@@ -130,6 +151,8 @@ class PaymentSuccessDetails {
       'transactionReference': transactionReference,
       'paidAt': paidAt?.toIso8601String(),
       'provider': provider,
+      'subscriptionStartedAt': subscriptionStartedAt?.toIso8601String(),
+      'status': status,
     };
   }
 
