@@ -853,38 +853,9 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                     height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  product.shortDescription.trim().isNotEmpty
-                      ? product.shortDescription
-                      : 'Professional resource from the EJ store.',
-                  style: const TextStyle(
-                    color: Color(0xFFD9E5FF),
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
                 const SizedBox(height: 14),
                 _buildHeroPriceCard(product, isUnlocked: isUnlocked),
               ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          _sectionCard(
-            title: product.isBundle
-                ? 'About This Bundle'
-                : 'About This Resource',
-            child: Text(
-              product.fullDescription.trim().isNotEmpty
-                  ? product.fullDescription
-                  : product.shortDescription.trim().isNotEmpty
-                  ? product.shortDescription
-                  : product.isBundle
-                  ? 'This bundle groups multiple study guides into one purchase so every included resource unlocks together.'
-                  : 'This resource gives you practical study material, structured explanations, and a focused buying flow for certification preparation.',
-              style: const TextStyle(color: Color(0xFF475569), height: 1.65),
             ),
           ),
           if (product.bundleIncludes.isNotEmpty) ...[
@@ -1025,10 +996,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => _openPreview(product),
-                          icon: const Icon(
-                            Icons.visibility_outlined,
-                            size: 18,
-                          ),
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
                           label: const Text('Preview 5 Pages'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF2D4F88),
@@ -1157,10 +1125,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                       const SizedBox(width: 10),
                       OutlinedButton.icon(
                         onPressed: () => _openPreview(product),
-                        icon: const Icon(
-                          Icons.visibility_outlined,
-                          size: 17,
-                        ),
+                        icon: const Icon(Icons.visibility_outlined, size: 17),
                         label: const Text('Preview 5 Pages'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF2D4F88),
@@ -1256,15 +1221,17 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Widget _buildHeroPriceCard(EbookProduct product, {required bool isUnlocked}) {
-    final currentPrice = _currencyText(
-      product.pricing.current,
-      product.pricing.currency,
-    );
+    final displayAmount = isUnlocked ? 0.0 : product.pricing.current;
+    final originalAmount = isUnlocked
+        ? (product.pricing.original > 0
+              ? product.pricing.original
+              : product.pricing.current)
+        : product.pricing.original;
+    final currentPrice = _currencyText(displayAmount, product.pricing.currency);
     final originalPrice = _currencyText(
-      product.pricing.original,
+      originalAmount,
       product.pricing.currency,
     );
-    final hasDiscount = product.pricing.original > product.pricing.current;
 
     return Container(
       width: double.infinity,
@@ -1309,26 +1276,25 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (hasDiscount)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AF59E0B),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Text(
-                    'Offer',
-                    style: TextStyle(
-                      color: Color(0xFFFFE0A3),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0x1AF59E0B),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Offer',
+                  style: TextStyle(
+                    color: Color(0xFFFFE0A3),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+              ),
               Text(
                 currentPrice,
                 style: const TextStyle(
@@ -1338,19 +1304,20 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                   height: 1,
                 ),
               ),
-              if (hasDiscount)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    originalPrice,
-                    style: const TextStyle(
-                      color: Color(0xFFB8C7E6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      decoration: TextDecoration.lineThrough,
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  originalPrice,
+                  style: const TextStyle(
+                    color: Color(0xFFB8C7E6),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.lineThrough,
+                    decorationColor: Color(0xFFB8C7E6),
+                    decorationThickness: 2,
                   ),
                 ),
+              ),
             ],
           ),
         ],

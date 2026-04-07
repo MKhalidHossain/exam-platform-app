@@ -93,7 +93,9 @@ class EbookUpgradeAddOnOption {
     required int sortOrder,
     required EbookUserAccess userAccess,
   }) {
-    final currentPrice = regularPrice > 0 ? regularPrice : basePrice;
+    final currentPrice = upgradeDiscountPrice > 0
+        ? upgradeDiscountPrice
+        : (regularPrice > 0 ? regularPrice : basePrice);
     final originalPrice = basePrice > currentPrice ? basePrice : currentPrice;
     final unlocked = userAccess.isUnlockedForCode(code);
 
