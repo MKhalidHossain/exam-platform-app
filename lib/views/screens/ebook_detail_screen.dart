@@ -1221,12 +1221,11 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Widget _buildHeroPriceCard(EbookProduct product, {required bool isUnlocked}) {
-    final displayAmount = isUnlocked ? 0.0 : product.pricing.current;
-    final originalAmount = isUnlocked
-        ? (product.pricing.original > 0
-              ? product.pricing.original
-              : product.pricing.current)
-        : product.pricing.original;
+    final displayAmount = product.pricing.current;
+    final originalAmount = product.pricing.original > 0
+        ? product.pricing.original
+        : product.pricing.current;
+    final showOriginalPrice = originalAmount > displayAmount;
     final currentPrice = _currencyText(displayAmount, product.pricing.currency);
     final originalPrice = _currencyText(
       originalAmount,
@@ -1235,7 +1234,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0x16FFFFFF),
         borderRadius: BorderRadius.circular(20),
@@ -1249,7 +1248,7 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Today\'s price',
+                  'Total price',
                   style: TextStyle(
                     color: Color(0xFFD9E5FF),
                     fontSize: 12,
@@ -1283,13 +1282,17 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0x1AF59E0B),
+                  color: showOriginalPrice
+                      ? const Color(0x1AF59E0B)
+                      : const Color(0x26FFFFFF),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Text(
-                  'Offer',
+                child: Text(
+                  showOriginalPrice ? 'Offer' : 'Regular Price',
                   style: TextStyle(
-                    color: Color(0xFFFFE0A3),
+                    color: showOriginalPrice
+                        ? const Color(0xFFFFE0A3)
+                        : const Color(0xFFE2E8F0),
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1304,20 +1307,21 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                   height: 1,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  originalPrice,
-                  style: const TextStyle(
-                    color: Color(0xFFB8C7E6),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    decoration: TextDecoration.lineThrough,
-                    decorationColor: Color(0xFFB8C7E6),
-                    decorationThickness: 2,
+              if (showOriginalPrice)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    originalPrice,
+                    style: const TextStyle(
+                      color: Color(0xFFB8C7E6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Color(0xFFB8C7E6),
+                      decorationThickness: 2,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
