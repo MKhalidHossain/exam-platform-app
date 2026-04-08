@@ -5,6 +5,9 @@ class PaymentSuccessDetails {
   final String currency;
   final String? billingCycleLabel;
   final DateTime? nextBillingDate;
+  final String? unlockDurationLabel;
+  final DateTime? expiresAt;
+  final int? expiryMonths;
   final String? paymentMethodLabel;
   final String? receiptNumber;
   final String? transactionReference;
@@ -20,6 +23,9 @@ class PaymentSuccessDetails {
     required this.currency,
     this.billingCycleLabel,
     this.nextBillingDate,
+    this.unlockDurationLabel,
+    this.expiresAt,
+    this.expiryMonths,
     this.paymentMethodLabel,
     this.receiptNumber,
     this.transactionReference,
@@ -30,6 +36,8 @@ class PaymentSuccessDetails {
   });
 
   factory PaymentSuccessDetails.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic>? access = _asMapOrNull(json['access']);
+
     return PaymentSuccessDetails(
       purchaseType:
           (json['purchaseType']?.toString().trim().toLowerCase() ?? 'exam')
@@ -53,10 +61,29 @@ class PaymentSuccessDetails {
       nextBillingDate: _parseDateTime(
         json['nextBillingDate'] ?? json['subscriptionExpiresAt'],
       ),
+      unlockDurationLabel: _normalizeText(
+        json['unlockDurationLabel'] ?? access?['unlockDurationLabel'],
+      ),
+      expiresAt: _parseDateTime(
+        json['expiresAt'] ??
+            json['unlockExpiresAt'] ??
+            json['expiryDate'] ??
+            access?['expiresAt'] ??
+            access?['unlockExpiresAt'] ??
+            access?['expiryDate'],
+      ),
+      expiryMonths: _parseInt(
+        json['expiryMonths'] ??
+            json['unlockDurationMonths'] ??
+            access?['expiryMonths'] ??
+            access?['unlockDurationMonths'],
+      ),
       paymentMethodLabel: _normalizeText(json['paymentMethodLabel']),
       receiptNumber: _normalizeText(json['receiptNumber']),
       transactionReference: _normalizeText(json['transactionReference']),
-      paidAt: _parseDateTime(json['paidAt'] ?? json['purchasedAt']),
+      paidAt: _parseDateTime(
+        json['paidAt'] ?? json['purchasedAt'] ?? access?['purchasedAt'],
+      ),
       provider: _normalizeText(json['provider']),
       subscriptionStartedAt: _parseDateTime(
         json['subscriptionStartedAt'] ?? json['startedAt'],
@@ -73,6 +100,9 @@ class PaymentSuccessDetails {
     String fallbackCurrency = 'USD',
     String? fallbackBillingCycleLabel,
     DateTime? fallbackNextBillingDate,
+    String? fallbackUnlockDurationLabel,
+    DateTime? fallbackExpiresAt,
+    int? fallbackExpiryMonths,
     String? fallbackPaymentMethodLabel,
     String? fallbackReceiptNumber,
     String? fallbackTransactionReference,
@@ -95,6 +125,7 @@ class PaymentSuccessDetails {
     final Map<String, dynamic>? pricingBreakdown = rawBreakdown is Map
         ? Map<String, dynamic>.from(rawBreakdown)
         : null;
+    final Map<String, dynamic>? access = _asMapOrNull(payload?['access']);
 
     return PaymentSuccessDetails(
       purchaseType: purchaseType.trim().toLowerCase(),
@@ -113,6 +144,29 @@ class PaymentSuccessDetails {
             payload?['nextBillingDate'] ?? payload?['subscriptionExpiresAt'],
           ) ??
           fallbackNextBillingDate,
+      unlockDurationLabel:
+          _normalizeText(
+            payload?['unlockDurationLabel'] ?? access?['unlockDurationLabel'],
+          ) ??
+          fallbackUnlockDurationLabel,
+      expiresAt:
+          _parseDateTime(
+            payload?['expiresAt'] ??
+                payload?['unlockExpiresAt'] ??
+                payload?['expiryDate'] ??
+                access?['expiresAt'] ??
+                access?['unlockExpiresAt'] ??
+                access?['expiryDate'],
+          ) ??
+          fallbackExpiresAt,
+      expiryMonths:
+          _parseInt(
+            payload?['expiryMonths'] ??
+                payload?['unlockDurationMonths'] ??
+                access?['expiryMonths'] ??
+                access?['unlockDurationMonths'],
+          ) ??
+          fallbackExpiryMonths,
       paymentMethodLabel:
           _normalizeText(payload?['paymentMethodLabel']) ??
           fallbackPaymentMethodLabel,
@@ -122,7 +176,11 @@ class PaymentSuccessDetails {
           _normalizeText(payload?['transactionReference']) ??
           fallbackTransactionReference,
       paidAt:
-          _parseDateTime(payload?['paidAt'] ?? payload?['purchasedAt']) ??
+          _parseDateTime(
+            payload?['paidAt'] ??
+                payload?['purchasedAt'] ??
+                access?['purchasedAt'],
+          ) ??
           fallbackPaidAt,
       provider: _normalizeText(payload?['provider']) ?? fallbackProvider,
       subscriptionStartedAt:
@@ -146,6 +204,9 @@ class PaymentSuccessDetails {
       'currency': currency,
       'billingCycleLabel': billingCycleLabel,
       'nextBillingDate': nextBillingDate?.toIso8601String(),
+      'unlockDurationLabel': unlockDurationLabel,
+      'expiresAt': expiresAt?.toIso8601String(),
+      'expiryMonths': expiryMonths,
       'paymentMethodLabel': paymentMethodLabel,
       'receiptNumber': receiptNumber,
       'transactionReference': transactionReference,
@@ -162,6 +223,13 @@ class PaymentSuccessDetails {
     return num.tryParse(value.toString());
   }
 
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
   static DateTime? _parseDateTime(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
@@ -173,5 +241,11 @@ class PaymentSuccessDetails {
   static String? _normalizeText(dynamic value) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  static Map<String, dynamic>? _asMapOrNull(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
   }
 }

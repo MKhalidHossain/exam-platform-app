@@ -26,6 +26,7 @@ import '../views/screens/exam_review_screen.dart';
 import '../views/screens/exam_unlock_success_screen.dart';
 import '../views/screens/history_detail_view.dart';
 import '../views/screens/referral_screen.dart';
+import '../views/screens/unlock_exam_resources_screen.dart';
 import '../views/screens/shared_ebook_redirect_screen.dart';
 import '../views/screens/shared_referral_redirect_screen.dart';
 import '../models/ebook_store_model.dart';
@@ -193,6 +194,11 @@ GoRouter getRouter() {
         path: '/referral',
         name: 'referral',
         builder: (context, state) => const ReferralScreen(),
+      ),
+      GoRoute(
+        path: '/unlock-exam-resources',
+        name: 'unlock-exam-resources',
+        builder: (context, state) => const UnlockExamResourcesScreen(),
       ),
       GoRoute(
         path: '/professional-plan',
@@ -544,13 +550,12 @@ GoRouter getRouter() {
           int? questionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
-          PaymentSuccessDetails paymentDetails =
-              const PaymentSuccessDetails(
-                purchaseType: 'plan',
-                title: 'Professional Plan',
-                amountPaid: 150,
-                currency: 'USD',
-              );
+          PaymentSuccessDetails paymentDetails = const PaymentSuccessDetails(
+            purchaseType: 'plan',
+            title: 'Professional Plan',
+            amountPaid: 150,
+            currency: 'USD',
+          );
 
           num? parseNum(dynamic value) {
             if (value == null) return null;
@@ -581,7 +586,8 @@ GoRouter getRouter() {
                 purchaseType: purchaseType,
                 title: purchaseType == 'plan' ? 'Professional Plan' : title,
                 amountPaid: parseNum(extra['amountPaid']) ?? 150,
-                currency: (extra['currency']?.toString() ?? 'USD').toUpperCase(),
+                currency: (extra['currency']?.toString() ?? 'USD')
+                    .toUpperCase(),
               );
             }
           }

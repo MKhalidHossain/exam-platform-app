@@ -409,6 +409,17 @@ class HomeDashboard extends StatelessWidget {
         await userController.applyProfessionalUpgrade(examId: examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
+        final DateTime fallbackPaidAt = DateTime.now();
+        final DateTime fallbackExamExpiresAt = DateTime(
+          fallbackPaidAt.year,
+          fallbackPaidAt.month + 3,
+          fallbackPaidAt.day,
+          fallbackPaidAt.hour,
+          fallbackPaidAt.minute,
+          fallbackPaidAt.second,
+          fallbackPaidAt.millisecond,
+          fallbackPaidAt.microsecond,
+        );
         final PaymentSuccessDetails paymentDetails =
             PaymentSuccessDetails.fromPayload(
               confirmRes.data,
@@ -418,8 +429,11 @@ class HomeDashboard extends StatelessWidget {
               fallbackCurrency:
                   (createRes.data?['currency']?.toString() ?? 'USD')
                       .toUpperCase(),
+              fallbackUnlockDurationLabel: '3 months',
+              fallbackExpiresAt: fallbackExamExpiresAt,
+              fallbackExpiryMonths: 3,
               fallbackPaymentMethodLabel: 'Card',
-              fallbackPaidAt: DateTime.now(),
+              fallbackPaidAt: fallbackPaidAt,
               fallbackProvider: 'stripe',
               fallbackStatus: 'successful',
             );
