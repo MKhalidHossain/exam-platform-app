@@ -242,6 +242,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 12),
                         _SettingItem(
+                          icon: Icons.lock_open_outlined,
+                          title: 'Unlock Exam & Resources',
+                          subtitle: 'View your unlocked exams and resources',
+                          onTap: () {
+                            context.push('/unlock-exam-resources');
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
                           icon: Icons.group_add_outlined,
                           title: 'Referral',
                           subtitle: 'Track your referral users and rewards',

@@ -53,18 +53,13 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
         ? (paymentDetails.billingCycleLabel?.trim().isNotEmpty ?? false
               ? paymentDetails.billingCycleLabel!.trim()
               : 'Pending')
-        : 'Lifetime access';
+        : _resolveExamDurationLabel(paymentDetails);
     final DateTime? resolvedNextBillingDate =
         paymentDetails.nextBillingDate ??
         _inferNextBillingDate(
           startDate: paymentDetails.subscriptionStartedAt ?? paidAt,
           durationLabel: paymentDetails.billingCycleLabel,
         );
-    final String nextBillingLabel = isPlanPurchase
-        ? (resolvedNextBillingDate != null
-              ? _formatDate(resolvedNextBillingDate)
-              : 'Pending')
-        : 'Not applicable';
     final List<MapEntry<String, String>> summaryRows =
         <MapEntry<String, String>>[
           MapEntry(
@@ -75,13 +70,29 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
             isPlanPurchase ? 'Amount Paid Today' : 'Amount Paid',
             amountLabel,
           ),
-          MapEntry('Duration', durationLabel),
+          MapEntry(
+            isPlanPurchase ? 'Duration' : 'Unlock Duration',
+            durationLabel,
+          ),
           if (isPlanPurchase && paymentDetails.subscriptionStartedAt != null)
             MapEntry(
               'Activated On',
               _formatDate(paymentDetails.subscriptionStartedAt!),
             ),
-          MapEntry('Next Billing Date', nextBillingLabel),
+          if (isPlanPurchase)
+            MapEntry(
+              'Next Billing Date',
+              resolvedNextBillingDate != null
+                  ? _formatDate(resolvedNextBillingDate)
+                  : 'Pending',
+            ),
+          if (!isPlanPurchase)
+            MapEntry(
+              'Expires On',
+              paymentDetails.expiresAt != null
+                  ? _formatDate(paymentDetails.expiresAt!)
+                  : 'Pending',
+            ),
           MapEntry('Payment Method', paymentMethodLabel),
           MapEntry('Provider', providerLabel),
           MapEntry('Receipt #', receiptLabel),
@@ -324,6 +335,18 @@ class ExamUnlockSuccessScreen extends StatelessWidget {
               '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
         )
         .join(' ');
+  }
+
+  static String _resolveExamDurationLabel(PaymentSuccessDetails details) {
+    final directLabel = details.unlockDurationLabel?.trim() ?? '';
+    if (directLabel.isNotEmpty) return directLabel;
+
+    final months = details.expiryMonths;
+    if (months != null && months > 0) {
+      return months == 1 ? '1 month' : '$months months';
+    }
+
+    return '3 months';
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../models/user_model.dart';
 import '../models/api_response.dart';
+import '../models/user_unlocks_model.dart';
 import '../models/users_response.dart';
 import 'api_service.dart';
 import '../utils/api_endpoints.dart';
@@ -13,6 +14,14 @@ class UserService {
     return await _apiService.get<UserModel>(
       ApiEndpoints.getProfile,
       fromJson: (json) => UserModel.fromJson(json),
+    );
+  }
+
+  /// Get current user unlocked exams and resources
+  Future<ApiResponse<UserUnlocksData>> getMyUnlocks() async {
+    return await _apiService.get<UserUnlocksData>(
+      ApiEndpoints.getMyUnlocks,
+      fromJson: (json) => UserUnlocksData.fromJson(json),
     );
   }
 
@@ -79,10 +88,7 @@ class UserService {
     required String oldPassword,
     required String newPassword,
   }) async {
-    final body = {
-      'oldPassword': oldPassword,
-      'newPassword': newPassword,
-    };
+    final body = {'oldPassword': oldPassword, 'newPassword': newPassword};
 
     return await _apiService.post<void>(
       ApiEndpoints.changePassword,
