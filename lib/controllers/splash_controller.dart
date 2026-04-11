@@ -25,6 +25,10 @@ class SplashController extends GetxController {
     if (!context.mounted) return;
 
     if (profileResponse.success && profileResponse.data != null) {
+      if (profileResponse.data!.mustChangePassword) {
+        context.go('/change-password', extra: {'forceChange': true});
+        return;
+      }
       context.go('/home');
     } else {
       await _storage.clearSessionData();

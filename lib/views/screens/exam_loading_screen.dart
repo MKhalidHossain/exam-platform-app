@@ -11,6 +11,7 @@ class ExamLoadingScreen extends StatefulWidget {
   final String courseTitle;
   final String? examId;
   final int? questionCount;
+  final int? totalQuestionCount;
   final bool timedMode;
   final bool regenerate;
 
@@ -19,6 +20,7 @@ class ExamLoadingScreen extends StatefulWidget {
     required this.courseTitle,
     this.examId,
     this.questionCount,
+    this.totalQuestionCount,
     this.timedMode = true,
     this.regenerate = false,
   });
@@ -129,6 +131,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen> {
             'courseTitle': widget.courseTitle,
             'examId': examId,
             'questions': response.data!.questions,
+            'totalQuestionCount': widget.totalQuestionCount ?? questionCount,
             'startTime': startTime,
             'endTime': endTime,
             'durationMinutes': durationMinutes,

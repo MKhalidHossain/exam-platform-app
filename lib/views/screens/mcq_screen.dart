@@ -11,6 +11,7 @@ class McqScreen extends StatefulWidget {
   final String courseTitle;
   final String? examId;
   final List<dynamic>? questions;
+  final int? totalQuestionCount;
   final DateTime? startTime;
   final DateTime? endTime;
   final int? durationMinutes;
@@ -21,6 +22,7 @@ class McqScreen extends StatefulWidget {
     required this.courseTitle,
     this.examId,
     this.questions,
+    this.totalQuestionCount,
     this.startTime,
     this.endTime,
     this.durationMinutes,
@@ -47,6 +49,12 @@ class _McqScreenState extends State<McqScreen> {
   Duration? _remaining;
   bool _hasAutoSubmitted = false;
   bool _isAutoSubmitting = false;
+
+  int get _settingsQuestionCount {
+    final total = widget.totalQuestionCount;
+    if (total != null && total > 0) return total;
+    return _questions.length;
+  }
 
   @override
   void initState() {
@@ -447,7 +455,7 @@ class _McqScreenState extends State<McqScreen> {
                           extra: {
                             'courseTitle': widget.courseTitle,
                             'examId': widget.examId,
-                            'questionCount': _questions.length,
+                            'questionCount': _settingsQuestionCount,
                             'selectedQuestionCount': _questions.length,
                           },
                         );

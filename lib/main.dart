@@ -61,7 +61,7 @@ class _MyAppState extends State<MyApp> {
 
     return Obx(() {
       final themeMode = themeController.isDarkMode
-          ? ThemeMode.dark
+          ? ThemeMode.dark 
           : ThemeMode.light;
       return MaterialApp.router(
         key: ValueKey<ThemeMode>(themeMode),
