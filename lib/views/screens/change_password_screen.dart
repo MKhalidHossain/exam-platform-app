@@ -4,9 +4,12 @@ import '../widgets/gradient_background.dart';
 import '../widgets/app_shimmer.dart';
 import '../../core/error/error_handler.dart';
 import '../../services/user_service.dart';
+import '../../utils/app_constants.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
-  const ChangePasswordScreen({super.key});
+  final bool forceChange;
+
+  const ChangePasswordScreen({super.key, this.forceChange = false});
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -26,22 +29,38 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   Future<void> _changePassword() async {
     if (_currentPasswordController.text.isEmpty) {
-      ErrorHandler.showSnackBar('Please enter your current password', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Please enter your current password',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
     if (_newPasswordController.text.isEmpty) {
-      ErrorHandler.showSnackBar('Please enter a new password', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Please enter a new password',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      ErrorHandler.showSnackBar('New passwords do not match', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'New passwords do not match',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
-    if (_newPasswordController.text.length < 6) {
-      ErrorHandler.showSnackBar('Password must be at least 6 characters', isError: true, context: context);
+    if (_newPasswordController.text.length < AppConstants.minPasswordLength) {
+      ErrorHandler.showSnackBar(
+        'Password must be at least ${AppConstants.minPasswordLength} characters',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
@@ -51,20 +70,28 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     try {
       final response = await _userService.changePassword(
-        oldPassword: _currentPasswordController.text.trim(),
-        newPassword: _newPasswordController.text.trim(),
+        oldPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
       );
 
       if (mounted) {
         if (response.success) {
           _showSuccessDialog();
         } else {
-          ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to change password');
+          ErrorHandler.showFromResponse(
+            response,
+            context: context,
+            failureFallback: 'Failed to change password',
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        ErrorHandler.showFromException(e, context: context, fallback: 'Error changing password.');
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error changing password.',
+        );
       }
     } finally {
       if (mounted) {
@@ -79,10 +106,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -94,16 +119,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.green[50],
-                  border: Border.all(
-                    color: Colors.green[300]!,
-                    width: 3,
-                  ),
+                  border: Border.all(color: Colors.green[300]!, width: 3),
                 ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.green,
-                  size: 50,
-                ),
+                child: const Icon(Icons.check, color: Colors.green, size: 50),
               ),
               const SizedBox(height: 24),
               const Text(
@@ -118,10 +136,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               const SizedBox(height: 12),
               Text(
                 'Your password has been updated successfully.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -130,8 +145,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
-                    context.pop();
+                    Navigator.pop(dialogContext);
+                    if (widget.forceChange) {
+                      context.go('/home');
+                    } else {
+                      context.pop();
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -145,9 +164,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Back To Home',
-                    style: TextStyle(
+                  child: Text(
+                    widget.forceChange ? 'Continue' : 'Back To Home',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -171,139 +190,161 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: GradientBackground(
-        useImage: true,
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App Bar
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => context.pop(),
-                      color: const Color(0xFF111827),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Change Password',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D4F88),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 48), // Balance the back button
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
+    return PopScope(
+      canPop: !widget.forceChange,
+      child: Scaffold(
+        body: GradientBackground(
+          useImage: true,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // App Bar
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
                     children: [
-                      const SizedBox(height: 40),
-                      // Current Password Field
-                      _PasswordField(
-                        controller: _currentPasswordController,
-                        label: 'Current Password',
-                        hint: 'Current Password',
-                        obscureText: _obscureCurrentPassword,
-                        onToggleVisibility: () {
-                          setState(() {
-                            _obscureCurrentPassword = !_obscureCurrentPassword;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      // New Password Field
-                      _PasswordField(
-                        controller: _newPasswordController,
-                        label: 'New Password',
-                        hint: 'New Password',
-                        obscureText: _obscureNewPassword,
-                        onToggleVisibility: () {
-                          setState(() {
-                            _obscureNewPassword = !_obscureNewPassword;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      // Confirm New Password Field
-                      _PasswordField(
-                        controller: _confirmPasswordController,
-                        label: 'Confirm New Password',
-                        hint: 'Confirm New Password',
-                        obscureText: _obscureConfirmPassword,
-                        onToggleVisibility: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 40),
-                      // Save Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _changePassword,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2D4F88),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      widget.forceChange
+                          ? const SizedBox(width: 48)
+                          : IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed: () => context.pop(),
+                              color: const Color(0xFF111827),
                             ),
-                            elevation: 0,
-                          ),
-                          child: _isLoading
-                              ? const AppShimmerCircle(size: 24)
-                              : const Text(
-                                  'Save',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Cancel Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: OutlinedButton(
-                          onPressed: _isLoading ? null : () => context.pop(),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.grey[700],
-                            side: BorderSide(
-                              color: Colors.grey[300]!,
-                              width: 1,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                      const Expanded(
+                        child: Text(
+                          'Change Password',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D4F88),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(width: 48), // Balance the back button
                     ],
                   ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        if (widget.forceChange) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Set a new password before continuing.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Color(0xFF4B5563),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 40),
+                        // Current Password Field
+                        _PasswordField(
+                          controller: _currentPasswordController,
+                          label: 'Current Password',
+                          hint: 'Current Password',
+                          obscureText: _obscureCurrentPassword,
+                          onToggleVisibility: () {
+                            setState(() {
+                              _obscureCurrentPassword =
+                                  !_obscureCurrentPassword;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        // New Password Field
+                        _PasswordField(
+                          controller: _newPasswordController,
+                          label: 'New Password',
+                          hint: 'New Password',
+                          obscureText: _obscureNewPassword,
+                          onToggleVisibility: () {
+                            setState(() {
+                              _obscureNewPassword = !_obscureNewPassword;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        // Confirm New Password Field
+                        _PasswordField(
+                          controller: _confirmPasswordController,
+                          label: 'Confirm New Password',
+                          hint: 'Confirm New Password',
+                          obscureText: _obscureConfirmPassword,
+                          onToggleVisibility: () {
+                            setState(() {
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 40),
+                        // Save Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _changePassword,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2D4F88),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? const AppShimmerCircle(size: 24)
+                                : const Text(
+                                    'Save',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        if (!widget.forceChange) ...[
+                          const SizedBox(height: 16),
+                          // Cancel Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: OutlinedButton(
+                              onPressed: _isLoading
+                                  ? null
+                                  : () => context.pop(),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey[700],
+                                side: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -332,20 +373,14 @@ class _PasswordField extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.grey[300]!,
-          width: 1,
-        ),
+        border: Border.all(color: Colors.grey[300]!, width: 1),
       ),
       child: TextField(
         controller: controller,
         obscureText: obscureText,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(
-            color: Colors.grey[500],
-            fontSize: 16,
-          ),
+          hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -353,16 +388,15 @@ class _PasswordField extends StatelessWidget {
           ),
           suffixIcon: IconButton(
             icon: Icon(
-              obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+              obscureText
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
               color: Colors.grey[600],
             ),
             onPressed: onToggleVisibility,
           ),
         ),
-        style: const TextStyle(
-          fontSize: 16,
-          color: Color(0xFF111827),
-        ),
+        style: const TextStyle(fontSize: 16, color: Color(0xFF111827)),
       ),
     );
   }

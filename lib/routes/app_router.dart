@@ -163,7 +163,12 @@ GoRouter getRouter() {
       GoRoute(
         path: '/change-password',
         name: 'change-password',
-        builder: (context, state) => const ChangePasswordScreen(),
+        builder: (context, state) {
+          final extra = state.extra;
+          final forceChange =
+              extra is Map<String, dynamic> && extra['forceChange'] == true;
+          return ChangePasswordScreen(forceChange: forceChange);
+        },
       ),
       GoRoute(
         path: '/privacy-policy',

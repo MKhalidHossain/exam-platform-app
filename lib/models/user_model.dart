@@ -14,6 +14,7 @@ class UserModel {
   final int? fine;
   final String? referralCode;
   final String? subscriptionTier;
+  final bool mustChangePassword;
   final DateTime? subscriptionStartedAt;
   final DateTime? subscriptionExpiresAt;
   final DateTime? createdAt;
@@ -35,6 +36,7 @@ class UserModel {
     this.fine,
     this.referralCode,
     this.subscriptionTier,
+    this.mustChangePassword = false,
     this.subscriptionStartedAt,
     this.subscriptionExpiresAt,
     this.createdAt,
@@ -73,6 +75,16 @@ class UserModel {
       if (value is int) return value;
       if (value is num) return value.toInt();
       return int.tryParse(value.toString());
+    }
+
+    bool parseBool(dynamic value) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final normalized = value.toLowerCase().trim();
+        return normalized == 'true' || normalized == '1';
+      }
+      return false;
     }
 
     // Extract ID from various possible fields
@@ -126,6 +138,7 @@ class UserModel {
       subscriptionTier: json['subscriptionTier'] != null
           ? getStringValue(json['subscriptionTier'])
           : null,
+      mustChangePassword: parseBool(json['mustChangePassword']),
       subscriptionStartedAt: parseDateTime(json['subscriptionStartedAt']),
       subscriptionExpiresAt: parseDateTime(json['subscriptionExpiresAt']),
       createdAt: parseDateTime(json['createdAt']),
@@ -150,6 +163,7 @@ class UserModel {
       'fine': fine,
       'referralCode': referralCode,
       'subscriptionTier': subscriptionTier,
+      'mustChangePassword': mustChangePassword,
       'subscriptionStartedAt': subscriptionStartedAt?.toIso8601String(),
       'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
       'createdAt': createdAt?.toIso8601String(),
@@ -173,6 +187,7 @@ class UserModel {
     int? fine,
     String? referralCode,
     String? subscriptionTier,
+    bool? mustChangePassword,
     DateTime? subscriptionStartedAt,
     DateTime? subscriptionExpiresAt,
     DateTime? createdAt,
@@ -194,6 +209,7 @@ class UserModel {
       fine: fine ?? this.fine,
       referralCode: referralCode ?? this.referralCode,
       subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       subscriptionStartedAt:
           subscriptionStartedAt ?? this.subscriptionStartedAt,
       subscriptionExpiresAt:

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../utils/app_navigation.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'history_tab.dart';
 import 'ebook_tab_screen.dart';
 import '../../models/plan_tier.dart';
+import '../../services/user_service.dart';
 
 class NavbarScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -27,6 +29,7 @@ class NavbarScreen extends StatefulWidget {
 }
 
 class _NavbarScreenState extends State<NavbarScreen> {
+  final UserService _userService = UserService();
   late int _currentIndex;
 
   @override
@@ -34,6 +37,17 @@ class _NavbarScreenState extends State<NavbarScreen> {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, 3);
     appTabNavigationController.addListener(_handleOpenResourcesTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _redirectIfPasswordChangeRequired();
+    });
+  }
+
+  Future<void> _redirectIfPasswordChangeRequired() async {
+    final response = await _userService.getProfile();
+    if (!mounted) return;
+    if (response.success && response.data?.mustChangePassword == true) {
+      context.go('/change-password', extra: {'forceChange': true});
+    }
   }
 
   @override

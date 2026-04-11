@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import '../controllers/user_controller.dart';
 import '../controllers/home_controller.dart';
 import '../utils/app_constants.dart';
+import '../views/widgets/force_change_password_dialog.dart';
 
 class AuthController extends GetxController {
   final ApiService _apiService = ApiService();
@@ -30,15 +31,6 @@ class AuthController extends GetxController {
       if (!context.mounted) return;
 
       if (response.success) {
-        if (rememberMe) {
-          await _storageService.saveRememberedLogin(
-            email: email,
-            password: password,
-          );
-        } else {
-          await _storageService.clearRememberedLogin();
-        }
-
         final UserController userController = Get.isRegistered<UserController>()
             ? Get.find<UserController>()
             : Get.put(UserController());
@@ -48,10 +40,53 @@ class AuthController extends GetxController {
             : null;
         await userController.clearState();
         homeController?.clearState();
+        if (!context.mounted) return;
+
+        if (response.data?.mustChangePassword ?? false) {
+          await _storageService.clearRememberedLogin();
+          if (!context.mounted) return;
+
+          final newPassword = await _showForceChangePasswordDialog(
+            context,
+            currentPassword: password,
+          );
+          if (!context.mounted) return;
+
+          if (newPassword == null) {
+            await _storageService.clearSessionData();
+            return;
+          }
+
+          await _saveRememberedLoginChoice(
+            email: email,
+            password: newPassword,
+            rememberMe: rememberMe,
+          );
+          await userController.refreshProfile();
+          if (homeController != null) {
+            await homeController.fetchActiveExams();
+          }
+          final postAuthRoute = await _resolvePostAuthRoute();
+          if (!context.mounted) return;
+          ErrorHandler.showSnackBar(
+            'Password updated successfully.',
+            isError: false,
+            context: context,
+          );
+          context.go(postAuthRoute);
+          return;
+        }
+
+        await _saveRememberedLoginChoice(
+          email: email,
+          password: password,
+          rememberMe: rememberMe,
+        );
         await userController.refreshProfile();
         if (homeController != null) {
           await homeController.fetchActiveExams();
         }
+        final postAuthRoute = await _resolvePostAuthRoute();
         if (!context.mounted) return;
         ErrorHandler.showSnackBar(
           ErrorHandler.getMessageFromResponse(
@@ -61,7 +96,7 @@ class AuthController extends GetxController {
           isError: false,
           context: context,
         );
-        context.go(await _resolvePostAuthRoute());
+        context.go(postAuthRoute);
       } else {
         final message = ErrorHandler.getMessageFromResponse(
           response,
@@ -80,6 +115,33 @@ class AuthController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  Future<void> _saveRememberedLoginChoice({
+    required String email,
+    required String password,
+    required bool rememberMe,
+  }) async {
+    if (rememberMe) {
+      await _storageService.saveRememberedLogin(
+        email: email,
+        password: password,
+      );
+    } else {
+      await _storageService.clearRememberedLogin();
+    }
+  }
+
+  Future<String?> _showForceChangePasswordDialog(
+    BuildContext context, {
+    required String currentPassword,
+  }) {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          ForceChangePasswordDialog(currentPassword: currentPassword),
+    );
   }
 
   Future<void> register(
