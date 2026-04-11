@@ -280,6 +280,7 @@ GoRouter getRouter() {
           String title = 'API 570 - Piping Inspector';
           String? examId;
           int? questionCount;
+          int? totalQuestionCount;
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
           bool timedMode = true;
@@ -309,6 +310,7 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
+            totalQuestionCount = parseInt(extra['totalQuestionCount']);
             effectivitySheetContent = extra['effectivitySheetContent']
                 ?.toString();
             bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
@@ -319,6 +321,7 @@ GoRouter getRouter() {
             courseTitle: title,
             examId: examId,
             questionCount: questionCount,
+            totalQuestionCount: totalQuestionCount,
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
             timedMode: timedMode,
@@ -333,6 +336,7 @@ GoRouter getRouter() {
           String title = 'API 570 - Piping Inspector';
           String? examId;
           int? questionCount;
+          int? totalQuestionCount;
           bool timedMode = true;
           bool regenerate = false;
 
@@ -361,6 +365,7 @@ GoRouter getRouter() {
             title = extra['courseTitle']?.toString() ?? title;
             examId = extra['examId']?.toString();
             questionCount = parseInt(extra['questionCount']);
+            totalQuestionCount = parseInt(extra['totalQuestionCount']);
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
             regenerate = parseBool(extra['regenerate'], fallback: regenerate);
           }
@@ -368,6 +373,7 @@ GoRouter getRouter() {
             courseTitle: title,
             examId: examId,
             questionCount: questionCount,
+            totalQuestionCount: totalQuestionCount,
             timedMode: timedMode,
             regenerate: regenerate,
           );
@@ -384,6 +390,7 @@ GoRouter getRouter() {
           DateTime? endTime;
           int? durationMinutes;
           String? examId;
+          int? totalQuestionCount;
           bool timedMode = true;
           int? sessionId;
 
@@ -424,6 +431,7 @@ GoRouter getRouter() {
             startTime = parseDate(extra['startTime']);
             endTime = parseDate(extra['endTime']);
             durationMinutes = parseInt(extra['durationMinutes']);
+            totalQuestionCount = parseInt(extra['totalQuestionCount']);
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
             final rawSessionId = extra['sessionId'];
             if (rawSessionId != null) {
@@ -435,6 +443,7 @@ GoRouter getRouter() {
             courseTitle: title,
             examId: examId,
             questions: questions,
+            totalQuestionCount: totalQuestionCount,
             startTime: startTime,
             endTime: endTime,
             durationMinutes: durationMinutes,

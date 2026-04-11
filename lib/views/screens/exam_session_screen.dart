@@ -6,6 +6,7 @@ class ExamSessionScreen extends StatelessWidget {
   final String courseTitle;
   final String? examId;
   final int? questionCount;
+  final int? totalQuestionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
   final bool timedMode;
@@ -15,6 +16,7 @@ class ExamSessionScreen extends StatelessWidget {
     required this.courseTitle,
     this.examId,
     this.questionCount,
+    this.totalQuestionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
     this.timedMode = true,
@@ -35,6 +37,7 @@ class ExamSessionScreen extends StatelessWidget {
         'courseTitle': courseTitle,
         'examId': id,
         'questionCount': questionCount ?? 1,
+        'totalQuestionCount': totalQuestionCount ?? questionCount ?? 1,
         'timedMode': timedMode,
       },
     );

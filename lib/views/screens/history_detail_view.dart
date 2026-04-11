@@ -767,7 +767,9 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                         examName: examName,
                                         examId: examId,
                                         questionCount:
-                                            _findExamById(examId)?.questionCount ??
+                                            _findExamById(
+                                              examId,
+                                            )?.questionCount ??
                                             safeRegenerateQuestionCount,
                                         selectedQuestionCount:
                                             safeRegenerateQuestionCount,
@@ -847,6 +849,11 @@ class _HistoryDetailViewState extends State<HistoryDetailView> {
                                       'courseTitle': examName,
                                       'examId': examId,
                                       'questionCount':
+                                          safeRegenerateQuestionCount,
+                                      'totalQuestionCount':
+                                          _findExamById(
+                                            examId,
+                                          )?.questionCount ??
                                           safeRegenerateQuestionCount,
                                       'regenerate': true,
                                       'examType': 'full_exam',

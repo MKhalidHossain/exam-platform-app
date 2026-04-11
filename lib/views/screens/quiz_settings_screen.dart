@@ -50,9 +50,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
         ? null
         : _savedQuestionCountsByExam[_examCacheKey!];
     final candidates = <int?>[
+      widget.questionCount,
       widget.selectedQuestionCount,
       cachedCount,
-      widget.questionCount,
       2,
     ];
     for (final value in candidates) {
@@ -334,6 +334,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen> {
                       'courseTitle': widget.courseTitle,
                       'examId': examId,
                       'questionCount': effectiveQuestionCount.toInt(),
+                      'totalQuestionCount': totalQuestions,
                       'selectedQuestionCount': effectiveQuestionCount.toInt(),
                       'effectivitySheetContent': widget.effectivitySheetContent,
                       'bodyOfKnowledgeContent': widget.bodyOfKnowledgeContent,
