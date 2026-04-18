@@ -37,6 +37,18 @@ It uses a controller-driven structure with `GetX` for state management, `GoRoute
 
 ---
 
+## Download APK
+
+<p align="center">
+  <strong>Get the latest Android build</strong><br>
+  <a href="https://drive.google.com/file/d/1JJsvq3pIk6L81fwBCSxZxe-3rcVtQfut/view?usp=sharing">Download Android APK</a>
+</p>
+
+> Recommended next step after previewing the product flow.
+> Open the APK link to install and test the latest mobile build.
+
+---
+
 ## Highlights
 
 - Authentication, onboarding, OTP verification, password reset, and remember-me login
@@ -120,10 +132,6 @@ Theme and styling live in:
 
 - [lib/utils/app_theme.dart](/Users/saa/dev/flutter/ej7696_flutter_jakir/lib/utils/app_theme.dart:1)
 - [lib/utils/app_colors.dart](/Users/saa/dev/flutter/ej7696_flutter_jakir/lib/utils/app_colors.dart:1)
-
-## APK
-
-- [Download Android APK](https://drive.google.com/file/d/1JJsvq3pIk6L81fwBCSxZxe-3rcVtQfut/view?usp=sharing)
 
 ## Notes
 
