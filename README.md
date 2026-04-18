@@ -1,6 +1,6 @@
 # EJ Flutter App
 
-A professional Flutter application built with **MVC architecture**, **Flutter Riverpod** for state management, and **GoRouter** for navigation. The project is structured for maintainability, scalability, and clean separation of concerns across controllers, models, services, and views.
+A professional Flutter application built with **MVC architecture**, **Flutter Riverpod** for state management, and **GoRouter** for navigation. The project is organized for maintainability, scalability, and clean separation of concerns across controllers, models, services, and views.
 
 ---
 
@@ -15,17 +15,19 @@ A professional Flutter application built with **MVC architecture**, **Flutter Ri
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
+- [APK Download](#apk-download)
 - [Usage](#usage)
 - [State Management Example](#state-management-example)
 - [Development Notes](#development-notes)
+- [Future Improvements](#future-improvements)
 
 ---
 
 ## Overview
 
-**EJ Flutter App** is a Flutter-based mobile application designed with a clear MVC structure and modern Flutter development practices. It uses **Riverpod** to manage application state in a predictable way and **GoRouter** to handle declarative routing and protected navigation flows.
+**EJ Flutter App** is a Flutter-based mobile application designed with a clear MVC structure and modern Flutter development practices. It uses **Riverpod** to manage application state in a predictable and maintainable way, while **GoRouter** provides declarative routing and navigation flow management.
 
-The app is organized to support authentication, protected screens, API-driven features, local storage, theming, and reusable UI components. The structure is suitable for production-ready development and future expansion.
+The application structure supports scalable feature development, API-driven screens, local persistence, theming, reusable widgets, and a clean controller-based business logic layer. It is suitable for production-oriented Flutter development and future project expansion.
 
 ---
 
@@ -35,31 +37,31 @@ This project follows the **MVC (Model-View-Controller)** pattern:
 
 - **Models** define the application's data structures and business entities.
 - **Views** contain UI screens and reusable presentation widgets.
-- **Controllers** handle business logic and state updates using Riverpod providers and notifiers.
+- **Controllers** manage business logic and state updates using Riverpod providers and notifiers.
 
 ### Architectural Highlights
 
-- Clear separation between UI, logic, and data
-- Scalable folder structure for new features
-- Centralized routing with GoRouter
-- Reusable utility and theme configuration
+- Clear separation between UI, business logic, and data
+- Centralized route management with GoRouter
+- Scalable folder structure for future feature growth
+- Reusable utility, constant, and theme configuration
 - Local persistence support with SharedPreferences
-- API integration support through service classes
+- Service layer support for API and storage operations
 
 ---
 
 ## Core Features
 
-- MVC-based project structure
+- MVC-based application structure
 - Riverpod state management
-- GoRouter-based navigation
+- GoRouter navigation
 - Authentication flow
-- Protected screens and route handling
+- Protected screens and controlled navigation
 - API integration support
 - Local storage support
-- Loading and error state handling
+- Loading, error, and empty state handling
 - Light and dark theme customization
-- Reusable service and utility layers
+- Reusable services and utility layers
 
 ---
 
@@ -96,12 +98,12 @@ lib/
 
 ### Directory Roles
 
-- **controllers/**: Handles state changes and feature logic
-- **models/**: Stores request/response models and entity definitions
-- **routes/**: Defines routes, guards, and navigation behavior
-- **services/**: Contains API calls, persistence logic, and helpers
-- **utils/**: Includes constants, colors, themes, and app-wide helpers
-- **views/**: Contains UI screens, widgets, and layout components
+- **controllers/**: Handles business logic and state changes
+- **models/**: Defines response models, request bodies, and app entities
+- **routes/**: Configures routes, guards, and navigation logic
+- **services/**: Contains API calls, persistence logic, and reusable service helpers
+- **utils/**: Stores constants, themes, app colors, and shared helpers
+- **views/**: Contains screens, widgets, and presentation-layer components
 
 ---
 
@@ -152,7 +154,7 @@ Before running the application, make sure your environment is ready:
 
 - Flutter SDK installed
 - Dart SDK installed
-- Android Studio / VS Code with Flutter extensions
+- Android Studio or VS Code with Flutter extensions
 - Android emulator, iOS simulator, or physical device
 - API base URL configured in the constants file
 
@@ -243,6 +245,16 @@ These files allow you to customize branding, color palette, and light/dark theme
 
 ---
 
+## APK Download
+
+You can download and install the latest APK build from the link below:
+
+- [Download APK](https://drive.google.com/file/d/1JJsvq3pIk6L81fwBCSxZxe-3rcVtQfut/view?usp=sharing)
+
+> Ensure installation from unknown sources is enabled on your Android device if required.
+
+---
+
 ## Usage
 
 ### Adding a New Screen
@@ -275,7 +287,7 @@ final authState = ref.watch(authControllerProvider);
 ref.read(authControllerProvider.notifier).login(email, password);
 ```
 
-This pattern helps keep business logic outside the UI layer and improves maintainability.
+This pattern keeps business logic outside the UI layer and improves maintainability.
 
 ---
 
