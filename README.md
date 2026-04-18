@@ -4,14 +4,45 @@ A professional Flutter application built with **MVC architecture**, **Flutter Ri
 
 ---
 
+## Preview
+
+<p align="center">
+  A concise product flow covering plan selection, resource access, exam practice, results, and profile management.
+</p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/13-home-screen-professional-plan.png" alt="Home Screen Professional Plan" width="220"><br><strong>Home</strong></td>
+    <td align="center"><img src="docs/screenshorts/14-unlock-exam-selection-dialog.png" alt="Unlock Exam Selection Dialog" width="220"><br><strong>Exam Unlock</strong></td>
+    <td align="center"><img src="docs/screenshorts/15-add-on-resource-checkout-dialog.png" alt="Add-on Resource Checkout Dialog" width="220"><br><strong>Checkout Add-on</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/01-resources-tab-overview.png" alt="Resources Tab Overview" width="220"><br><strong>Resources</strong></td>
+    <td align="center"><img src="docs/screenshorts/02-api510-resource-category-list.png" alt="API 510 Resource Category List" width="220"><br><strong>Category List</strong></td>
+    <td align="center"><img src="docs/screenshorts/03-api510-resource-details-unlocked.png" alt="API 510 Resource Details Unlocked" width="220"><br><strong>Resource Details</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/05-api510-resource-details-payment.png" alt="API 510 Resource Details Payment" width="220"><br><strong>Resource Payment</strong></td>
+    <td align="center"><img src="docs/screenshorts/08-exam-session-question-1.png" alt="Exam Session Question 1" width="220"><br><strong>Exam Session</strong></td>
+    <td align="center"><img src="docs/screenshorts/10-exam-review-screen.png" alt="Exam Review Screen" width="220"><br><strong>Exam Review</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/11-quiz-complete-results.png" alt="Quiz Complete Results" width="220"><br><strong>Results</strong></td>
+    <td align="center"><img src="docs/screenshorts/12-performance-dashboard.png" alt="Performance Dashboard" width="220"><br><strong>Performance</strong></td>
+    <td align="center"><img src="docs/screenshorts/16-profile-screen.png" alt="Profile Screen" width="220"><br><strong>Profile</strong></td>
+  </tr>
+</table>
+
+---
+
 ## Table of Contents
 
+- [Preview](#preview)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Core Features](#core-features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
@@ -104,47 +135,6 @@ lib/
 - **services/**: Contains API calls, persistence logic, and reusable service helpers
 - **utils/**: Stores constants, themes, app colors, and shared helpers
 - **views/**: Contains screens, widgets, and presentation-layer components
-
----
-
-## Screenshots
-
-> This README uses the screenshot paths exactly as shown in your project folder: `docs/screenshorts/`
-
-<table>
-  <tr>
-    <td align="center"><strong>Resources Tab Overview</strong><br><img src="docs/screenshorts/01-resources-tab-overview.png" alt="Resources Tab Overview" width="220"></td>
-    <td align="center"><strong>API 510 Resource Category List</strong><br><img src="docs/screenshorts/02-api510-resource-category-list.png" alt="API 510 Resource Category List" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>API 510 Resource Details Unlocked</strong><br><img src="docs/screenshorts/03-api510-resource-details-unlocked.png" alt="API 510 Resource Details Unlocked" width="220"></td>
-    <td align="center"><strong>API 510 Resource Viewer Coming Soon</strong><br><img src="docs/screenshorts/04-api510-resource-viewer-coming-soon.png" alt="API 510 Resource Viewer Coming Soon" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>API 510 Resource Details Payment</strong><br><img src="docs/screenshorts/05-api510-resource-details-payment.png" alt="API 510 Resource Details Payment" width="220"></td>
-    <td align="center"><strong>History Tab Overview</strong><br><img src="docs/screenshorts/06-history-tab-overview.png" alt="History Tab Overview" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Login Screen</strong><br><img src="docs/screenshorts/07-login-screen.png" alt="Login Screen" width="220"></td>
-    <td align="center"><strong>Exam Session Question 1</strong><br><img src="docs/screenshorts/08-exam-session-question-1.png" alt="Exam Session Question 1" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Exam Session Question 2 Explanation</strong><br><img src="docs/screenshorts/09-exam-session-question-2-explanation.png" alt="Exam Session Question 2 Explanation" width="220"></td>
-    <td align="center"><strong>Exam Review Screen</strong><br><img src="docs/screenshorts/10-exam-review-screen.png" alt="Exam Review Screen" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Quiz Complete Results</strong><br><img src="docs/screenshorts/11-quiz-complete-results.png" alt="Quiz Complete Results" width="220"></td>
-    <td align="center"><strong>Performance Dashboard</strong><br><img src="docs/screenshorts/12-performance-dashboard.png" alt="Performance Dashboard" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Home Screen Professional Plan</strong><br><img src="docs/screenshorts/13-home-screen-professional-plan.png" alt="Home Screen Professional Plan" width="220"></td>
-    <td align="center"><strong>Unlock Exam Selection Dialog</strong><br><img src="docs/screenshorts/14-unlock-exam-selection-dialog.png" alt="Unlock Exam Selection Dialog" width="220"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Add-on Resource Checkout Dialog</strong><br><img src="docs/screenshorts/15-add-on-resource-checkout-dialog.png" alt="Add-on Resource Checkout Dialog" width="220"></td>
-    <td align="center"><strong>Profile Screen</strong><br><img src="docs/screenshorts/16-profile-screen.png" alt="Profile Screen" width="220"></td>
-  </tr>
-</table>
 
 ---
 
