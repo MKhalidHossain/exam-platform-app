@@ -1,104 +1,271 @@
 # EJ Flutter App
 
-A Flutter application built with MVC architecture, Flutter Riverpod for state management, and GoRouter for navigation.
+A professional Flutter application built with **MVC architecture**, **Flutter Riverpod** for state management, and **GoRouter** for navigation. The project is structured for maintainability, scalability, and clean separation of concerns across controllers, models, services, and views.
 
-## 🏗️ Architecture
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Core Features](#core-features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Screenshots](#screenshots)
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [State Management Example](#state-management-example)
+- [Development Notes](#development-notes)
+
+---
+
+## Overview
+
+**EJ Flutter App** is a Flutter-based mobile application designed with a clear MVC structure and modern Flutter development practices. It uses **Riverpod** to manage application state in a predictable way and **GoRouter** to handle declarative routing and protected navigation flows.
+
+The app is organized to support authentication, protected screens, API-driven features, local storage, theming, and reusable UI components. The structure is suitable for production-ready development and future expansion.
+
+---
+
+## Architecture
 
 This project follows the **MVC (Model-View-Controller)** pattern:
 
-- **Models**: Data structures and business entities
-- **Views**: UI components (screens and reusable widgets)
-- **Controllers**: Business logic and state management using Riverpod
+- **Models** define the application's data structures and business entities.
+- **Views** contain UI screens and reusable presentation widgets.
+- **Controllers** handle business logic and state updates using Riverpod providers and notifiers.
 
-## 📦 Dependencies
+### Architectural Highlights
 
-- `flutter_riverpod: ^3.2.0` - State management
-- `go_router: ^14.2.0` - Declarative routing
-- `http: ^1.2.0` - HTTP client for API calls
-- `shared_preferences: ^2.2.2` - Local storage
+- Clear separation between UI, logic, and data
+- Scalable folder structure for new features
+- Centralized routing with GoRouter
+- Reusable utility and theme configuration
+- Local persistence support with SharedPreferences
+- API integration support through service classes
 
-## 📁 Project Structure
+---
 
-```
+## Core Features
+
+- MVC-based project structure
+- Riverpod state management
+- GoRouter-based navigation
+- Authentication flow
+- Protected screens and route handling
+- API integration support
+- Local storage support
+- Loading and error state handling
+- Light and dark theme customization
+- Reusable service and utility layers
+
+---
+
+## Tech Stack
+
+### Framework & Language
+
+- **Flutter**
+- **Dart**
+
+### State Management & Navigation
+
+- `flutter_riverpod: ^3.2.0`
+- `go_router: ^14.2.0`
+
+### Networking & Storage
+
+- `http: ^1.2.0`
+- `shared_preferences: ^2.2.2`
+
+---
+
+## Project Structure
+
+```text
 lib/
-├── controllers/        # Riverpod StateNotifiers
-├── models/            # Data models
-├── routes/            # GoRouter configuration
-├── services/          # API & storage services
-├── utils/             # Colors, constants, theme
-└── views/             # Screens & widgets
+├── controllers/        # Riverpod controllers / state notifiers
+├── models/             # Data models and entities
+├── routes/             # GoRouter route configuration
+├── services/           # API services and local storage services
+├── utils/              # App colors, constants, themes, helpers
+└── views/              # Screens and reusable widgets
 ```
 
-## 🚀 Getting Started
+### Directory Roles
 
-1. **Install dependencies:**
-   ```bash
-   flutter pub get
-   ```
+- **controllers/**: Handles state changes and feature logic
+- **models/**: Stores request/response models and entity definitions
+- **routes/**: Defines routes, guards, and navigation behavior
+- **services/**: Contains API calls, persistence logic, and helpers
+- **utils/**: Includes constants, colors, themes, and app-wide helpers
+- **views/**: Contains UI screens, widgets, and layout components
 
-2. **Configure API:**
-   - Update `lib/utils/app_constants.dart` with your API base URL
+---
 
-3. **Add assets:**
-   - Place images in `assets/images/`
-   - Place icons in `assets/icons/`
+## Screenshots
 
-4. **Run the app:**
-   ```bash
-   flutter run
-   ```
+> This README uses the screenshot paths exactly as shown in your project folder: `docs/screenshorts/`
 
-## 🎨 Features
+<table>
+  <tr>
+    <td align="center"><strong>Resources Tab Overview</strong><br><img src="docs/screenshorts/01-resources-tab-overview.png" alt="Resources Tab Overview" width="220"></td>
+    <td align="center"><strong>API 510 Resource Category List</strong><br><img src="docs/screenshorts/02-api510-resource-category-list.png" alt="API 510 Resource Category List" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>API 510 Resource Details Unlocked</strong><br><img src="docs/screenshorts/03-api510-resource-details-unlocked.png" alt="API 510 Resource Details Unlocked" width="220"></td>
+    <td align="center"><strong>API 510 Resource Viewer Coming Soon</strong><br><img src="docs/screenshorts/04-api510-resource-viewer-coming-soon.png" alt="API 510 Resource Viewer Coming Soon" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>API 510 Resource Details Payment</strong><br><img src="docs/screenshorts/05-api510-resource-details-payment.png" alt="API 510 Resource Details Payment" width="220"></td>
+    <td align="center"><strong>History Tab Overview</strong><br><img src="docs/screenshorts/06-history-tab-overview.png" alt="History Tab Overview" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Login Screen</strong><br><img src="docs/screenshorts/07-login-screen.png" alt="Login Screen" width="220"></td>
+    <td align="center"><strong>Exam Session Question 1</strong><br><img src="docs/screenshorts/08-exam-session-question-1.png" alt="Exam Session Question 1" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Exam Session Question 2 Explanation</strong><br><img src="docs/screenshorts/09-exam-session-question-2-explanation.png" alt="Exam Session Question 2 Explanation" width="220"></td>
+    <td align="center"><strong>Exam Review Screen</strong><br><img src="docs/screenshorts/10-exam-review-screen.png" alt="Exam Review Screen" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Quiz Complete Results</strong><br><img src="docs/screenshorts/11-quiz-complete-results.png" alt="Quiz Complete Results" width="220"></td>
+    <td align="center"><strong>Performance Dashboard</strong><br><img src="docs/screenshorts/12-performance-dashboard.png" alt="Performance Dashboard" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Home Screen Professional Plan</strong><br><img src="docs/screenshorts/13-home-screen-professional-plan.png" alt="Home Screen Professional Plan" width="220"></td>
+    <td align="center"><strong>Unlock Exam Selection Dialog</strong><br><img src="docs/screenshorts/14-unlock-exam-selection-dialog.png" alt="Unlock Exam Selection Dialog" width="220"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Add-on Resource Checkout Dialog</strong><br><img src="docs/screenshorts/15-add-on-resource-checkout-dialog.png" alt="Add-on Resource Checkout Dialog" width="220"></td>
+    <td align="center"><strong>Profile Screen</strong><br><img src="docs/screenshorts/16-profile-screen.png" alt="Profile Screen" width="220"></td>
+  </tr>
+</table>
 
-- ✅ MVC Architecture
-- ✅ Riverpod State Management
-- ✅ GoRouter Navigation
-- ✅ Light/Dark Theme Support
-- ✅ Authentication Flow
-- ✅ API Integration
-- ✅ Local Storage
-- ✅ Error Handling
-- ✅ Loading States
+---
 
-## 📱 Screens
+## Prerequisites
 
-- **Splash Screen** - Initial loading screen
-- **Login Screen** - User authentication
-- **Register Screen** - User registration
-- **Home Screen** - Main dashboard (protected)
-- **Profile Screen** - User profile (protected)
+Before running the application, make sure your environment is ready:
 
-## 🔧 Configuration
+- Flutter SDK installed
+- Dart SDK installed
+- Android Studio / VS Code with Flutter extensions
+- Android emulator, iOS simulator, or physical device
+- API base URL configured in the constants file
 
-### Update API Base URL
+Check your Flutter setup:
 
-Edit `lib/utils/app_constants.dart`:
+```bash
+flutter doctor
+```
+
+---
+
+## Getting Started
+
+### 1. Install dependencies
+
+```bash
+flutter pub get
+```
+
+### 2. Configure the API base URL
+
+Update the API configuration in:
+
+```text
+lib/utils/app_constants.dart
+```
+
+Example:
+
 ```dart
 static const String baseUrl = 'https://your-api-url.com';
 ```
 
-### Add Custom Colors
+### 3. Add assets
 
-Edit `lib/utils/app_colors.dart` to customize your color scheme.
+Place project assets in the proper folders:
 
-### Modify Theme
+```text
+assets/images/
+assets/icons/
+```
 
-Edit `lib/utils/app_theme.dart` to customize light and dark themes.
+### 4. Run the app
 
-## 📝 Usage
+```bash
+flutter run
+```
+
+### 5. Build the app
+
+```bash
+# Android
+flutter build apk --release
+
+# iOS
+flutter build ios --release
+```
+
+---
+
+## Configuration
+
+### API Base URL
+
+Edit:
+
+```text
+lib/utils/app_constants.dart
+```
+
+### Custom Colors
+
+Edit:
+
+```text
+lib/utils/app_colors.dart
+```
+
+### App Theme
+
+Edit:
+
+```text
+lib/utils/app_theme.dart
+```
+
+These files allow you to customize branding, color palette, and light/dark theme behavior.
+
+---
+
+## Usage
 
 ### Adding a New Screen
 
-1. Create screen in `lib/views/screens/`
-2. Add route in `lib/routes/app_router.dart`
-3. Create controller if needed
+1. Create the screen under `lib/views/`
+2. Add the route in `lib/routes/app_router.dart`
+3. Connect the screen to a controller if state handling is required
 
 ### Adding a New Model
 
-1. Create model class in `lib/models/`
-2. Implement `fromJson` and `toJson` methods
+1. Create the model in `lib/models/`
+2. Add `fromJson` and `toJson` methods for serialization
+3. Use the model inside services and controllers as needed
 
-### Using Controllers
+### Adding a New Service
+
+1. Create a service in `lib/services/`
+2. Centralize API or storage logic there
+3. Call the service through your controller/provider layer
+
+---
+
+## State Management Example
 
 ```dart
 // Watch state
@@ -108,10 +275,53 @@ final authState = ref.watch(authControllerProvider);
 ref.read(authControllerProvider.notifier).login(email, password);
 ```
 
-## 🎯 Next Steps
+This pattern helps keep business logic outside the UI layer and improves maintainability.
 
-- Add more screens and features
-- Integrate with your backend API
-- Add custom assets
-- Customize theme and colors
-- Add more models and services
+---
+
+## Development Notes
+
+- Keep controllers focused on state and business rules
+- Keep views free from heavy logic
+- Centralize API and storage logic inside services
+- Reuse theme and constants from the `utils/` directory
+- Organize new features without breaking the MVC structure
+- Add loading, error, and empty states for all API-driven screens
+
+---
+
+## Included Screens
+
+The project currently includes flows and screens such as:
+
+- Splash screen
+- Login screen
+- Register screen
+- Home screen
+- Profile screen
+- Resource browsing screens
+- Exam session screens
+- Review and result screens
+- Performance dashboard
+- Purchase and unlock dialogs
+- History view
+
+---
+
+## Future Improvements
+
+- Expand protected route handling
+- Add more API-driven modules
+- Improve offline persistence strategy
+- Add unit and widget testing
+- Extend reusable widget library
+- Introduce feature-specific folders if the project grows further
+
+---
+
+## Flutter Resources
+
+- [Flutter Documentation](https://docs.flutter.dev/)
+- [Dart Language Tour](https://dart.dev/guides/language/language-tour)
+- [Riverpod Documentation](https://riverpod.dev/)
+- [GoRouter Documentation](https://pub.dev/packages/go_router)
