@@ -41,7 +41,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final response = await _userService.getProfile();
-      
+
       if (response.success && response.data != null) {
         setState(() {
           _user = response.data;
@@ -51,7 +51,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       } else {
         if (mounted) {
           ErrorHandler.showSnackBar(
-            ErrorHandler.getMessageFromResponse(response, failureFallback: 'Failed to load profile'),
+            ErrorHandler.getMessageFromResponse(
+              response,
+              failureFallback: 'Failed to load profile',
+            ),
             isError: true,
             context: context,
           );
@@ -59,7 +62,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ErrorHandler.showFromException(e, context: context, fallback: 'Error loading profile.');
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error loading profile.',
+        );
       }
     } finally {
       if (mounted) {
@@ -86,7 +93,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ErrorHandler.showFromException(e, context: context, fallback: 'Error picking image.');
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error picking image.',
+        );
       }
     }
   }
@@ -126,7 +137,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final phone = _phoneController.text.trim();
 
     if (name.isEmpty) {
-      ErrorHandler.showSnackBar('Please enter your name', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Please enter your name',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
@@ -141,25 +156,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         avatarFile: _selectedImage,
       );
 
-      if (mounted) {
-        if (response.success && response.data != null) {
-          // Update UserController so Profile and Home screens show updated name and image
-          if (Get.isRegistered<UserController>()) {
-            await Get.find<UserController>().applyProfile(response.data!);
-          }
-          ErrorHandler.showSnackBar(
-            ErrorHandler.getMessageFromResponse(response, successFallback: 'Profile updated successfully'),
-            isError: false,
-            context: context,
-          );
-          context.pop();
-        } else {
-          ErrorHandler.showFromResponse(response, context: context, failureFallback: 'Failed to update profile');
+      if (!mounted) return;
+
+      if (response.success && response.data != null) {
+        // Update UserController so Profile and Home screens show updated name and image.
+        if (Get.isRegistered<UserController>()) {
+          await Get.find<UserController>().applyProfile(response.data!);
+          if (!mounted) return;
         }
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Profile updated successfully',
+          ),
+          isError: false,
+          context: context,
+        );
+        context.pop();
+      } else {
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Failed to update profile',
+        );
       }
     } catch (e) {
       if (mounted) {
-        ErrorHandler.showFromException(e, context: context, fallback: 'Error updating profile.');
+        ErrorHandler.showFromException(
+          e,
+          context: context,
+          fallback: 'Error updating profile.',
+        );
       }
     } finally {
       if (mounted) {
@@ -233,13 +260,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                             fit: BoxFit.cover,
                                           )
                                         : _user?.avatar != null
-                                            ? DecorationImage(
-                                                image: NetworkImage(_user!.avatar!),
-                                                fit: BoxFit.cover,
-                                              )
-                                            : null,
+                                        ? DecorationImage(
+                                            image: NetworkImage(_user!.avatar!),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
                                   ),
-                                  child: _selectedImage == null &&
+                                  child:
+                                      _selectedImage == null &&
                                           (_user?.avatar == null)
                                       ? const Icon(
                                           Icons.person,
@@ -349,35 +377,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               ),
                             ),
                             const SizedBox(height: 40),
-                      // Next Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _saveProfile,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2D4F88),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: _isLoading
-                              ? const AppShimmerCircle(size: 24)
-                              : const Text(
-                                  'Next',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
+                            // Next Button
+                            SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _saveProfile,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2D4F88),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
+                                  elevation: 0,
                                 ),
+                                child: _isLoading
+                                    ? const AppShimmerCircle(size: 24)
+                                    : const Text(
+                                        'Next',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 40),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),

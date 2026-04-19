@@ -36,40 +36,24 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 1800),
     );
 
-    _fadeIn = CurvedAnimation(
-      parent: _introController,
-      curve: Curves.easeOut,
-    );
+    _fadeIn = CurvedAnimation(parent: _introController, curve: Curves.easeOut);
     _scaleIn = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: Curves.easeOutBack,
-      ),
+      CurvedAnimation(parent: _introController, curve: Curves.easeOutBack),
     );
     _pulse = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     _float = Tween<double>(begin: -6.0, end: 6.0).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _ringScale = Tween<double>(begin: 0.9, end: 1.25).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeOut,
-      ),
-    );
-    _ringOpacity = Tween<double>(begin: 0.35, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeOut,
-      ),
-    );
+    _ringScale = Tween<double>(
+      begin: 0.9,
+      end: 1.25,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
+    _ringOpacity = Tween<double>(
+      begin: 0.35,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
 
     _introController.forward();
     _pulseController.repeat(reverse: true);
@@ -84,10 +68,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  Widget _buildGlowBlob({
-    required double size,
-    required Color color,
-  }) {
+  Widget _buildGlowBlob({required double size, required Color color}) {
     return Container(
       width: size,
       height: size,
@@ -96,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
         color: color,
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
+            color: color.withValues(alpha: 0.3),
             blurRadius: 70,
             spreadRadius: 8,
           ),
@@ -132,7 +113,7 @@ class _SplashScreenState extends State<SplashScreen>
             right: -60,
             child: _buildGlowBlob(
               size: 220,
-              color: AppColors.accentBlue.withOpacity(0.18),
+              color: AppColors.accentBlue.withValues(alpha: 0.18),
             ),
           ),
           Positioned(
@@ -140,7 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
             left: -90,
             child: _buildGlowBlob(
               size: 260,
-              color: AppColors.primaryBlue.withOpacity(0.12),
+              color: AppColors.primaryBlue.withValues(alpha: 0.12),
             ),
           ),
           Center(
@@ -152,10 +133,7 @@ class _SplashScreenState extends State<SplashScreen>
                   opacity: _fadeIn.value,
                   child: Transform.translate(
                     offset: Offset(0, _float.value),
-                    child: Transform.scale(
-                      scale: scale,
-                      child: child,
-                    ),
+                    child: Transform.scale(scale: scale, child: child),
                   ),
                 );
               },
@@ -178,7 +156,9 @@ class _SplashScreenState extends State<SplashScreen>
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: AppColors.accentBlue.withOpacity(0.4),
+                                    color: AppColors.accentBlue.withValues(
+                                      alpha: 0.4,
+                                    ),
                                     width: 2,
                                   ),
                                 ),
@@ -195,7 +175,9 @@ class _SplashScreenState extends State<SplashScreen>
                           color: Colors.white,
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primaryBlue.withOpacity(0.15),
+                              color: AppColors.primaryBlue.withValues(
+                                alpha: 0.15,
+                              ),
                               blurRadius: 24,
                               offset: const Offset(0, 12),
                             ),
@@ -233,7 +215,7 @@ class _SplashScreenState extends State<SplashScreen>
                     'Smart practice. Real progress.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textSecondary.withOpacity(0.85),
+                      color: AppColors.textSecondary.withValues(alpha: 0.85),
                       letterSpacing: 0.3,
                     ),
                   ),

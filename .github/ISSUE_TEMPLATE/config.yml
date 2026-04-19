@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support and contribution guide
+    url: https://github.com/FSDTeam-SAA/ej7696_flutter_jakir/blob/main/SUPPORT.md
+    about: Start here for setup, troubleshooting, and contribution expectations.
+  - name: Security policy
+    url: https://github.com/FSDTeam-SAA/ej7696_flutter_jakir/blob/main/SECURITY.md
+    about: Please do not open public issues for vulnerabilities or sensitive findings.
