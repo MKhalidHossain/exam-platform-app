@@ -60,7 +60,7 @@ dependencies:
   url_launcher: ^6.3.2
 
   # Share content to social media / apps
-  share_plus: ^10.1.4
+  share_plus: ^12.0.2
 
   # Deep links / app links
   app_links: ^6.3.3
