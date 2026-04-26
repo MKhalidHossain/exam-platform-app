@@ -1,117 +1,140 @@
 # EJ Flutter App
 
-A Flutter application built with MVC architecture, Flutter Riverpod for state management, and GoRouter for navigation.
+EJ Flutter App is the mobile codebase behind an inspector exam preparation experience that combines authentication, exam unlocks, paid resources, quiz sessions, performance tracking, referrals, and profile management in a single Flutter application.
 
-## 🏗️ Architecture
+It uses a controller-driven structure with `GetX` for state management, `GoRouter` for navigation, `http` for API access, local persistence for session data, deep links for shared content, and Stripe for purchase flows.
 
-This project follows the **MVC (Model-View-Controller)** pattern:
+---
 
-- **Models**: Data structures and business entities
-- **Views**: UI components (screens and reusable widgets)
-- **Controllers**: Business logic and state management using Riverpod
+## Preview
 
-## 📦 Dependencies
+<p align="center">
+  A compact product flow showing home, unlock, resources, exam practice, results, and profile management.
+</p>
 
-- `flutter_riverpod: ^3.2.0` - State management
-- `go_router: ^14.2.0` - Declarative routing
-- `http: ^1.2.0` - HTTP client for API calls
-- `shared_preferences: ^2.2.2` - Local storage
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/13-home-screen-professional-plan.png" alt="Home Screen Professional Plan" width="220"><br><strong>Home</strong></td>
+    <td align="center"><img src="docs/screenshorts/14-unlock-exam-selection-dialog.png" alt="Unlock Exam Selection Dialog" width="220"><br><strong>Exam Unlock</strong></td>
+    <td align="center"><img src="docs/screenshorts/15-add-on-resource-checkout-dialog.png" alt="Add-on Resource Checkout Dialog" width="220"><br><strong>Checkout Add-on</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/01-resources-tab-overview.png" alt="Resources Tab Overview" width="220"><br><strong>Resources</strong></td>
+    <td align="center"><img src="docs/screenshorts/02-api510-resource-category-list.png" alt="API 510 Resource Category List" width="220"><br><strong>Category List</strong></td>
+    <td align="center"><img src="docs/screenshorts/03-api510-resource-details-unlocked.png" alt="API 510 Resource Details Unlocked" width="220"><br><strong>Resource Details</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/05-api510-resource-details-payment.png" alt="API 510 Resource Details Payment" width="220"><br><strong>Resource Payment</strong></td>
+    <td align="center"><img src="docs/screenshorts/08-exam-session-question-1.png" alt="Exam Session Question 1" width="220"><br><strong>Exam Session</strong></td>
+    <td align="center"><img src="docs/screenshorts/10-exam-review-screen.png" alt="Exam Review Screen" width="220"><br><strong>Exam Review</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshorts/11-quiz-complete-results.png" alt="Quiz Complete Results" width="220"><br><strong>Results</strong></td>
+    <td align="center"><img src="docs/screenshorts/12-performance-dashboard.png" alt="Performance Dashboard" width="220"><br><strong>Performance</strong></td>
+    <td align="center"><img src="docs/screenshorts/16-profile-screen.png" alt="Profile Screen" width="220"><br><strong>Profile</strong></td>
+  </tr>
+</table>
 
-## 📁 Project Structure
+---
 
-```
+## Download APK
+
+<p align="center">
+  <strong>Get the latest Android build</strong><br>
+  <a href="https://drive.google.com/file/d/1JJsvq3pIk6L81fwBCSxZxe-3rcVtQfut/view?usp=sharing">Download Android APK</a>
+</p>
+
+> Recommended next step after previewing the product flow.
+> Open the APK link to install and test the latest mobile build.
+
+---
+
+## Highlights
+
+- Authentication, onboarding, OTP verification, password reset, and remember-me login
+- Exam selection, unlock flows, subscription upsell, and Stripe-based payment handling
+- Resource browsing with category pages, detail pages, and PDF-based content delivery
+- Quiz sessions, review flow, score summary, and performance tracking
+- Referral and shared-link flows through app links
+- Persistent local session and installation identity handling
+
+## Tech Stack
+
+- Flutter and Dart
+- `GetX` for app state and controllers
+- `GoRouter` for route handling
+- `http` for API requests
+- `shared_preferences` and `flutter_secure_storage` for persistence
+- `flutter_stripe` for checkout flows
+- `app_links` for deep-link handling
+- `syncfusion_flutter_pdfviewer` for in-app PDF viewing
+
+## Project Structure
+
+```text
 lib/
-├── controllers/        # Riverpod StateNotifiers
-├── models/            # Data models
-├── routes/            # GoRouter configuration
-├── services/          # API & storage services
-├── utils/             # Colors, constants, theme
-└── views/             # Screens & widgets
+├── controllers/   # GetX controllers and app state orchestration
+├── models/        # API models and domain entities
+├── routes/        # GoRouter route definitions
+├── services/      # API, auth, storage, referral, ebook, and exam services
+├── utils/         # Constants, theme, colors, navigation helpers
+└── views/         # Screens and reusable UI widgets
 ```
 
-## 🚀 Getting Started
+## Main Flows
 
-1. **Install dependencies:**
-   ```bash
-   flutter pub get
-   ```
+- Auth: splash, onboarding, login, sign up, forgot password, OTP, reset password
+- Practice: home, quiz settings, exam session, review, results, performance
+- Resources: resource tab, category list, detail page, PDF viewer, purchase path
+- Account: profile, edit profile, change password, subscription, referral
 
-2. **Configure API:**
-   - Update `lib/utils/app_constants.dart` with your API base URL
+## Getting Started
 
-3. **Add assets:**
-   - Place images in `assets/images/`
-   - Place icons in `assets/icons/`
+### Requirements
 
-4. **Run the app:**
-   ```bash
-   flutter run
-   ```
+- Flutter SDK
+- Dart SDK
+- Android Studio or VS Code with Flutter tooling
+- Android emulator, iOS simulator, or a physical device
 
-## 🎨 Features
+### Install
 
-- ✅ MVC Architecture
-- ✅ Riverpod State Management
-- ✅ GoRouter Navigation
-- ✅ Light/Dark Theme Support
-- ✅ Authentication Flow
-- ✅ API Integration
-- ✅ Local Storage
-- ✅ Error Handling
-- ✅ Loading States
-
-## 📱 Screens
-
-- **Splash Screen** - Initial loading screen
-- **Login Screen** - User authentication
-- **Register Screen** - User registration
-- **Home Screen** - Main dashboard (protected)
-- **Profile Screen** - User profile (protected)
-
-## 🔧 Configuration
-
-### Update API Base URL
-
-Edit `lib/utils/app_constants.dart`:
-```dart
-static const String baseUrl = 'https://your-api-url.com';
+```bash
+flutter pub get
 ```
 
-### Add Custom Colors
+### Run
 
-Edit `lib/utils/app_colors.dart` to customize your color scheme.
-
-### Modify Theme
-
-Edit `lib/utils/app_theme.dart` to customize light and dark themes.
-
-## 📝 Usage
-
-### Adding a New Screen
-
-1. Create screen in `lib/views/screens/`
-2. Add route in `lib/routes/app_router.dart`
-3. Create controller if needed
-
-### Adding a New Model
-
-1. Create model class in `lib/models/`
-2. Implement `fromJson` and `toJson` methods
-
-### Using Controllers
-
-```dart
-// Watch state
-final authState = ref.watch(authControllerProvider);
-
-// Read controller
-ref.read(authControllerProvider.notifier).login(email, password);
+```bash
+flutter run
 ```
 
-## 🎯 Next Steps
+### Build
 
-- Add more screens and features
-- Integrate with your backend API
-- Add custom assets
-- Customize theme and colors
-- Add more models and services
+```bash
+flutter build apk --release
+flutter build ios --release
+```
+
+## Configuration
+
+Update the main runtime constants in [lib/utils/app_constants.dart](/Users/saa/dev/flutter/ej7696_flutter_jakir/lib/utils/app_constants.dart:1).
+
+Important values:
+
+- `AppConstants.apiOrigin`
+- `AppConstants.baseUrl`
+- `AppConstants.publicBaseUrl`
+- `AppConstants.appLinkScheme`
+- `AppConstants.stripePublishableKey`
+
+Theme and styling live in:
+
+- [lib/utils/app_theme.dart](/Users/saa/dev/flutter/ej7696_flutter_jakir/lib/utils/app_theme.dart:1)
+- [lib/utils/app_colors.dart](/Users/saa/dev/flutter/ej7696_flutter_jakir/lib/utils/app_colors.dart:1)
+
+## Notes
+
+- The screenshot assets in this README currently live under `docs/screenshorts/`.
+- The project uses `GetX`, not Riverpod.
+- The Stripe publishable key is currently defined in source; for production, it should move to a safer environment-based configuration.

@@ -62,11 +62,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (expired) _handleSessionExpired();
       }),
     );
-    _sessionWorkers.add(
-      ever<PlanTier>(_userController.planTier, (_) {
-        _homeController.fetchActiveExams();
-      }),
-    );
 
     if (_userController.sessionExpired.value ||
         _homeController.sessionExpired.value) {
@@ -96,14 +91,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshAll() async {
-    if (!_userController.isLoading.value) {
-      await _userController.refreshProfile();
-    }
     if (!_homeController.isLoading.value) {
       await _homeController.fetchActiveExams();
     }
     if (!_homeController.isAnnouncementLoading.value) {
       await _homeController.fetchAnnouncements();
+    }
+    if (!_userController.isLoading.value) {
+      await _userController.refreshProfile();
     }
   }
 
@@ -156,22 +151,12 @@ class HomeDashboard extends StatelessWidget {
   });
 
   bool _isUnlocked(CourseItem course) {
-    final bool isPlanUnlock =
-        course.purchaseType?.trim().toLowerCase() == 'plan';
-    if (isPlanUnlock && planTier != PlanTier.professional) {
-      return false;
-    }
+    if (course.isUnlocked == true) return true;
     final String rawId = (course.examId ?? course.id).trim();
-    if (rawId.isNotEmpty) {
-      if (unlockedCourseIds.contains(rawId)) return true;
-      final String normalized = rawId.toLowerCase();
-      if (unlockedCourseIds.any(
-        (id) => id.trim().toLowerCase() == normalized,
-      )) {
-        return true;
-      }
-    }
-    return course.isUnlocked == true;
+    if (rawId.isEmpty) return false;
+    if (unlockedCourseIds.contains(rawId)) return true;
+    final String normalized = rawId.toLowerCase();
+    return unlockedCourseIds.any((id) => id.trim().toLowerCase() == normalized);
   }
 
   void _showLoading(BuildContext context, String message) {
@@ -677,8 +662,6 @@ class HomeDashboard extends StatelessWidget {
                                 exam.effectivitySheetContent,
                             bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
                             isUnlocked: exam.unlocked,
-                            purchaseType: exam.purchaseType,
-                            paymentStatus: exam.paymentStatus,
                             unlockPrice: exam.unlockPrice,
                             currency: exam.currency,
                           ),
@@ -1132,8 +1115,6 @@ class CourseItem {
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
   final bool? isUnlocked;
-  final String? purchaseType;
-  final String? paymentStatus;
   final double? unlockPrice;
   final String? currency;
 
@@ -1148,8 +1129,6 @@ class CourseItem {
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
     this.isUnlocked,
-    this.purchaseType,
-    this.paymentStatus,
     this.unlockPrice,
     this.currency,
   });

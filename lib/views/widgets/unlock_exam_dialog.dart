@@ -55,7 +55,10 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
     final res = await widget.examService.getActiveExams();
     if (!res.success) {
       throw AppException(
-        userMessage: ErrorHandler.getMessageFromResponse(res, failureFallback: 'Failed to fetch exams'),
+        userMessage: ErrorHandler.getMessageFromResponse(
+          res,
+          failureFallback: 'Failed to fetch exams',
+        ),
       );
     }
     final exams = res.data ?? const [];
@@ -119,10 +122,7 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                               AppShimmerCircle(size: 36),
                               SizedBox(width: 12),
                               Expanded(
-                                child: AppShimmerBox(
-                                  height: 14,
-                                  radius: 6,
-                                ),
+                                child: AppShimmerBox(height: 14, radius: 6),
                               ),
                             ],
                           ),
@@ -166,8 +166,9 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                 unlockedIds.add(exam.id);
               }
             }
-            final bool hasLockedSelection =
-                _selectedIds.any((id) => !unlockedIds.contains(id));
+            final bool hasLockedSelection = _selectedIds.any(
+              (id) => !unlockedIds.contains(id),
+            );
             final canConfirm = _acknowledged && hasLockedSelection;
 
             return Column(
@@ -193,7 +194,8 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                       final e = exams[index];
                       final bool isUnlocked = unlockedIds.contains(e.id);
                       final selected = _selectedIds.contains(e.id);
-                      final disabled = isUnlocked ||
+                      final disabled =
+                          isUnlocked ||
                           (!selected &&
                               widget.maxSelect != 1 &&
                               _selectedIds.length >= widget.maxSelect);
@@ -202,14 +204,14 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                         borderRadius: BorderRadius.circular(14),
                         onTap: disabled
                             ? (isUnlocked
-                                ? () => Navigator.pop(
+                                  ? () => Navigator.pop(
                                       context,
                                       UnlockExamDialogResult(
                                         exam: e,
                                         alreadyUnlocked: true,
                                       ),
                                     )
-                                : null)
+                                  : null)
                             : () => _toggle(e.id),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -218,15 +220,15 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                           ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
-                            border:
-                                Border.all(color: const Color(0xFFCBD5E1)),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
                           ),
                           child: Row(
                             children: [
                               Checkbox(
                                 value: selected,
-                                onChanged:
-                                    disabled ? null : (_) => _toggle(e.id),
+                                onChanged: disabled
+                                    ? null
+                                    : (_) => _toggle(e.id),
                               ),
                               const SizedBox(width: 6),
                               Expanded(
@@ -259,8 +261,9 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFD8F5D8),
-                                          borderRadius:
-                                              BorderRadius.circular(999),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
                                         ),
                                         child: const Text(
                                           'Unlocked',
@@ -369,23 +372,25 @@ class _UnlockExamDialogState extends State<UnlockExamDialog> {
                                       ),
                                       actions: [
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(false),
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(false),
                                           child: const Text('No'),
                                         ),
-                                        
+
                                         ElevatedButton(
-                                          onPressed: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(true),
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(true),
                                           child: const Text('Yes'),
                                         ),
                                       ],
                                     );
                                   },
                                 );
-                                if (confirmed != true) return;
+                                if (!context.mounted || confirmed != true) {
+                                  return;
+                                }
                                 Navigator.pop(
                                   context,
                                   UnlockExamDialogResult(
