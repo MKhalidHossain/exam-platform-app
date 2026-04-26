@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:get/get.dart';
 import '../core/error/error_handler.dart';
 import '../models/plan_tier.dart';
+import '../models/user_unlocks_model.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
 import '../services/user_service.dart';
 import '../utils/app_constants.dart';
 
 class UserController extends GetxController {
+  static const Duration _profileRefreshInterval = Duration(seconds: 15);
+
   final UserService _userService = UserService();
   final StorageService _storageService = StorageService();
 
@@ -18,26 +22,26 @@ class UserController extends GetxController {
   final RxString errorMessage = ''.obs;
   final RxBool sessionExpired = false.obs;
 
+  Timer? _profileRefreshTimer;
+  bool _isRefreshingProfile = false;
+
   @override
   void onInit() {
     super.onInit();
     _loadCached();
     refreshProfile();
+    _startProfileRefreshTimer();
+  }
+
+  @override
+  void onClose() {
+    _profileRefreshTimer?.cancel();
+    super.onClose();
   }
 
   Future<void> applyProfile(UserModel next) async {
-    final previousPlan = planTier.value;
     user.value = next;
-    final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-    final nextPlan =
-        (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
-        ? PlanTier.professional
-        : fromProfile;
-    if (previousPlan == PlanTier.professional && nextPlan == PlanTier.starter) {
-      planTier.value = previousPlan;
-    } else {
-      planTier.value = nextPlan;
-    }
+    _syncPlanTier();
     final userJson = jsonEncode(next.toJson());
     await _storageService.saveString(AppConstants.userDataKey, userJson);
   }
@@ -77,32 +81,80 @@ class UserController extends GetxController {
   }
 
   void _syncPlanTier() {
-    final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-    if (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty) {
-      planTier.value = PlanTier.professional;
-      return;
-    }
-    planTier.value = fromProfile;
+    planTier.value = planTierFromSubscription(user.value?.subscriptionTier);
   }
 
-  Future<void> refreshProfile() async {
-    isLoading.value = true;
-    errorMessage.value = '';
+  Set<String> _extractActiveUnlockedExamIds(UserUnlocksData data) {
+    return data.unlockedExams
+        .where((exam) => !exam.isExpired)
+        .map((exam) => exam.examId.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+  }
 
-    final response = await _userService.getProfile();
+  Future<void> _refreshUnlocksCache({bool silent = false}) async {
+    final response = await _userService.getMyUnlocks();
     if (response.statusCode == 401) {
       sessionExpired.value = true;
-    }
-    if (response.success && response.data != null) {
-      await applyProfile(response.data!);
-    } else {
-      errorMessage.value = ErrorHandler.getMessageFromResponse(
-        response,
-        failureFallback: 'Failed to load profile',
-      );
+      return;
     }
 
-    isLoading.value = false;
+    if (response.success && response.data != null) {
+      await setUnlockedExamIds(_extractActiveUnlockedExamIds(response.data!));
+      return;
+    }
+
+    if (!silent) {
+      errorMessage.value = ErrorHandler.getMessageFromResponse(
+        response,
+        failureFallback: 'Failed to load unlocked exams',
+      );
+    }
+  }
+
+  void _startProfileRefreshTimer() {
+    _profileRefreshTimer?.cancel();
+    _profileRefreshTimer = Timer.periodic(_profileRefreshInterval, (_) async {
+      if (sessionExpired.value || _isRefreshingProfile) return;
+      final hasSession = await _storageService.hasValidSessionArtifacts();
+      if (!hasSession) return;
+      await refreshProfile(silent: true);
+    });
+  }
+
+  Future<void> refreshProfile({bool silent = false}) async {
+    if (_isRefreshingProfile) return;
+
+    final hasSession = await _storageService.hasValidSessionArtifacts();
+    if (!hasSession) return;
+
+    _isRefreshingProfile = true;
+    if (!silent) {
+      isLoading.value = true;
+      errorMessage.value = '';
+    }
+
+    try {
+      final response = await _userService.getProfile();
+      if (response.statusCode == 401) {
+        sessionExpired.value = true;
+      }
+      if (response.success && response.data != null) {
+        await applyProfile(response.data!);
+        await _refreshUnlocksCache(silent: true);
+        errorMessage.value = '';
+      } else if (!silent) {
+        errorMessage.value = ErrorHandler.getMessageFromResponse(
+          response,
+          failureFallback: 'Failed to load profile',
+        );
+      }
+    } finally {
+      if (!silent) {
+        isLoading.value = false;
+      }
+      _isRefreshingProfile = false;
+    }
   }
 
   Future<void> setUnlockedExamIds(Set<String> ids) async {

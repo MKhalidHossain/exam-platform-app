@@ -6,6 +6,8 @@ class ExamModel {
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
   final bool? unlocked;
+  final String? purchaseType;
+  final String? paymentStatus;
   final double? unlockPrice;
   final String? currency;
 
@@ -17,6 +19,8 @@ class ExamModel {
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
     this.unlocked,
+    this.purchaseType,
+    this.paymentStatus,
     this.unlockPrice,
     this.currency,
   });
@@ -35,6 +39,8 @@ class ExamModel {
       effectivitySheetContent: json['effectivitySheetContent']?.toString(),
       bodyOfKnowledgeContent: json['bodyOfKnowledgeContent']?.toString(),
       unlocked: Exam._toBool(json['unlocked']),
+      purchaseType: json['purchaseType']?.toString(),
+      paymentStatus: json['paymentStatus']?.toString(),
       unlockPrice: Exam._toDouble(json['unlockPrice'] ?? json['unlock_price']),
       currency: json['currency']?.toString(),
     );
@@ -45,10 +51,7 @@ class ExamImage {
   final String? publicId;
   final String? url;
 
-  const ExamImage({
-    this.publicId,
-    this.url,
-  });
+  const ExamImage({this.publicId, this.url});
 
   factory ExamImage.fromJson(Map<String, dynamic> json) {
     return ExamImage(
@@ -58,10 +61,7 @@ class ExamImage {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'public_id': publicId,
-      'url': url,
-    };
+    return {'public_id': publicId, 'url': url};
   }
 }
 
@@ -78,6 +78,8 @@ class Exam {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool? unlocked;
+  final String? purchaseType;
+  final String? paymentStatus;
   final double? unlockPrice;
   final String? currency;
 
@@ -94,6 +96,8 @@ class Exam {
     this.createdAt,
     this.updatedAt,
     this.unlocked,
+    this.purchaseType,
+    this.paymentStatus,
     this.unlockPrice,
     this.currency,
   });
@@ -145,6 +149,8 @@ class Exam {
       createdAt: _toDate(json['createdAt']),
       updatedAt: _toDate(json['updatedAt']),
       unlocked: _toBool(json['unlocked']),
+      purchaseType: json['purchaseType']?.toString(),
+      paymentStatus: json['paymentStatus']?.toString(),
       unlockPrice: _toDouble(json['unlockPrice'] ?? json['unlock_price']),
       currency: json['currency']?.toString(),
     );
@@ -164,6 +170,8 @@ class Exam {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'unlocked': unlocked,
+      'purchaseType': purchaseType,
+      'paymentStatus': paymentStatus,
       'unlockPrice': unlockPrice,
       'currency': currency,
     };
@@ -176,12 +184,7 @@ class ExamsMeta {
   final int? total;
   final int? totalPages;
 
-  const ExamsMeta({
-    this.page,
-    this.limit,
-    this.total,
-    this.totalPages,
-  });
+  const ExamsMeta({this.page, this.limit, this.total, this.totalPages});
 
   factory ExamsMeta.fromJson(Map<String, dynamic> json) {
     return ExamsMeta(
@@ -206,10 +209,7 @@ class ActiveExamsData {
   final List<Exam> exams;
   final ExamsMeta? meta;
 
-  const ActiveExamsData({
-    this.exams = const [],
-    this.meta,
-  });
+  const ActiveExamsData({this.exams = const [], this.meta});
 
   factory ActiveExamsData.fromJson(Map<String, dynamic> json) {
     final examsJson = json['exams'];
@@ -227,10 +227,7 @@ class ActiveExamsData {
       parsedMeta = ExamsMeta.fromJson(metaJson);
     }
 
-    return ActiveExamsData(
-      exams: parsedExams,
-      meta: parsedMeta,
-    );
+    return ActiveExamsData(exams: parsedExams, meta: parsedMeta);
   }
 
   Map<String, dynamic> toJson() {
