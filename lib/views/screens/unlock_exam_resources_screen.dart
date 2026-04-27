@@ -18,7 +18,8 @@ class UnlockExamResourcesScreen extends StatefulWidget {
       _UnlockExamResourcesScreenState();
 }
 
-class _UnlockExamResourcesScreenState extends State<UnlockExamResourcesScreen> {
+class _UnlockExamResourcesScreenState extends State<UnlockExamResourcesScreen>
+    with WidgetsBindingObserver {
   final UserService _userService = UserService();
 
   bool _isLoading = true;
@@ -28,7 +29,22 @@ class _UnlockExamResourcesScreenState extends State<UnlockExamResourcesScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadUnlocks();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Refresh when user brings the app back to foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadUnlocks();
+    }
   }
 
   Future<void> _loadUnlocks() async {
@@ -44,13 +60,16 @@ class _UnlockExamResourcesScreenState extends State<UnlockExamResourcesScreen> {
 
     if (response.success && response.data != null) {
       final data = response.data!;
-      final unlockedExamIds = data.unlockedExams
+      // Only treat non-expired exams as active unlocks so that an admin
+      // downgrade/refund is reflected immediately in UserController.
+      final activeIds = data.unlockedExams
+          .where((exam) => !exam.isExpired)
           .map((exam) => exam.examId)
           .where((id) => id.trim().isNotEmpty)
           .toSet();
 
       if (Get.isRegistered<UserController>()) {
-        await Get.find<UserController>().setUnlockedExamIds(unlockedExamIds);
+        await Get.find<UserController>().setUnlockedExamIds(activeIds);
       }
 
       setState(() {

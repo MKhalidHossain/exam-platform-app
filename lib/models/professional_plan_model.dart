@@ -3,6 +3,7 @@
 ///   "message": "...",
 ///   "data": { "plan": { ... }, "subscription": { ... } }
 /// }
+library;
 import 'referral_model.dart';
 
 class ProfessionalPlanModel {
