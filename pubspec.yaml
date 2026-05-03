@@ -78,6 +78,9 @@ dependencies:
   # Text to speech
   flutter_tts: ^3.8.5
 
+  # Speech to text (voice commands)
+  speech_to_text: ^7.0.0
+
   # Shimmer loading
   shimmer: ^3.0.0
   

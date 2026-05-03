@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:get/get.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
@@ -36,6 +38,7 @@ class McqScreen extends StatefulWidget {
 class _McqScreenState extends State<McqScreen> {
   static const int _defaultDurationMinutes = 130;
 
+  // ─── Exam state ────────────────────────────────────────────────────────────
   late final List<_Question> _questions;
   late final FlutterTts _tts;
   late final bool _isTimedSession;
@@ -50,11 +53,21 @@ class _McqScreenState extends State<McqScreen> {
   bool _hasAutoSubmitted = false;
   bool _isAutoSubmitting = false;
 
+  // ─── Voice state ───────────────────────────────────────────────────────────
+  final SpeechToText _speech = SpeechToText();
+  bool _voiceModeEnabled = false;
+  bool _isListening = false;
+  bool _speechAvailable = false;
+  String? _speechLocaleId;
+  String _heardText = '';
+
   int get _settingsQuestionCount {
     final total = widget.totalQuestionCount;
     if (total != null && total > 0) return total;
     return _questions.length;
   }
+
+  // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -62,6 +75,7 @@ class _McqScreenState extends State<McqScreen> {
     _questions = _buildQuestions(widget.questions);
     _tts = FlutterTts();
     _configureTts();
+    _initSpeech();
     final UserController userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
         : Get.put(UserController());
@@ -78,8 +92,11 @@ class _McqScreenState extends State<McqScreen> {
   void dispose() {
     _timer?.cancel();
     unawaited(_tts.stop());
+    unawaited(_speech.cancel());
     super.dispose();
   }
+
+  // ─── TTS configuration ─────────────────────────────────────────────────────
 
   Future<void> _configureTts() async {
     await _tts.setLanguage('en-US');
@@ -88,6 +105,14 @@ class _McqScreenState extends State<McqScreen> {
     _tts.setCompletionHandler(() {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      // In voice mode, auto-start listening after every TTS completion.
+      if (_voiceModeEnabled && !_isListening) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && _voiceModeEnabled && !_isSpeaking && !_isListening) {
+            _startListening();
+          }
+        });
+      }
     });
     _tts.setCancelHandler(() {
       if (!mounted) return;
@@ -98,6 +123,57 @@ class _McqScreenState extends State<McqScreen> {
       setState(() => _isSpeaking = false);
     });
   }
+
+  // ─── STT initialisation ────────────────────────────────────────────────────
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _isListening = false);
+      },
+      onStatus: (status) {
+        if (!mounted) return;
+        if (status == 'done' || status == 'notListening') {
+          if (_isListening) setState(() => _isListening = false);
+        }
+      },
+    );
+    String? preferredLocaleId;
+    if (available) {
+      preferredLocaleId = await _resolvePreferredSpeechLocaleId();
+    }
+    if (mounted) {
+      setState(() {
+        _speechAvailable = available;
+        _speechLocaleId = preferredLocaleId;
+      });
+    }
+  }
+
+  Future<String?> _resolvePreferredSpeechLocaleId() async {
+    try {
+      final systemLocale = await _speech.systemLocale();
+      final locales = await _speech.locales();
+      final localeIds = locales.map((locale) => locale.localeId).toSet();
+
+      final String? systemLocaleId = systemLocale?.localeId;
+      if (systemLocaleId != null &&
+          systemLocaleId.toLowerCase().startsWith('en')) {
+        return systemLocaleId;
+      }
+
+      for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
+        if (localeIds.contains(fallback)) return fallback;
+      }
+
+      return systemLocaleId;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ─── Timer ─────────────────────────────────────────────────────────────────
 
   DateTime? _resolveEndTime() {
     final now = DateTime.now();
@@ -152,28 +228,17 @@ class _McqScreenState extends State<McqScreen> {
     if (_hasAutoSubmitted) return;
     _hasAutoSubmitted = true;
     unawaited(_tts.stop());
+    unawaited(_speech.cancel());
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
+      _isListening = false;
       _isAutoSubmitting = true;
     });
-
-    final List<dynamic> reviewQuestions =
-        (widget.questions != null && widget.questions!.isNotEmpty)
-        ? widget.questions!
-        : _questions;
-    context.go(
-      '/exam-review',
-      extra: {
-        'courseTitle': widget.courseTitle,
-        'examId': widget.examId,
-        'questions': reviewQuestions,
-        'selected': _selectedIndex,
-        'flagged': _flaggedQuestions,
-        'autoSubmit': true,
-      },
-    );
+    _goToExamReview(autoSubmit: true);
   }
+
+  // ─── Question building ─────────────────────────────────────────────────────
 
   List<_Question> _buildQuestions(List<dynamic>? rawQuestions) {
     final parsed = _parseQuestions(rawQuestions);
@@ -197,9 +262,7 @@ class _McqScreenState extends State<McqScreen> {
   }
 
   List<_Question> _parseQuestions(List<dynamic>? rawQuestions) {
-    if (rawQuestions == null || rawQuestions.isEmpty) {
-      return [];
-    }
+    if (rawQuestions == null || rawQuestions.isEmpty) return [];
 
     final List<_Question> parsed = [];
     for (int i = 0; i < rawQuestions.length; i++) {
@@ -242,16 +305,12 @@ class _McqScreenState extends State<McqScreen> {
                 option['label'] ??
                 option['value'] ??
                 option['answer'];
-            if (optionText != null) {
-              options.add(optionText.toString());
-            }
+            if (optionText != null) options.add(optionText.toString());
             final bool isCorrect =
                 option['is_correct'] == true ||
                 option['isCorrect'] == true ||
                 option['correct'] == true;
-            if (isCorrect && correctIndex == null) {
-              correctIndex = optIndex;
-            }
+            if (isCorrect && correctIndex == null) correctIndex = optIndex;
           } else {
             options.add(option.toString());
           }
@@ -312,6 +371,8 @@ class _McqScreenState extends State<McqScreen> {
     return parsed;
   }
 
+  // ─── Exam actions ──────────────────────────────────────────────────────────
+
   void _onSelect(int index) {
     if (_lockedQuestions.contains(_currentIndex)) return;
     setState(() {
@@ -336,41 +397,7 @@ class _McqScreenState extends State<McqScreen> {
       });
       return;
     }
-
-    final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
-    if (covered.length < _questions.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please answer or flag all questions first.'),
-        ),
-      );
-      return;
-    }
-
-    unawaited(_tts.stop());
-    final List<dynamic> reviewQuestions =
-        (widget.questions != null && widget.questions!.isNotEmpty)
-        ? widget.questions!
-        : _questions;
-    final result = await context.push<Object?>(
-      '/exam-review',
-      extra: {
-        'courseTitle': widget.courseTitle,
-        'examId': widget.examId,
-        'questions': reviewQuestions,
-        'selected': _selectedIndex,
-        'flagged': _flaggedQuestions,
-      },
-    );
-
-    if (result is int) {
-      unawaited(_tts.stop());
-      setState(() {
-        _currentIndex = result.clamp(0, _questions.length - 1);
-        _showExplanation = false;
-        _isSpeaking = false;
-      });
-    }
+    await _openExamReview();
   }
 
   void _toggleFlag() {
@@ -384,8 +411,8 @@ class _McqScreenState extends State<McqScreen> {
   }
 
   void _toggleExplanation() {
-    final bool canViewExplanation = _selectedIndex[_currentIndex] != null;
-    if (!canViewExplanation) {
+    final bool canView = _selectedIndex[_currentIndex] != null;
+    if (!canView) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select an answer first to view explanation.'),
@@ -393,11 +420,10 @@ class _McqScreenState extends State<McqScreen> {
       );
       return;
     }
-
-    setState(() {
-      _showExplanation = !_showExplanation;
-    });
+    setState(() => _showExplanation = !_showExplanation);
   }
+
+  // ─── TTS ───────────────────────────────────────────────────────────────────
 
   Future<void> _speakCurrentQuestion() async {
     final _Question question = _questions[_currentIndex];
@@ -408,13 +434,22 @@ class _McqScreenState extends State<McqScreen> {
       buffer.write(' Options: ');
       for (int i = 0; i < question.options.length; i++) {
         final label = String.fromCharCode(65 + i);
-        buffer.write('$label. ${question.options[i]}. ');
+        buffer.write('${i + 1}, $label. ${question.options[i]}. ');
+      }
+      // Ordinal words are far more reliable than single letters for STT.
+      if (_voiceModeEnabled) {
+        buffer.write(' Say first, second, third, or fourth. ');
+        buffer.write('You can also say next, review, or help.');
       }
     }
+    await _speech.cancel();
     await _tts.stop();
-    await _tts.speak(buffer.toString());
     if (!mounted) return;
-    setState(() => _isSpeaking = true);
+    setState(() {
+      _isSpeaking = true;
+      _isListening = false;
+    });
+    await _tts.speak(buffer.toString());
   }
 
   Future<void> _toggleSpeak() async {
@@ -427,6 +462,581 @@ class _McqScreenState extends State<McqScreen> {
     await _speakCurrentQuestion();
   }
 
+  /// Speaks [text] and, in voice mode, auto-starts listening when done.
+  Future<void> _speakFeedback(String text) async {
+    await _speech.cancel();
+    await _tts.stop();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = true;
+      _isListening = false;
+    });
+    await _tts.speak(text);
+  }
+
+  // ─── Voice mode toggle ─────────────────────────────────────────────────────
+
+  Future<void> _toggleVoiceMode() async {
+    if (_voiceModeEnabled) {
+      await _tts.stop();
+      await _speech.cancel();
+      if (!mounted) return;
+      setState(() {
+        _voiceModeEnabled = false;
+        _isListening = false;
+        _isSpeaking = false;
+        _heardText = '';
+      });
+      return;
+    }
+
+    if (!_speechAvailable) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Speech recognition is not available on this device.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _voiceModeEnabled = true;
+      _heardText = '';
+    });
+    // Auto-read the current question immediately.
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted && _voiceModeEnabled) await _speakCurrentQuestion();
+  }
+
+  // ─── STT listening ─────────────────────────────────────────────────────────
+
+  /// Start the mic. TTS must be finished before calling — they never overlap.
+  Future<void> _startListening() async {
+    if (!_speechAvailable || _isListening || _isSpeaking) return;
+    setState(() {
+      _isListening = true;
+      _heardText = '';
+    });
+    await _speech.listen(
+      onResult: _onSpeechResult,
+      listenFor: const Duration(seconds: 15),
+      pauseFor: const Duration(seconds: 7),
+      localeId: _speechLocaleId,
+      listenOptions: SpeechListenOptions(
+        cancelOnError: false,
+        partialResults: true,
+      ),
+    );
+  }
+
+  /// Tap-while-reading: stop TTS first, then open the mic.
+  Future<void> _interruptAndListen() async {
+    await _tts.stop();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isListening = false;
+    });
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (mounted) unawaited(_startListening());
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    if (!mounted) return;
+    setState(() => _isListening = false);
+  }
+
+  List<dynamic> _reviewQuestions() {
+    if (widget.questions != null && widget.questions!.isNotEmpty) {
+      return widget.questions!;
+    }
+    return _questions;
+  }
+
+  Future<void> _openExamReview({bool preserveVoiceMode = false}) async {
+    await _tts.stop();
+    await _speech.cancel();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isListening = false;
+      _heardText = '';
+    });
+
+    final result = await context.push<Object?>(
+      '/exam-review',
+      extra: {
+        'courseTitle': widget.courseTitle,
+        'examId': widget.examId,
+        'questions': _reviewQuestions(),
+        'selected': _selectedIndex,
+        'flagged': _flaggedQuestions,
+        'voiceModeEnabled': preserveVoiceMode,
+      },
+    );
+
+    if (!mounted) return;
+    if (result is int) {
+      setState(() {
+        _currentIndex = result.clamp(0, _questions.length - 1);
+        _showExplanation = false;
+        _isSpeaking = false;
+        _isListening = false;
+        _heardText = '';
+      });
+      if (preserveVoiceMode && _voiceModeEnabled) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _voiceModeEnabled) {
+            unawaited(_speakCurrentQuestion());
+          }
+        });
+      }
+    }
+  }
+
+  void _goToExamReview({
+    bool autoSubmit = false,
+    bool preserveVoiceMode = false,
+  }) {
+    context.go(
+      '/exam-review',
+      extra: {
+        'courseTitle': widget.courseTitle,
+        'examId': widget.examId,
+        'questions': _reviewQuestions(),
+        'selected': _selectedIndex,
+        'flagged': _flaggedQuestions,
+        'autoSubmit': autoSubmit,
+        'voiceModeEnabled': preserveVoiceMode,
+      },
+    );
+  }
+
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    if (!mounted) return;
+    setState(() => _heardText = result.recognizedWords);
+    if (result.finalResult) {
+      setState(() => _isListening = false);
+      final text = result.recognizedWords.trim();
+      if (text.isNotEmpty) _handleVoiceCommand(text);
+    }
+  }
+
+  // ─── Voice command dispatcher ──────────────────────────────────────────────
+
+  void _handleVoiceCommand(String rawText) {
+    final text = _normalizeCommand(rawText);
+
+    // ── Select option (A / B / C / D) ──
+    final optionIndex = _parseOptionLetter(text);
+    if (optionIndex != null) {
+      _selectViaVoice(optionIndex);
+      return;
+    }
+
+    // ── Next ──
+    if (_wordMatch(text, ['next', 'skip', 'continue', 'go next', 'move on'])) {
+      _nextViaVoice();
+      return;
+    }
+
+    // ── Previous ──
+    if (_wordMatch(text, ['back', 'previous', 'go back', 'prev', 'last question'])) {
+      _previousViaVoice();
+      return;
+    }
+
+    // ── Go to question N ──
+    final qMatch = RegExp(r'(?:question|go to|number|q)\s*(\d+)').firstMatch(text);
+    if (qMatch != null) {
+      final n = int.tryParse(qMatch.group(1) ?? '') ?? 0;
+      _goToQuestionViaVoice(n - 1);
+      return;
+    }
+
+    // ── Flag ──
+    if (_wordMatch(text, ['flag', 'mark', 'bookmark', 'flag this', 'mark this'])) {
+      _flagViaVoice();
+      return;
+    }
+
+    // ── Read / repeat ──
+    if (_wordMatch(text, ['read', 'repeat', 'again', 'read again', 're-read', 'say again', 'read question'])) {
+      unawaited(_speakCurrentQuestion());
+      return;
+    }
+
+    // ── Explanation ──
+    if (_wordMatch(text, ['explain', 'explanation', 'why', 'show explanation', 'view explanation', 'read explanation'])) {
+      _explanationViaVoice();
+      return;
+    }
+
+    // ── Review ──
+    if (_wordMatch(text, [
+      'review',
+      'open review',
+      'exam review',
+      'review screen',
+      'go to review',
+      'check review',
+      'open exam review',
+      'show review',
+    ])) {
+      _reviewViaVoice();
+      return;
+    }
+
+    // ── Submit ──
+    if (_wordMatch(text, ['submit', 'done', 'finish', 'complete', 'end exam', 'submit exam'])) {
+      _submitViaVoice();
+      return;
+    }
+
+    // ── Stop / silence ──
+    // TTS is already stopped by _onSpeechResult (barge-in).
+    // Just start fresh listening so the user can say their answer.
+    if (_wordMatch(text, ['stop', 'quiet', 'silence', 'pause', 'stop reading', 'cancel'])) {
+      unawaited(_speech.cancel());
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+        _isListening = false;
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _voiceModeEnabled) unawaited(_startListening());
+      });
+      return;
+    }
+
+    // ── Help ──
+    if (_wordMatch(text, ['help', 'commands', 'what can i say', 'instructions'])) {
+      unawaited(_speakFeedback(
+        'Available voice commands. '
+        'To answer say first, second, third, or fourth. '
+        'You can also say select A, select B, select C, or select D. '
+        'Say next or skip to move forward. '
+        'Say back to go to the previous question. '
+        'Say question 5 to jump to any question. '
+        'Say flag to bookmark a question. '
+        'Say read to hear the question again. '
+        'Say explain to hear the explanation. '
+        'Say review to open the exam review screen. '
+        'Say submit to open review and confirm the exam. '
+        'Say stop to turn off listening.',
+      ));
+      return;
+    }
+
+    // ── Unrecognised ──
+    final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
+    unawaited(_speakFeedback(
+      '${heard}Not recognised. '
+      'Try one of these commands: first, second, next, review, or help.',
+    ));
+  }
+
+  String _normalizeCommand(String rawText) {
+    var text = rawText.toLowerCase();
+    text = text.replaceAll("'", '');
+    text = text.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
+    const fillerPhrases = [
+      'please',
+      'can you',
+      'could you',
+      'would you',
+      'i want to',
+      'i wanna',
+      'let me',
+      'show me',
+      'take me to',
+      'go ahead and',
+      'i would like to',
+    ];
+    for (final filler in fillerPhrases) {
+      text = text.replaceAll(filler, ' ');
+    }
+
+    const phraseAliases = {
+      'go next': 'next',
+      'move next': 'next',
+      'move forward': 'next',
+      'go forward': 'next',
+      'go previous': 'back',
+      'previous question': 'back',
+      'go review': 'review',
+      'open the review': 'review',
+      'submit now': 'submit',
+      'finish exam': 'submit',
+      'read again': 'read',
+      'say again': 'read',
+      'read question': 'read',
+      'show explanation': 'explain',
+      'view explanation': 'explain',
+      'mark review': 'flag',
+    };
+    phraseAliases.forEach((from, to) {
+      text = text.replaceAll(from, to);
+    });
+
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Returns 0–3 if [text] maps to an answer letter, otherwise null.
+  ///
+  /// Tries five layers so natural speech and number-based input both work.
+  int? _parseOptionLetter(String text) {
+    // ── 0. Raw digit / number-word fast-path ──────────────────────────────
+    // STT sometimes returns digits; also lets users say "1","2","3","4".
+    switch (text.trim()) {
+      case '1': return 0;
+      case '2': return 1;
+      case '3': return 2;
+      case '4': return 3;
+    }
+
+    // ── Word map — letters + numbers + ordinals + homophones ──────────────
+    // 'A' is the hardest because it doubles as an article.
+    // Numbers and ordinals are the most reliable STT output for option picks.
+    const Map<String, int> wordMap = {
+      // ── A / option 1 / first ──
+      'a': 0, 'ay': 0, 'aye': 0, 'eh': 0, 'hey': 0, 'hay': 0,
+      'alpha': 0, 'ace': 0, 'eight': 0,
+      'one': 0, 'first': 0, 'won': 0,
+      // ── B / option 2 / second ──
+      'b': 1, 'be': 1, 'bee': 1, 'bi': 1, 'by': 1, 'bye': 1,
+      'bay': 1, 'buy': 1, 'bea': 1, 'bravo': 1,
+      'two': 1, 'second': 1, 'to': 1, 'too': 1,
+      // ── C / option 3 / third ──
+      'c': 2, 'see': 2, 'sea': 2, 'si': 2, 'key': 2, 'charlie': 2,
+      'three': 2, 'third': 2, 'free': 2,
+      // ── D / option 4 / fourth ──
+      'd': 3, 'de': 3, 'dee': 3, 'di': 3, 'day': 3, 'delta': 3,
+      'four': 3, 'fourth': 3, 'for': 3, 'fore': 3,
+    };
+
+    final words = text
+        .split(RegExp(r'\s+'))
+        .map((w) => w.replaceAll(RegExp(r'[^a-z]'), ''))
+        .where((w) => w.isNotEmpty)
+        .toList();
+
+    // ── 1. Full-text exact match ───────────────────────────────────────────
+    if (wordMap.containsKey(text)) return wordMap[text];
+
+    // ── 2. Single word (strip punctuation) ────────────────────────────────
+    if (words.length == 1 && wordMap.containsKey(words[0])) {
+      return wordMap[words[0]];
+    }
+
+    // ── 3. Explicit selection phrases anywhere in the text ─────────────────
+    // Handles: "I think it's B", "my answer is 3", "I'll go with first"
+    const selectionTriggers = [
+      'option', 'number', 'select', 'choose', 'answer', 'pick',
+      'i choose', 'i pick', 'i select', 'i think',
+      "i'll go with", 'i ll go with', 'go with', "it's", 'it s', 'its',
+      'my answer is', 'the answer is', 'answer is',
+      "i'll say", 'i ll say', 'i say', 'i want', 'i think it',
+    ];
+    for (final trigger in selectionTriggers) {
+      final idx = text.indexOf(trigger);
+      if (idx < 0) continue;
+      final after = text.substring(idx + trigger.length).trim();
+      // Check digit immediately after trigger (e.g. "option 2")
+      final digitMatch = RegExp(r'^([1-4])').firstMatch(after);
+      if (digitMatch != null) {
+        return int.parse(digitMatch.group(1)!) - 1;
+      }
+      final firstWord = after
+          .split(RegExp(r'\s+'))
+          .map((w) => w.replaceAll(RegExp(r'[^a-z]'), ''))
+          .firstWhere((w) => w.isNotEmpty, orElse: () => '');
+      if (wordMap.containsKey(firstWord)) return wordMap[firstWord];
+    }
+
+    // ── 4. Last word is a letter / number ─────────────────────────────────
+    // Handles: "I think B", "probably third", "going with two"
+    // Skip bare 'a' here to avoid article false-positives.
+    if (words.isNotEmpty) {
+      final last = words.last;
+      if (last != 'a' && wordMap.containsKey(last)) return wordMap[last];
+    }
+
+    // ── 5. Short input (≤ 3 words) — scan every word ──────────────────────
+    // Handles: "it's b", "is see", "say two", "think dee"
+    if (words.length <= 3) {
+      for (final word in words) {
+        if (word == 'a' && words.length == 1) return 0;
+        if (word != 'a' && wordMap.containsKey(word)) return wordMap[word];
+      }
+    }
+
+    return null;
+  }
+
+  bool _wordMatch(String text, List<String> keywords) =>
+      keywords.any((kw) => text == kw || text.contains(kw));
+
+  // ─── Voice actions ─────────────────────────────────────────────────────────
+
+  void _selectViaVoice(int optionIndex) {
+    final question = _questions[_currentIndex];
+
+    if (optionIndex >= question.options.length) {
+      unawaited(_speakFeedback("That option doesn't exist for this question."));
+      return;
+    }
+    if (_lockedQuestions.contains(_currentIndex)) {
+      final letter = question.correctIndex != null
+          ? String.fromCharCode(65 + question.correctIndex!)
+          : '';
+      unawaited(_speakFeedback(
+        letter.isNotEmpty
+            ? 'This question is already answered. The correct answer was $letter.'
+            : 'This question is already answered.',
+      ));
+      return;
+    }
+    if (_selectedIndex[_currentIndex] == optionIndex) {
+      unawaited(_speakFeedback('You already selected that option.'));
+      return;
+    }
+
+    _onSelect(optionIndex);
+
+    final letter = String.fromCharCode(65 + optionIndex);
+    final correct = question.correctIndex;
+
+    if (correct == null) {
+      unawaited(_speakFeedback('You selected option $letter.'));
+    } else if (optionIndex == correct) {
+      unawaited(_speakFeedback(
+        'Correct! Option $letter is the right answer. Say next to continue.',
+      ));
+    } else {
+      final correctLetter = String.fromCharCode(65 + correct);
+      unawaited(_speakFeedback(
+        'Incorrect. The correct answer is option $correctLetter. '
+        'Say next to move on.',
+      ));
+    }
+  }
+
+  void _nextViaVoice() {
+    final hasAnswer = _selectedIndex[_currentIndex] != null;
+    final isFlagged = _flaggedQuestions.contains(_currentIndex);
+
+    if (!hasAnswer && !isFlagged) {
+      unawaited(_speakFeedback(
+        'Please select an answer or flag this question before moving on.',
+      ));
+      return;
+    }
+
+    if (_currentIndex < _questions.length - 1) {
+      unawaited(_tts.stop());
+      unawaited(_speech.cancel());
+      setState(() {
+        _currentIndex += 1;
+        _showExplanation = false;
+        _isSpeaking = false;
+        _isListening = false;
+        _heardText = '';
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
+      });
+    } else {
+      final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
+      if (covered.length < _questions.length) {
+        unawaited(_speakFeedback(
+          'You still have unanswered questions. Say submit when you are ready.',
+        ));
+      } else {
+        unawaited(_speakFeedback(
+          'You have reached the last question. Say submit to finish, or say back to review.',
+        ));
+      }
+    }
+  }
+
+  void _previousViaVoice() {
+    if (_currentIndex > 0) {
+      unawaited(_tts.stop());
+      unawaited(_speech.cancel());
+      setState(() {
+        _currentIndex -= 1;
+        _showExplanation = false;
+        _isSpeaking = false;
+        _isListening = false;
+        _heardText = '';
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
+      });
+    } else {
+      unawaited(_speakFeedback('You are already on the first question.'));
+    }
+  }
+
+  void _goToQuestionViaVoice(int index) {
+    if (index < 0 || index >= _questions.length) {
+      unawaited(_speakFeedback(
+        'Question ${index + 1} does not exist. '
+        'There are ${_questions.length} questions total.',
+      ));
+      return;
+    }
+    unawaited(_tts.stop());
+    unawaited(_speech.cancel());
+    setState(() {
+      _currentIndex = index;
+      _showExplanation = false;
+      _isSpeaking = false;
+      _isListening = false;
+      _heardText = '';
+    });
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
+    });
+  }
+
+  void _flagViaVoice() {
+    _toggleFlag();
+    final nowFlagged = _flaggedQuestions.contains(_currentIndex);
+    unawaited(_speakFeedback(nowFlagged ? 'Question flagged.' : 'Flag removed.'));
+  }
+
+  void _explanationViaVoice() {
+    final hasAnswer = _selectedIndex[_currentIndex] != null;
+    if (!hasAnswer) {
+      unawaited(_speakFeedback(
+        'Please select an answer first to view the explanation.',
+      ));
+      return;
+    }
+    if (!_showExplanation) setState(() => _showExplanation = true);
+    final question = _questions[_currentIndex];
+    final text = question.explanation.isNotEmpty
+        ? question.explanation
+        : 'No explanation available for this question.';
+    unawaited(_speakFeedback('Explanation. $text'));
+  }
+
+  void _submitViaVoice() {
+    _reviewViaVoice();
+  }
+
+  void _reviewViaVoice() {
+    unawaited(_openExamReview(preserveVoiceMode: true));
+  }
+
+  // ─── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final _Question question = _questions[_currentIndex];
@@ -434,22 +1044,25 @@ class _McqScreenState extends State<McqScreen> {
     final bool canViewExplanation = selected != null;
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
     final bool canGoNext = selected != null || isFlagged;
-    final String timerLabel = _remaining == null
-        ? '--:--'
-        : _formatDuration(_remaining!);
+    final String timerLabel =
+        _remaining == null ? '--:--' : _formatDuration(_remaining!);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
       body: SafeArea(
         child: Stack(
           children: [
+            // ── Main scrollable content ──────────────────────────────────────
             ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
+                // Header row
                 Row(
                   children: [
                     IconButton(
                       onPressed: () {
+                        unawaited(_tts.stop());
+                        unawaited(_speech.cancel());
                         context.push(
                           '/quiz-settings',
                           extra: {
@@ -476,6 +1089,8 @@ class _McqScreenState extends State<McqScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+
+                // Info pills row — TTS + voice mode buttons
                 Row(
                   children: [
                     _InfoPill(
@@ -487,6 +1102,7 @@ class _McqScreenState extends State<McqScreen> {
                       _InfoPill(icon: Icons.timer, label: timerLabel),
                     ],
                     const Spacer(),
+                    // TTS play/stop button
                     IconButton(
                       onPressed: _toggleSpeak,
                       icon: Icon(
@@ -495,9 +1111,18 @@ class _McqScreenState extends State<McqScreen> {
                       ),
                       tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
                     ),
+                    // Voice mode toggle
+                    _VoiceModeButton(
+                      isEnabled: _voiceModeEnabled,
+                      isListening: _isListening,
+                      speechAvailable: _speechAvailable,
+                      onTap: _toggleVoiceMode,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Question number scroller
                 SizedBox(
                   height: 40,
                   child: ListView.separated(
@@ -505,8 +1130,8 @@ class _McqScreenState extends State<McqScreen> {
                     itemCount: _questions.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
-                      final int? selected = _selectedIndex[index];
-                      final bool isAnswered = selected != null;
+                      final int? sel = _selectedIndex[index];
+                      final bool isAnswered = sel != null;
                       final bool isFlag = _flaggedQuestions.contains(index);
                       final bool isCurrent = index == _currentIndex;
                       Color border = const Color(0xFF2D4F88);
@@ -517,7 +1142,7 @@ class _McqScreenState extends State<McqScreen> {
                         final int? correctIndex =
                             _questions[index].correctIndex;
                         if (correctIndex != null) {
-                          final bool isCorrect = selected == correctIndex;
+                          final bool isCorrect = sel == correctIndex;
                           if (isCorrect) {
                             fill = const Color(0xFFD8F5D8);
                             border = const Color(0xFF2DBD67);
@@ -537,18 +1162,27 @@ class _McqScreenState extends State<McqScreen> {
                         border = const Color(0xFFFFB020);
                         textColor = const Color(0xFFB76A00);
                       }
-                      if (isCurrent) {
-                        border = const Color(0xFF111827);
-                      }
+                      if (isCurrent) border = const Color(0xFF111827);
 
                       return GestureDetector(
                         onTap: () {
                           unawaited(_tts.stop());
+                          unawaited(_speech.cancel());
                           setState(() {
                             _currentIndex = index;
                             _showExplanation = false;
                             _isSpeaking = false;
+                            _isListening = false;
+                            _heardText = '';
                           });
+                          // Auto-read the tapped question in voice mode.
+                          if (_voiceModeEnabled) {
+                            Future.delayed(const Duration(milliseconds: 300), () {
+                              if (mounted && _voiceModeEnabled) {
+                                unawaited(_speakCurrentQuestion());
+                              }
+                            });
+                          }
                         },
                         child: Container(
                           width: 40,
@@ -571,6 +1205,8 @@ class _McqScreenState extends State<McqScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Question text
                 Text(
                   question.text,
                   style: const TextStyle(
@@ -580,6 +1216,8 @@ class _McqScreenState extends State<McqScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Answer options
                 ...List.generate(question.options.length, (index) {
                   final String option = question.options[index];
                   final bool isSelected = selected == index;
@@ -659,12 +1297,15 @@ class _McqScreenState extends State<McqScreen> {
                     ),
                   );
                 }),
+
+                // Flag button
                 Center(
                   child: TextButton.icon(
                     onPressed: _toggleFlag,
                     icon: Icon(
                       Icons.flag,
-                      color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
+                      color:
+                          isFlagged ? const Color(0xFFB76A00) : Colors.black,
                     ),
                     label: Text(
                       'Flag',
@@ -688,12 +1329,16 @@ class _McqScreenState extends State<McqScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Next button
                 _PrimaryButton(
                   label: 'Next',
                   isEnabled: canGoNext,
                   onTap: _onNext,
                 ),
                 const SizedBox(height: 14),
+
+                // Explanation toggle
                 _DropdownHeader(
                   isExpanded: _showExplanation && canViewExplanation,
                   isEnabled: canViewExplanation,
@@ -709,8 +1354,13 @@ class _McqScreenState extends State<McqScreen> {
                 ],
                 const SizedBox(height: 18),
                 const ApiDisclaimerSection(),
+
+                // Extra bottom padding so the voice overlay never covers content.
+                if (_voiceModeEnabled) const SizedBox(height: 90),
               ],
             ),
+
+            // ── Auto-submit overlay ──────────────────────────────────────────
             if (_isAutoSubmitting)
               Positioned.fill(
                 child: Container(
@@ -730,7 +1380,7 @@ class _McqScreenState extends State<McqScreen> {
                         ),
                         SizedBox(height: 14),
                         Text(
-                          "Time is up. Submitting...",
+                          'Time is up. Submitting...',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -742,12 +1392,30 @@ class _McqScreenState extends State<McqScreen> {
                   ),
                 ),
               ),
+
+            // ── Voice mode overlay (bottom) ──────────────────────────────────
+            if (_voiceModeEnabled)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: _ListeningOverlay(
+                  isListening: _isListening,
+                  isSpeaking: _isSpeaking,
+                  heardText: _heardText,
+                  onMicTap: _isSpeaking
+                      ? _interruptAndListen   // tap while TTS reads → stop TTS then open mic
+                      : (_isListening ? _stopListening : _startListening),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 }
+
+// ─── Data model ───────────────────────────────────────────────────────────────
 
 class _Question {
   final int number;
@@ -767,14 +1435,16 @@ class _Question {
   });
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 String _formatDuration(Duration duration) {
   final int totalSeconds = duration.inSeconds.clamp(0, 24 * 60 * 60);
   final int minutes = totalSeconds ~/ 60;
   final int seconds = totalSeconds % 60;
-  final String mm = minutes.toString().padLeft(2, '0');
-  final String ss = seconds.toString().padLeft(2, '0');
-  return '$mm:$ss';
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 }
+
+// ─── Existing widgets ─────────────────────────────────────────────────────────
 
 class _InfoPill extends StatelessWidget {
   final String label;
@@ -863,9 +1533,8 @@ class _DropdownHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color accentColor = isEnabled
-        ? const Color(0xFF2F6DE0)
-        : const Color(0xFF9CA3AF);
+    final Color accentColor =
+        isEnabled ? const Color(0xFF2F6DE0) : const Color(0xFF9CA3AF);
 
     return GestureDetector(
       onTap: onTap,
@@ -888,7 +1557,9 @@ class _DropdownHeader extends StatelessWidget {
               ),
             ),
             Icon(
-              isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              isExpanded
+                  ? Icons.keyboard_arrow_up
+                  : Icons.keyboard_arrow_down,
               color: accentColor,
             ),
           ],
@@ -932,6 +1603,232 @@ class _ExplanationSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── New voice widgets ────────────────────────────────────────────────────────
+
+/// Toggle button shown in the header row to enable/disable voice mode.
+class _VoiceModeButton extends StatelessWidget {
+  final bool isEnabled;
+  final bool isListening;
+  final bool speechAvailable;
+  final VoidCallback onTap;
+
+  const _VoiceModeButton({
+    required this.isEnabled,
+    required this.isListening,
+    required this.speechAvailable,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color iconColor;
+    final IconData icon;
+    final String tooltip;
+
+    if (!speechAvailable) {
+      bg = Colors.transparent;
+      iconColor = Colors.grey.shade400;
+      icon = Icons.mic_off;
+      tooltip = 'Speech recognition unavailable';
+    } else if (isEnabled) {
+      bg = isListening
+          ? const Color(0xFFFFE4E4)
+          : const Color(0xFFDCFCE7);
+      iconColor = isListening
+          ? const Color(0xFFB91C1C)
+          : const Color(0xFF166534);
+      icon = Icons.mic;
+      tooltip = 'Tap to turn off voice mode';
+    } else {
+      bg = Colors.transparent;
+      iconColor = const Color(0xFF274B8A);
+      icon = Icons.mic_none;
+      tooltip = 'Tap to turn on voice mode';
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: iconColor, size: 22),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating bar at the bottom of the screen shown when voice mode is active.
+class _ListeningOverlay extends StatefulWidget {
+  final bool isListening;
+  final bool isSpeaking;
+  final String heardText;
+  final VoidCallback onMicTap;
+
+  const _ListeningOverlay({
+    required this.isListening,
+    required this.isSpeaking,
+    required this.heardText,
+    required this.onMicTap,
+  });
+
+  @override
+  State<_ListeningOverlay> createState() => _ListeningOverlayState();
+}
+
+class _ListeningOverlayState extends State<_ListeningOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.18).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool listening = widget.isListening;
+    final bool speaking = widget.isSpeaking;
+
+    final Color borderColor = listening
+        ? const Color(0xFFEF4444)
+        : speaking
+            ? const Color(0xFF2D4F88)
+            : const Color(0xFFD1D5DB);
+
+    final Color micBg = listening
+        ? const Color(0xFFEF4444)
+        : const Color(0xFF2D4F88);
+
+    final String statusText = listening
+        ? 'Listening...'
+        : speaking
+            ? 'Speaking...'
+            : 'Voice mode active — tap mic to speak';
+
+    final Color statusColor = listening
+        ? const Color(0xFFB91C1C)
+        : speaking
+            ? const Color(0xFF1E4C9A)
+            : const Color(0xFF6B7280);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Mic button — pulses when listening
+            GestureDetector(
+              onTap: widget.onMicTap,
+              child: listening
+                  ? ScaleTransition(
+                      scale: _scale,
+                      child: _MicCircle(bg: micBg),
+                    )
+                  : _MicCircle(bg: micBg),
+            ),
+            const SizedBox(width: 12),
+
+            // Status text + heard text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                  if (widget.heardText.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Heard: "${widget.heardText}"',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF6B7280),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Help hint
+            Tooltip(
+              message:
+                  'Answer: first / second / third / fourth\n'
+                  'or: select A / select B / select C / select D\n'
+                  'Other: next • back • flag • read • explain • submit',
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: 18,
+                color: Colors.grey.shade400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MicCircle extends StatelessWidget {
+  final Color bg;
+  const _MicCircle({required this.bg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      child: const Icon(Icons.mic, color: Colors.white, size: 20),
     );
   }
 }

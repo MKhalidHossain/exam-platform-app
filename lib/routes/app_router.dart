@@ -463,6 +463,7 @@ GoRouter getRouter() {
           String? examId;
           List<int>? timeSpentSec;
           bool autoSubmit = false;
+          bool voiceModeEnabled = false;
           bool parseBool(dynamic value, {bool fallback = false}) {
             if (value == null) return fallback;
             if (value is bool) return value;
@@ -488,6 +489,10 @@ GoRouter getRouter() {
                   .toList();
             }
             autoSubmit = parseBool(extra['autoSubmit'], fallback: autoSubmit);
+            voiceModeEnabled = parseBool(
+              extra['voiceModeEnabled'],
+              fallback: voiceModeEnabled,
+            );
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
               selected = rawSelected.map(
@@ -516,6 +521,7 @@ GoRouter getRouter() {
             examId: examId,
             timeSpentSec: timeSpentSec,
             autoSubmit: autoSubmit,
+            voiceModeEnabled: voiceModeEnabled,
           );
         },
       ),
