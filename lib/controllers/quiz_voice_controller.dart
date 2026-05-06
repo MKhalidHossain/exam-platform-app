@@ -29,7 +29,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   static const Duration _idleRecoveryThreshold = Duration(seconds: 1);
   static const Duration _processingRecoveryThreshold = Duration(seconds: 5);
   static const Duration _speakingRecoveryThreshold = Duration(seconds: 8);
-  static const Duration _listeningRecoveryThreshold = Duration(seconds: 22);
+  static const Duration _listeningRecoveryThreshold = Duration(seconds: 55);
 
   final RxBool isEnabled = false.obs;
   final RxBool isDebugPanelExpanded = false.obs;

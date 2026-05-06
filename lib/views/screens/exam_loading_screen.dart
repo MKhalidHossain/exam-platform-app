@@ -16,6 +16,7 @@ import '../../services/exam_service.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
+import '../widgets/quiz_voice_overlay.dart';
 
 class ExamLoadingScreen extends StatefulWidget {
   final String courseTitle;
@@ -52,6 +53,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
   bool _speechAvailable = false;
   bool _speechInitializing = false;
   bool _isListening = false;
+  bool _isPreparingToListen = false;
   bool _isSpeaking = false;
   bool _cancelRequested = false;
   Timer? _listeningRestartTimer;
@@ -112,7 +114,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
     _startExam();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+        _bindVoiceSession(requestEntryAction: false);
       }
     });
   }
@@ -146,7 +148,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
   @override
   void onVoiceRouteActive() {
     if (!mounted) return;
-    _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+    _bindVoiceSession(requestEntryAction: false);
   }
 
   @override
@@ -232,7 +234,10 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
             'speech error: $error',
             screen: QuizVoiceScreen.examLoading,
           );
-          setState(() => _isListening = false);
+          setState(() {
+            _isListening = false;
+            _isPreparingToListen = false;
+          });
           _syncVoiceSessionState();
           _scheduleListeningRestart();
         },
@@ -242,9 +247,20 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
             'speech status: $status',
             screen: QuizVoiceScreen.examLoading,
           );
+          if (status == 'listening' &&
+              (!_isListening || _isPreparingToListen)) {
+            setState(() {
+              _isListening = true;
+              _isPreparingToListen = false;
+            });
+            _syncVoiceSessionState();
+          }
           if (status == 'done' || status == 'notListening') {
-            if (_isListening) {
-              setState(() => _isListening = false);
+            if (_isListening || _isPreparingToListen) {
+              setState(() {
+                _isListening = false;
+                _isPreparingToListen = false;
+              });
               _syncVoiceSessionState();
             }
             _scheduleListeningRestart();
@@ -392,6 +408,9 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
   ]) {
     _listeningRestartTimer?.cancel();
     if (!_voiceModeEnabled) return;
+    if (mounted && !_isListening && !_isSpeaking && !_isPreparingToListen) {
+      setState(() => _isPreparingToListen = true);
+    }
     _listeningRestartTimer = Timer(delay, () {
       if (!mounted || !_voiceModeEnabled || _isListening || _isSpeaking) {
         return;
@@ -407,35 +426,72 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
     );
     _listeningRestartTimer?.cancel();
     if (_isListening || _isSpeaking) return;
+    setState(() {
+      _isPreparingToListen = true;
+      _heardText = '';
+    });
+    _voiceController.markHeardText(_heardText);
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
-      if (!speechReady) return;
+      if (!speechReady) {
+        if (mounted) setState(() => _isPreparingToListen = false);
+        return;
+      }
+    }
+    _voiceController.logEvent(
+      'speech listen call starting',
+      screen: QuizVoiceScreen.examLoading,
+    );
+    bool started = false;
+    try {
+      started = await _speech.listen(
+        onResult: _onSpeechResult,
+        listenFor: const Duration(minutes: 1),
+        pauseFor: const Duration(minutes: 1),
+        localeId: _speechLocaleId,
+        listenOptions: SpeechListenOptions(
+          cancelOnError: false,
+          partialResults: true,
+        ),
+      );
+    } catch (error) {
+      _voiceController.logEvent(
+        'speech listen start failed: $error',
+        screen: QuizVoiceScreen.examLoading,
+      );
+    }
+    if (!mounted) return;
+    if (!started) {
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
+      _syncVoiceSessionState();
+      _voiceController.logEvent(
+        'speech listen did not start, retry scheduled',
+        screen: QuizVoiceScreen.examLoading,
+      );
+      _scheduleListeningRestart();
+      return;
     }
     setState(() {
       _isListening = true;
-      _heardText = '';
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     _voiceController.logEvent(
-      'speech listen call started',
+      'speech listen active',
       screen: QuizVoiceScreen.examLoading,
-    );
-    await _speech.listen(
-      onResult: _onSpeechResult,
-      listenFor: const Duration(minutes: 1),
-      pauseFor: const Duration(minutes: 1),
-      localeId: _speechLocaleId,
-      listenOptions: SpeechListenOptions(
-        cancelOnError: false,
-        partialResults: true,
-      ),
     );
   }
 
   Future<void> _stopListening() async {
     await _speech.stop();
     if (!mounted) return;
-    setState(() => _isListening = false);
+    setState(() {
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
     _syncVoiceSessionState();
   }
 
@@ -445,6 +501,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
     setState(() {
       _isSpeaking = false;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -463,7 +520,10 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
       screen: QuizVoiceScreen.examLoading,
     );
     if (result.finalResult) {
-      setState(() => _isListening = false);
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
       _voiceController.setPhase(
         QuizVoicePhase.processing,
         screen: QuizVoiceScreen.examLoading,
@@ -711,7 +771,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
                   ),
                   _LoadingVoiceModeButton(
                     isEnabled: _voiceModeEnabled,
-                    isListening: _isListening,
+                    isListening: _isListening || _isPreparingToListen,
                     speechAvailable: _speechAvailable,
                     onTap: _toggleVoiceMode,
                   ),
@@ -835,13 +895,25 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
         ),
       ),
       bottomSheet: _voiceModeEnabled
-          ? _LoadingListeningOverlay(
-              isListening: _isListening,
+          ? QuizVoiceOverlay(
+              isListening: _isListening || _isPreparingToListen,
+              isPreparingToListen: _isPreparingToListen,
               isSpeaking: _isSpeaking,
               heardText: _heardText,
               onMicTap: _isSpeaking
                   ? _interruptAndListen
                   : (_isListening ? _stopListening : _startListening),
+              listeningHint:
+                  'Say status, retry, cancel, back, or stop voice mode.',
+              speakingHint: 'Assistant is speaking.',
+              idleHint: 'Tap the mic or say a loading command.',
+              instructionItems: const <String>[
+                'status',
+                'retry',
+                'cancel',
+                'back',
+                'stop voice mode',
+              ],
             )
           : null,
     );

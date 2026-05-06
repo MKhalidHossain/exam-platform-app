@@ -16,6 +16,7 @@ import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
+import '../widgets/quiz_voice_overlay.dart';
 
 class QuizSettingsScreen extends StatefulWidget {
   final String courseTitle;
@@ -55,6 +56,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   bool _speechAvailable = false;
   bool _speechInitializing = false;
   bool _isListening = false;
+  bool _isPreparingToListen = false;
   bool _isSpeaking = false;
   Timer? _listeningRestartTimer;
   String? _speechLocaleId;
@@ -110,7 +112,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     _loadStarterExamUsage();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+        _bindVoiceSession(requestEntryAction: false);
       }
     });
   }
@@ -209,7 +211,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   @override
   void onVoiceRouteActive() {
     if (!mounted) return;
-    _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+    _bindVoiceSession(requestEntryAction: false);
   }
 
   @override
@@ -269,7 +271,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
             'speech error: $error',
             screen: QuizVoiceScreen.quizSettings,
           );
-          setState(() => _isListening = false);
+          setState(() {
+            _isListening = false;
+            _isPreparingToListen = false;
+          });
           _syncVoiceSessionState();
           _scheduleListeningRestart();
         },
@@ -279,9 +284,20 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
             'speech status: $status',
             screen: QuizVoiceScreen.quizSettings,
           );
+          if (status == 'listening' &&
+              (!_isListening || _isPreparingToListen)) {
+            setState(() {
+              _isListening = true;
+              _isPreparingToListen = false;
+            });
+            _syncVoiceSessionState();
+          }
           if (status == 'done' || status == 'notListening') {
-            if (_isListening) {
-              setState(() => _isListening = false);
+            if (_isListening || _isPreparingToListen) {
+              setState(() {
+                _isListening = false;
+                _isPreparingToListen = false;
+              });
               _syncVoiceSessionState();
             }
             _scheduleListeningRestart();
@@ -407,6 +423,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   ]) {
     _listeningRestartTimer?.cancel();
     if (!_voiceModeEnabled) return;
+    if (mounted &&
+        !_isListening &&
+        !_isSpeaking &&
+        !_isStarterUsageLoading &&
+        !_isPreparingToListen) {
+      setState(() => _isPreparingToListen = true);
+    }
     _listeningRestartTimer = Timer(delay, () {
       if (!mounted ||
           !_voiceModeEnabled ||
@@ -426,35 +449,72 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     );
     _listeningRestartTimer?.cancel();
     if (_isListening || _isSpeaking) return;
+    setState(() {
+      _isPreparingToListen = true;
+      _heardText = '';
+    });
+    _voiceController.markHeardText(_heardText);
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
-      if (!speechReady) return;
+      if (!speechReady) {
+        if (mounted) setState(() => _isPreparingToListen = false);
+        return;
+      }
+    }
+    _voiceController.logEvent(
+      'speech listen call starting',
+      screen: QuizVoiceScreen.quizSettings,
+    );
+    bool started = false;
+    try {
+      started = await _speech.listen(
+        onResult: _onSpeechResult,
+        listenFor: const Duration(minutes: 1),
+        pauseFor: const Duration(minutes: 1),
+        localeId: _speechLocaleId,
+        listenOptions: SpeechListenOptions(
+          cancelOnError: false,
+          partialResults: true,
+        ),
+      );
+    } catch (error) {
+      _voiceController.logEvent(
+        'speech listen start failed: $error',
+        screen: QuizVoiceScreen.quizSettings,
+      );
+    }
+    if (!mounted) return;
+    if (!started) {
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
+      _syncVoiceSessionState();
+      _voiceController.logEvent(
+        'speech listen did not start, retry scheduled',
+        screen: QuizVoiceScreen.quizSettings,
+      );
+      _scheduleListeningRestart();
+      return;
     }
     setState(() {
       _isListening = true;
-      _heardText = '';
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     _voiceController.logEvent(
-      'speech listen call started',
+      'speech listen active',
       screen: QuizVoiceScreen.quizSettings,
-    );
-    await _speech.listen(
-      onResult: _onSpeechResult,
-      listenFor: const Duration(minutes: 1),
-      pauseFor: const Duration(minutes: 1),
-      localeId: _speechLocaleId,
-      listenOptions: SpeechListenOptions(
-        cancelOnError: false,
-        partialResults: true,
-      ),
     );
   }
 
   Future<void> _stopListening() async {
     await _speech.stop();
     if (!mounted) return;
-    setState(() => _isListening = false);
+    setState(() {
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
     _syncVoiceSessionState();
   }
 
@@ -464,6 +524,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     setState(() {
       _isSpeaking = false;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
@@ -482,7 +543,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     if (result.finalResult) {
-      setState(() => _isListening = false);
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
       _voiceController.setPhase(
         QuizVoicePhase.processing,
         screen: QuizVoiceScreen.quizSettings,
@@ -647,7 +711,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       },
     );
     if (!mounted || !_voiceModeEnabled) return;
-    _bindVoiceSession(requestEntryAction: true);
+    _bindVoiceSession(requestEntryAction: false);
   }
 
   void _goBackHome() {
@@ -759,7 +823,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
                   ),
                   _SettingsVoiceModeButton(
                     isEnabled: _voiceModeEnabled,
-                    isListening: _isListening,
+                    isListening: _isListening || _isPreparingToListen,
                     speechAvailable: _speechAvailable,
                     onTap: _toggleVoiceMode,
                   ),
@@ -923,13 +987,25 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
           ),
         ),
         bottomSheet: _voiceModeEnabled
-            ? _SettingsListeningOverlay(
-                isListening: _isListening,
+            ? QuizVoiceOverlay(
+                isListening: _isListening || _isPreparingToListen,
+                isPreparingToListen: _isPreparingToListen,
                 isSpeaking: _isSpeaking,
                 heardText: _heardText,
                 onMicTap: _isSpeaking
                     ? _interruptAndListen
                     : (_isListening ? _stopListening : _startListening),
+                listeningHint:
+                    'Say start quiz, set questions, timed mode on or off, or go back.',
+                speakingHint: 'Assistant is speaking.',
+                idleHint: 'Tap the mic or say a settings command.',
+                instructionItems: const <String>[
+                  'start quiz',
+                  'set questions',
+                  'timed mode on',
+                  'timed mode off',
+                  'go back',
+                ],
               )
             : null,
       );

@@ -13,6 +13,7 @@ import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
+import '../widgets/quiz_voice_overlay.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -65,12 +66,15 @@ class _McqScreenState extends State<McqScreen>
   final SpeechToText _speech = SpeechToText();
   bool _voiceModeEnabled = false;
   bool _isListening = false;
+  bool _isPreparingToListen = false;
   bool _speechAvailable = false;
   bool _speechInitializing = false;
   Timer? _listeningRestartTimer;
   Timer? _voiceLoopRecoveryTimer;
   String? _speechLocaleId;
   String _heardText = '';
+  bool _isQuestionNarrationActive = false;
+  int _ttsSessionId = 0;
 
   QuizVoiceController get _voiceController =>
       Get.isRegistered<QuizVoiceController>()
@@ -116,7 +120,7 @@ class _McqScreenState extends State<McqScreen>
     _timer?.cancel();
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     _voiceController.unbindScreen(QuizVoiceScreen.mcq);
     super.dispose();
@@ -128,8 +132,10 @@ class _McqScreenState extends State<McqScreen>
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setPitch(1.0);
+    await _tts.awaitSpeakCompletion(true);
     _tts.setCompletionHandler(() {
       if (!mounted) return;
+      if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       // In voice mode, auto-start listening after every TTS completion.
@@ -139,11 +145,13 @@ class _McqScreenState extends State<McqScreen>
     });
     _tts.setCancelHandler(() {
       if (!mounted) return;
+      if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
       if (!mounted) return;
+      if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
@@ -172,7 +180,7 @@ class _McqScreenState extends State<McqScreen>
     );
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     await _speech.cancel();
     if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
     setState(() {
@@ -253,7 +261,10 @@ class _McqScreenState extends State<McqScreen>
             'speech error: $error',
             screen: QuizVoiceScreen.mcq,
           );
-          setState(() => _isListening = false);
+          setState(() {
+            _isListening = false;
+            _isPreparingToListen = false;
+          });
           _syncVoiceSessionState();
           _scheduleListeningRestart();
         },
@@ -263,9 +274,20 @@ class _McqScreenState extends State<McqScreen>
             'speech status: $status',
             screen: QuizVoiceScreen.mcq,
           );
+          if (status == 'listening' &&
+              (!_isListening || _isPreparingToListen)) {
+            setState(() {
+              _isListening = true;
+              _isPreparingToListen = false;
+            });
+            _syncVoiceSessionState();
+          }
           if (status == 'done' || status == 'notListening') {
-            if (_isListening) {
-              setState(() => _isListening = false);
+            if (_isListening || _isPreparingToListen) {
+              setState(() {
+                _isListening = false;
+                _isPreparingToListen = false;
+              });
               _syncVoiceSessionState();
             }
             _scheduleListeningRestart();
@@ -320,6 +342,13 @@ class _McqScreenState extends State<McqScreen>
   ]) {
     _listeningRestartTimer?.cancel();
     if (!_voiceModeEnabled) return;
+    if (mounted &&
+        !_isListening &&
+        !_isSpeaking &&
+        !_isAutoSubmitting &&
+        !_isPreparingToListen) {
+      setState(() => _isPreparingToListen = true);
+    }
     _listeningRestartTimer = Timer(delay, () {
       if (!mounted ||
           !_voiceModeEnabled ||
@@ -431,7 +460,7 @@ class _McqScreenState extends State<McqScreen>
   void _handleTimeExpired() {
     if (_hasAutoSubmitted) return;
     _hasAutoSubmitted = true;
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     if (!mounted) return;
     setState(() {
@@ -594,7 +623,7 @@ class _McqScreenState extends State<McqScreen>
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
     if (!hasAnswer && !isFlagged) return;
     if (_currentIndex < _questions.length - 1) {
-      unawaited(_tts.stop());
+      unawaited(_stopTtsPlayback());
       setState(() {
         _currentIndex += 1;
         _showExplanation = false;
@@ -630,41 +659,79 @@ class _McqScreenState extends State<McqScreen>
 
   // ─── TTS ───────────────────────────────────────────────────────────────────
 
+  String _normalizeSpeechText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  List<String> _buildQuestionSpeechSegments(_Question question) {
+    final segments = <String>[
+      'Question ${question.number}.',
+      _normalizeSpeechText(question.text),
+    ];
+
+    for (int i = 0; i < question.options.length; i++) {
+      final label = String.fromCharCode(65 + i);
+      final optionText = _normalizeSpeechText(question.options[i]);
+      if (optionText.isEmpty) continue;
+      segments.add('Option $label. $optionText.');
+    }
+
+    if (_voiceModeEnabled && question.options.isNotEmpty) {
+      segments.add(
+        'Say first, second, third, or fourth. You can also say next, review, or help.',
+      );
+    }
+
+    return segments.where((segment) => segment.isNotEmpty).toList();
+  }
+
+  Future<void> _stopTtsPlayback() async {
+    _ttsSessionId++;
+    _isQuestionNarrationActive = false;
+    await _tts.stop();
+  }
+
   Future<void> _speakCurrentQuestion() async {
     _voiceController.logEvent(
       'speak current question',
       screen: QuizVoiceScreen.mcq,
     );
     final _Question question = _questions[_currentIndex];
-    final buffer = StringBuffer();
-    buffer.write('Question ${question.number}. ');
-    buffer.write(question.text);
-    if (question.options.isNotEmpty) {
-      buffer.write(' Options: ');
-      for (int i = 0; i < question.options.length; i++) {
-        final label = String.fromCharCode(65 + i);
-        buffer.write('${i + 1}, $label. ${question.options[i]}. ');
-      }
-      // Ordinal words are far more reliable than single letters for STT.
-      if (_voiceModeEnabled) {
-        buffer.write(' Say first, second, third, or fourth. ');
-        buffer.write('You can also say next, review, or help.');
-      }
-    }
     await _speech.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
       _isListening = false;
     });
     _syncVoiceSessionState();
-    await _tts.speak(buffer.toString());
+    final segments = _buildQuestionSpeechSegments(question);
+    final sessionId = ++_ttsSessionId;
+    _isQuestionNarrationActive = true;
+
+    try {
+      for (final segment in segments) {
+        if (!mounted || sessionId != _ttsSessionId) return;
+        await _tts.speak(segment);
+      }
+    } catch (_) {
+      // Let the voice recovery flow reopen listening if TTS fails mid-read.
+    } finally {
+      _isQuestionNarrationActive = false;
+      final isActiveSession = mounted && sessionId == _ttsSessionId;
+      if (isActiveSession) {
+        setState(() => _isSpeaking = false);
+        _syncVoiceSessionState();
+        if (_voiceModeEnabled && !_isListening) {
+          _scheduleListeningRestart(const Duration(milliseconds: 500));
+        }
+      }
+    }
   }
 
   Future<void> _toggleSpeak() async {
     if (_isSpeaking) {
-      await _tts.stop();
+      await _stopTtsPlayback();
       if (!mounted) return;
       setState(() => _isSpeaking = false);
       return;
@@ -679,7 +746,7 @@ class _McqScreenState extends State<McqScreen>
       screen: QuizVoiceScreen.mcq,
     );
     await _speech.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
@@ -695,7 +762,7 @@ class _McqScreenState extends State<McqScreen>
     if (_voiceModeEnabled) {
       _listeningRestartTimer?.cancel();
       _voiceLoopRecoveryTimer?.cancel();
-      await _tts.stop();
+      await _stopTtsPlayback();
       await _speech.cancel();
       if (!mounted) return;
       setState(() {
@@ -742,38 +809,73 @@ class _McqScreenState extends State<McqScreen>
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
     if (_isListening || _isSpeaking) return;
+    setState(() {
+      _isPreparingToListen = true;
+      _heardText = '';
+    });
+    _voiceController.markHeardText(_heardText);
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
-      if (!speechReady) return;
+      if (!speechReady) {
+        if (mounted) setState(() => _isPreparingToListen = false);
+        return;
+      }
+    }
+    _voiceController.logEvent(
+      'speech listen call starting',
+      screen: QuizVoiceScreen.mcq,
+    );
+    bool started = false;
+    try {
+      started = await _speech.listen(
+        onResult: _onSpeechResult,
+        listenFor: const Duration(minutes: 1),
+        pauseFor: const Duration(minutes: 1),
+        localeId: _speechLocaleId,
+        listenOptions: SpeechListenOptions(
+          cancelOnError: false,
+          partialResults: true,
+        ),
+      );
+    } catch (error) {
+      _voiceController.logEvent(
+        'speech listen start failed: $error',
+        screen: QuizVoiceScreen.mcq,
+      );
+    }
+    if (!mounted) return;
+    if (!started) {
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
+      _syncVoiceSessionState();
+      _voiceController.logEvent(
+        'speech listen did not start, retry scheduled',
+        screen: QuizVoiceScreen.mcq,
+      );
+      _scheduleListeningRestart();
+      return;
     }
     setState(() {
       _isListening = true;
-      _heardText = '';
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     _voiceController.logEvent(
-      'speech listen call started',
+      'speech listen active',
       screen: QuizVoiceScreen.mcq,
-    );
-    await _speech.listen(
-      onResult: _onSpeechResult,
-      listenFor: const Duration(minutes: 1),
-      pauseFor: const Duration(minutes: 1),
-      localeId: _speechLocaleId,
-      listenOptions: SpeechListenOptions(
-        cancelOnError: false,
-        partialResults: true,
-      ),
     );
   }
 
   /// Tap-while-reading: stop TTS first, then open the mic.
   Future<void> _interruptAndListen() async {
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
@@ -783,7 +885,10 @@ class _McqScreenState extends State<McqScreen>
   Future<void> _stopListening() async {
     await _speech.stop();
     if (!mounted) return;
-    setState(() => _isListening = false);
+    setState(() {
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
     _syncVoiceSessionState();
   }
 
@@ -796,7 +901,7 @@ class _McqScreenState extends State<McqScreen>
 
   Future<void> _openExamReview({bool preserveVoiceMode = false}) async {
     _voiceLoopRecoveryTimer?.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     await _speech.cancel();
     if (!mounted) return;
     setState(() {
@@ -879,7 +984,10 @@ class _McqScreenState extends State<McqScreen>
       screen: QuizVoiceScreen.mcq,
     );
     if (result.finalResult) {
-      setState(() => _isListening = false);
+      setState(() {
+        _isListening = false;
+        _isPreparingToListen = false;
+      });
       _voiceController.setPhase(
         QuizVoicePhase.processing,
         screen: QuizVoiceScreen.mcq,
@@ -1174,7 +1282,7 @@ class _McqScreenState extends State<McqScreen>
     }
 
     if (_currentIndex < _questions.length - 1) {
-      unawaited(_tts.stop());
+      unawaited(_stopTtsPlayback());
       unawaited(_speech.cancel());
       setState(() {
         _currentIndex += 1;
@@ -1206,7 +1314,7 @@ class _McqScreenState extends State<McqScreen>
 
   void _previousViaVoice() {
     if (_currentIndex > 0) {
-      unawaited(_tts.stop());
+      unawaited(_stopTtsPlayback());
       unawaited(_speech.cancel());
       setState(() {
         _currentIndex -= 1;
@@ -1233,7 +1341,7 @@ class _McqScreenState extends State<McqScreen>
       );
       return;
     }
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     setState(() {
       _currentIndex = index;
@@ -1285,7 +1393,7 @@ class _McqScreenState extends State<McqScreen>
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
     await _speech.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _voiceModeEnabled = false;
@@ -1326,7 +1434,7 @@ class _McqScreenState extends State<McqScreen>
                   children: [
                     IconButton(
                       onPressed: () {
-                        unawaited(_tts.stop());
+                        unawaited(_stopTtsPlayback());
                         unawaited(_speech.cancel());
                         context.push(
                           '/quiz-settings',
@@ -1379,7 +1487,7 @@ class _McqScreenState extends State<McqScreen>
                     // Voice mode toggle
                     _VoiceModeButton(
                       isEnabled: _voiceModeEnabled,
-                      isListening: _isListening,
+                      isListening: _isListening || _isPreparingToListen,
                       speechAvailable: _speechAvailable,
                       onTap: _toggleVoiceMode,
                     ),
@@ -1431,7 +1539,7 @@ class _McqScreenState extends State<McqScreen>
 
                       return GestureDetector(
                         onTap: () {
-                          unawaited(_tts.stop());
+                          unawaited(_stopTtsPlayback());
                           unawaited(_speech.cancel());
                           setState(() {
                             _currentIndex = index;
@@ -1666,13 +1774,28 @@ class _McqScreenState extends State<McqScreen>
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: _ListeningOverlay(
-                  isListening: _isListening,
+                child: QuizVoiceOverlay(
+                  isListening: _isListening || _isPreparingToListen,
+                  isPreparingToListen: _isPreparingToListen,
                   isSpeaking: _isSpeaking,
                   heardText: _heardText,
                   onMicTap: _isSpeaking
                       ? _interruptAndListen // tap while TTS reads → stop TTS then open mic
                       : (_isListening ? _stopListening : _startListening),
+                  listeningHint:
+                      'Say first, second, next, review, submit, or help.',
+                  speakingHint: 'Assistant is reading the question.',
+                  idleHint: 'Tap the mic or say an answer or command.',
+                  instructionItems: const <String>[
+                    'first',
+                    'second',
+                    'third',
+                    'fourth',
+                    'next',
+                    'review',
+                    'submit',
+                    'help',
+                  ],
                 ),
               ),
           ],
