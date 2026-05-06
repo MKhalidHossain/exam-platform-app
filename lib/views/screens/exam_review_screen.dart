@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart' hide ErrorHandler;
@@ -7,11 +8,15 @@ import 'package:get/get.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../core/error/error_handler.dart';
+import '../../controllers/quiz_voice_controller.dart';
 import '../../services/exam_service.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_model.dart';
+import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/quiz_voice_route_aware.dart';
 import 'history_models.dart';
 import '../widgets/api_disclaimer_section.dart';
+import '../widgets/quiz_voice_debug_panel.dart';
 
 class ExamReviewScreen extends StatefulWidget {
   final String courseTitle;
@@ -22,6 +27,7 @@ class ExamReviewScreen extends StatefulWidget {
   final List<int>? timeSpentSec;
   final bool autoSubmit;
   final bool voiceModeEnabled;
+  final int returnQuestionIndex;
 
   const ExamReviewScreen({
     super.key,
@@ -33,33 +39,48 @@ class ExamReviewScreen extends StatefulWidget {
     this.timeSpentSec,
     this.autoSubmit = false,
     this.voiceModeEnabled = false,
+    this.returnQuestionIndex = 0,
   });
 
   @override
   State<ExamReviewScreen> createState() => _ExamReviewScreenState();
 }
 
-class _ExamReviewScreenState extends State<ExamReviewScreen> {
+class _ExamReviewScreenState extends State<ExamReviewScreen>
+    with QuizVoiceRouteAware<ExamReviewScreen> {
   final ExamService _examService = ExamService();
   final SpeechToText _speech = SpeechToText();
   late final FlutterTts _tts;
   bool _isSubmitting = false;
   bool _voiceModeEnabled = false;
   bool _speechAvailable = false;
+  bool _speechInitializing = false;
   bool _isListening = false;
   bool _isSpeaking = false;
   bool _awaitingSubmitConfirmation = false;
+  Timer? _listeningRestartTimer;
   Timer? _submitConfirmationTimer;
   String? _speechLocaleId;
   String _heardText = '';
+
+  QuizVoiceController get _voiceController =>
+      Get.isRegistered<QuizVoiceController>()
+      ? Get.find<QuizVoiceController>()
+      : Get.put(QuizVoiceController(), permanent: true);
 
   @override
   void initState() {
     super.initState();
     _tts = FlutterTts();
-    _voiceModeEnabled = widget.voiceModeEnabled;
+    _voiceModeEnabled =
+        widget.voiceModeEnabled || _voiceController.isEnabledValue;
     _configureTts();
-    _initSpeech();
+    unawaited(_primeSpeechAvailability());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !widget.autoSubmit) {
+        _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+      }
+    });
     if (widget.autoSubmit) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -71,9 +92,11 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
 
   @override
   void dispose() {
+    _listeningRestartTimer?.cancel();
     _submitConfirmationTimer?.cancel();
     unawaited(_tts.stop());
     unawaited(_speech.cancel());
+    _voiceController.unbindScreen(QuizVoiceScreen.examReview);
     super.dispose();
   }
 
@@ -99,53 +122,213 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     _tts.setCompletionHandler(() {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
       if (_voiceModeEnabled && !_isSubmitting && !_isListening) {
-        Future.delayed(const Duration(milliseconds: 400), () {
-          if (mounted && _voiceModeEnabled && !_isSubmitting) {
-            unawaited(_startListening());
-          }
-        });
+        _scheduleListeningRestart(const Duration(milliseconds: 400));
       }
     });
     _tts.setCancelHandler(() {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
     });
   }
 
-  Future<void> _initSpeech() async {
-    final available = await _speech.initialize(
-      onError: (_) {
-        if (!mounted) return;
-        setState(() => _isListening = false);
+  void _bindVoiceSession({bool requestEntryAction = false}) {
+    _voiceController.bindScreen(
+      screen: QuizVoiceScreen.examReview,
+      onRecoverListening: () async {
+        await _forceVoiceRecovery();
       },
-      onStatus: (status) {
-        if (!mounted) return;
-        if ((status == 'done' || status == 'notListening') && _isListening) {
-          setState(() => _isListening = false);
+      onEntryAction: () async {
+        if (!mounted ||
+            !_voiceModeEnabled ||
+            _isSubmitting ||
+            widget.autoSubmit) {
+          return;
         }
+        await _speakReviewSummary();
       },
+      requestEntryAction: requestEntryAction,
     );
-    String? preferredLocaleId;
-    if (available) {
-      preferredLocaleId = await _resolvePreferredSpeechLocaleId();
+    _syncVoiceSessionState();
+  }
+
+  Future<void> _forceVoiceRecovery() async {
+    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+      return;
     }
-    if (!mounted) return;
+    _voiceController.logEvent(
+      'force voice recovery',
+      screen: QuizVoiceScreen.examReview,
+    );
+    _listeningRestartTimer?.cancel();
+    _submitConfirmationTimer?.cancel();
+    await _tts.stop();
+    await _speech.cancel();
+    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+      return;
+    }
     setState(() {
-      _speechAvailable = available;
-      _speechLocaleId = preferredLocaleId;
+      _isSpeaking = false;
+      _isListening = false;
+      _heardText = '';
+      _awaitingSubmitConfirmation = false;
     });
-    if (_voiceModeEnabled && available && !widget.autoSubmit) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _voiceModeEnabled && !_isSubmitting) {
-          unawaited(_speakReviewSummary());
-        }
-      });
+    _syncVoiceSessionState();
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+      return;
     }
+    await _startListening();
+  }
+
+  @override
+  void onVoiceRouteActive() {
+    if (!mounted || widget.autoSubmit) return;
+    _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+  }
+
+  @override
+  void onVoiceRouteInactive() {
+    if (!_voiceModeEnabled || widget.autoSubmit) return;
+    _voiceController.beginNavigation();
+  }
+
+  void _syncVoiceSessionState() {
+    _voiceController.setVoiceEnabled(
+      _voiceModeEnabled,
+      screen: QuizVoiceScreen.examReview,
+    );
+    _voiceController.markHeardText(_heardText);
+    if (!_voiceModeEnabled) return;
+    final phase = _isSubmitting
+        ? QuizVoicePhase.submitting
+        : _isSpeaking
+        ? QuizVoicePhase.speaking
+        : _isListening
+        ? QuizVoicePhase.listening
+        : QuizVoicePhase.idle;
+    _voiceController.setPhase(phase, screen: QuizVoiceScreen.examReview);
+  }
+
+  Future<void> _primeSpeechAvailability() async {
+    final hasPermission = await _speech.hasPermission;
+    if (!hasPermission) {
+      if (!mounted) return;
+      setState(() {
+        _speechAvailable = false;
+        _speechLocaleId = null;
+      });
+      return;
+    }
+    await _initSpeech();
+  }
+
+  Future<bool> _initSpeech({bool requestPermission = false}) async {
+    if (_speechInitializing) return _speechAvailable;
+    if (!requestPermission && !_speechAvailable) {
+      final hasPermission = await _speech.hasPermission;
+      if (!hasPermission) {
+        if (!mounted) return false;
+        setState(() {
+          _speechAvailable = false;
+          _speechLocaleId = null;
+        });
+        return false;
+      }
+    }
+
+    _speechInitializing = true;
+    try {
+      final available = await _speech.initialize(
+        onError: (error) {
+          if (!mounted) return;
+          _voiceController.logEvent(
+            'speech error: $error',
+            screen: QuizVoiceScreen.examReview,
+          );
+          setState(() => _isListening = false);
+          _syncVoiceSessionState();
+          _scheduleListeningRestart();
+        },
+        onStatus: (status) {
+          if (!mounted) return;
+          _voiceController.logEvent(
+            'speech status: $status',
+            screen: QuizVoiceScreen.examReview,
+          );
+          if ((status == 'done' || status == 'notListening') && _isListening) {
+            setState(() => _isListening = false);
+            _syncVoiceSessionState();
+          }
+          if (status == 'done' || status == 'notListening') {
+            _scheduleListeningRestart();
+          }
+        },
+        options: [SpeechToText.androidNoBluetooth],
+      );
+      String? preferredLocaleId;
+      if (available) {
+        preferredLocaleId = await _resolvePreferredSpeechLocaleId();
+      }
+      if (!mounted) return available;
+      setState(() {
+        _speechAvailable = available;
+        _speechLocaleId = preferredLocaleId;
+      });
+      if (_voiceModeEnabled && available && !widget.autoSubmit) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _voiceModeEnabled && !_isSubmitting) {
+            unawaited(_speakReviewSummary());
+          }
+        });
+      }
+      return available;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _speechAvailable = false;
+          _speechLocaleId = null;
+        });
+      }
+      return false;
+    } finally {
+      _speechInitializing = false;
+    }
+  }
+
+  Future<void> _showSpeechUnavailableMessage() async {
+    final hasPermission = await _speech.hasPermission;
+    if (!mounted) return;
+    final message = hasPermission
+        ? 'Speech recognition is not available on this device right now.'
+        : 'Microphone permission is required for voice mode. If you denied it before, enable Microphone for this app in Android settings and try again.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _scheduleListeningRestart([
+    Duration delay = const Duration(milliseconds: 700),
+  ]) {
+    _listeningRestartTimer?.cancel();
+    if (!_voiceModeEnabled) return;
+    _listeningRestartTimer = Timer(delay, () {
+      if (!mounted ||
+          !_voiceModeEnabled ||
+          _isListening ||
+          _isSpeaking ||
+          _isSubmitting) {
+        return;
+      }
+      unawaited(_startListening());
+    });
   }
 
   Future<String?> _resolvePreferredSpeechLocaleId() async {
@@ -179,10 +362,14 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     buffer.write('Exam review. ');
     buffer.write('You answered $answered out of $total questions. ');
     if (flagged > 0) {
-      buffer.write('$flagged question${flagged == 1 ? '' : 's'} flagged for review. ');
+      buffer.write(
+        '$flagged question${flagged == 1 ? '' : 's'} flagged for review. ',
+      );
     }
     if (unanswered > 0) {
-      buffer.write('$unanswered question${unanswered == 1 ? '' : 's'} unanswered. ');
+      buffer.write(
+        '$unanswered question${unanswered == 1 ? '' : 's'} unanswered. ',
+      );
       buffer.write(
         'Say question ${_unansweredIndexes.first + 1} to return to an unanswered question, '
         'or say submit to begin final confirmation. ',
@@ -202,6 +389,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
   }
 
   Future<void> _speakFeedback(String text) async {
+    _voiceController.logEvent(
+      'speak feedback requested',
+      screen: QuizVoiceScreen.examReview,
+    );
     await _speech.cancel();
     await _tts.stop();
     if (!mounted) return;
@@ -209,11 +400,13 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       _isSpeaking = true;
       _isListening = false;
     });
+    _syncVoiceSessionState();
     await _tts.speak(text);
   }
 
   Future<void> _toggleVoiceMode() async {
     if (_voiceModeEnabled) {
+      _listeningRestartTimer?.cancel();
       await _tts.stop();
       await _speech.cancel();
       if (!mounted) return;
@@ -223,16 +416,13 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
         _isSpeaking = false;
         _heardText = '';
       });
+      _syncVoiceSessionState();
       return;
     }
 
-    if (!_speechAvailable) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Speech recognition is not available on this device.'),
-        ),
-      );
+    final speechReady = await _initSpeech(requestPermission: true);
+    if (!speechReady) {
+      await _showSpeechUnavailableMessage();
       return;
     }
 
@@ -240,24 +430,44 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       _voiceModeEnabled = true;
       _heardText = '';
     });
+    _bindVoiceSession();
     await Future.delayed(const Duration(milliseconds: 200));
     if (mounted && _voiceModeEnabled) {
+      _voiceController.setVoiceEnabled(
+        true,
+        screen: QuizVoiceScreen.examReview,
+        requestEntryAction: true,
+      );
       await _speakReviewSummary();
     }
   }
 
   Future<void> _startListening() async {
-    if (!_speechAvailable || _isListening || _isSpeaking || _isSubmitting) {
+    _voiceController.logEvent(
+      'start listening requested',
+      screen: QuizVoiceScreen.examReview,
+    );
+    _listeningRestartTimer?.cancel();
+    if (_isListening || _isSpeaking || _isSubmitting) {
       return;
+    }
+    if (!_speechAvailable) {
+      final speechReady = await _initSpeech();
+      if (!speechReady) return;
     }
     setState(() {
       _isListening = true;
       _heardText = '';
     });
+    _syncVoiceSessionState();
+    _voiceController.logEvent(
+      'speech listen call started',
+      screen: QuizVoiceScreen.examReview,
+    );
     await _speech.listen(
       onResult: _onSpeechResult,
-      listenFor: const Duration(seconds: 15),
-      pauseFor: const Duration(seconds: 7),
+      listenFor: const Duration(minutes: 1),
+      pauseFor: const Duration(minutes: 1),
       localeId: _speechLocaleId,
       listenOptions: SpeechListenOptions(
         cancelOnError: false,
@@ -270,6 +480,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     await _speech.stop();
     if (!mounted) return;
     setState(() => _isListening = false);
+    _syncVoiceSessionState();
   }
 
   Future<void> _interruptAndListen() async {
@@ -279,6 +490,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       _isSpeaking = false;
       _isListening = false;
     });
+    _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
     if (mounted) unawaited(_startListening());
   }
@@ -286,8 +498,18 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted) return;
     setState(() => _heardText = result.recognizedWords);
+    _voiceController.markHeardText(_heardText);
+    _voiceController.logTranscript(
+      result.recognizedWords,
+      isFinal: result.finalResult,
+      screen: QuizVoiceScreen.examReview,
+    );
     if (result.finalResult) {
       setState(() => _isListening = false);
+      _voiceController.setPhase(
+        QuizVoicePhase.processing,
+        screen: QuizVoiceScreen.examReview,
+      );
       final text = result.recognizedWords.trim();
       if (text.isNotEmpty) {
         _handleVoiceCommand(text);
@@ -295,148 +517,109 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     }
   }
 
-  bool _wordMatch(String text, List<String> keywords) =>
-      keywords.any((kw) => text == kw || text.contains(kw));
-
   void _handleVoiceCommand(String rawText) {
-    final text = _normalizeCommand(rawText);
+    final result = QuizVoiceIntentParser.parse(
+      QuizVoiceScreen.examReview,
+      rawText,
+    );
+    _voiceController.logEvent(
+      'parsed intent: ${result.intent.name}'
+      '${result.numberValue != null ? ' (${result.numberValue})' : ''}',
+      screen: QuizVoiceScreen.examReview,
+    );
 
-    final qMatch = RegExp(r'(?:question|go to|number|q)\s*(\d+)').firstMatch(text);
-    if (qMatch != null) {
-      final n = int.tryParse(qMatch.group(1) ?? '') ?? 0;
-      _goToQuestionViaVoice(n - 1);
-      return;
-    }
-
-    if (_wordMatch(text, [
-      'confirm',
-      'confirm submit',
-      'yes submit',
-      'submit confirm',
-      'confirm finish',
-    ])) {
-      _confirmSubmitViaVoice();
-      return;
-    }
-
-    if (_wordMatch(text, [
-      'submit',
-      'finish',
-      'done',
-      'complete',
-      'submit exam',
-    ])) {
-      _submitViaVoice();
-      return;
-    }
-
-    if (_wordMatch(text, [
-      'back',
-      'return',
-      'go back',
-      'return to question',
-      'back to exam',
-    ])) {
-      _returnToQuestionViaVoice();
-      return;
-    }
-
-    if (_wordMatch(text, ['unanswered', 'review unanswered', 'open unanswered'])) {
-      _jumpToBucketViaVoice(_unansweredIndexes, 'There are no unanswered questions.');
-      return;
-    }
-
-    if (_wordMatch(text, ['flagged', 'review flagged', 'open flagged'])) {
-      _jumpToBucketViaVoice(_flaggedIndexes, 'There are no flagged questions.');
-      return;
-    }
-
-    if (_wordMatch(text, ['read', 'repeat', 'again', 'summary', 'review'])) {
-      unawaited(_speakReviewSummary());
-      return;
-    }
-
-    if (_wordMatch(text, ['help', 'commands', 'what can i say'])) {
-      unawaited(_speakFeedback(
-        'Review commands. '
-        'Say submit, then say confirm submit, to finish the exam. '
-        'Say question 5 to return to that question. '
-        'Say unanswered to jump to the first unanswered question. '
-        'Say flagged to jump to the first flagged question. '
-        'Say back to return to the exam. '
-        'Say read to hear this summary again.',
-      ));
-      return;
+    switch (result.intent) {
+      case QuizVoiceIntent.stopVoiceMode:
+        unawaited(_disableVoiceModeWithFeedback('Voice mode turned off.'));
+        return;
+      case QuizVoiceIntent.questionNumber:
+        if (result.numberValue != null) {
+          _goToQuestionViaVoice(result.numberValue! - 1);
+          return;
+        }
+        break;
+      case QuizVoiceIntent.confirmSubmit:
+        _confirmSubmitViaVoice();
+        return;
+      case QuizVoiceIntent.submit:
+        _submitViaVoice();
+        return;
+      case QuizVoiceIntent.goBack:
+        _returnToQuestionViaVoice();
+        return;
+      case QuizVoiceIntent.unanswered:
+        _jumpToBucketViaVoice(
+          _unansweredIndexes,
+          'There are no unanswered questions.',
+        );
+        return;
+      case QuizVoiceIntent.flagged:
+        _jumpToBucketViaVoice(
+          _flaggedIndexes,
+          'There are no flagged questions.',
+        );
+        return;
+      case QuizVoiceIntent.readSummary:
+        unawaited(_speakReviewSummary());
+        return;
+      case QuizVoiceIntent.help:
+        unawaited(
+          _speakFeedback(
+            'Review commands. '
+            'Say submit, then say confirm submit, to finish the exam. '
+            'Say question 5 to return to that question. '
+            'Say unanswered to jump to the first unanswered question. '
+            'Say flagged to jump to the first flagged question. '
+            'Say back to return to the exam. '
+            'Say read to hear this summary again. '
+            'Say stop voice mode to turn off hands free mode.',
+          ),
+        );
+        return;
+      case QuizVoiceIntent.unknown:
+      case QuizVoiceIntent.startQuiz:
+      case QuizVoiceIntent.nextQuestion:
+      case QuizVoiceIntent.timedModeOn:
+      case QuizVoiceIntent.timedModeOff:
+      case QuizVoiceIntent.maxQuestions:
+      case QuizVoiceIntent.minQuestions:
+      case QuizVoiceIntent.increaseQuestions:
+      case QuizVoiceIntent.decreaseQuestions:
+      case QuizVoiceIntent.setQuestionCount:
+      case QuizVoiceIntent.startTest:
+      case QuizVoiceIntent.explainQuestion:
+      case QuizVoiceIntent.openReview:
+      case QuizVoiceIntent.status:
+      case QuizVoiceIntent.pauseAssistant:
+      case QuizVoiceIntent.retry:
+      case QuizVoiceIntent.cancel:
+        break;
     }
 
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
-    unawaited(_speakFeedback(
-      '${heard}Not recognised. Try submit, confirm submit, back, unanswered, flagged, or question number.',
-    ));
-  }
-
-  String _normalizeCommand(String rawText) {
-    var text = rawText.toLowerCase();
-    text = text.replaceAll("'", '');
-    text = text.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
-    const fillerPhrases = [
-      'please',
-      'can you',
-      'could you',
-      'would you',
-      'i want to',
-      'i wanna',
-      'let me',
-      'show me',
-      'take me to',
-      'go ahead and',
-      'i would like to',
-    ];
-    for (final filler in fillerPhrases) {
-      text = text.replaceAll(filler, ' ');
-    }
-
-    const phraseAliases = {
-      'go previous': 'back',
-      'go back to exam': 'back',
-      'return to exam': 'back',
-      'open unanswered': 'unanswered',
-      'review unanswered': 'unanswered',
-      'open flagged': 'flagged',
-      'review flagged': 'flagged',
-      'finish exam': 'submit',
-      'submit now': 'submit',
-      'yes confirm': 'confirm submit',
-      'confirm now': 'confirm submit',
-      'read again': 'read',
-      'say again': 'read',
-      'review summary': 'summary',
-    };
-    phraseAliases.forEach((from, to) {
-      text = text.replaceAll(from, to);
-    });
-
-    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    unawaited(
+      _speakFeedback(
+        '${heard}Not recognised. Try submit, confirm submit, back, unanswered, flagged, or question number.',
+      ),
+    );
   }
 
   void _goToQuestionViaVoice(int index) {
     if (index < 0 || index >= widget.questions.length) {
-      unawaited(_speakFeedback(
-        'Question ${index + 1} does not exist. There are ${widget.questions.length} questions total.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Question ${index + 1} does not exist. There are ${widget.questions.length} questions total.',
+        ),
+      );
       return;
     }
     unawaited(_returnToExam(index));
   }
 
   void _returnToQuestionViaVoice() {
-    final target = _unansweredIndexes.isNotEmpty
-        ? _unansweredIndexes.first
-        : _flaggedIndexes.isNotEmpty
-            ? _flaggedIndexes.first
-            : _answeredIndexes.isNotEmpty
-                ? _answeredIndexes.first
-                : 0;
+    final target = widget.questions.isEmpty
+        ? 0
+        : widget.returnQuestionIndex.clamp(0, widget.questions.length - 1);
     unawaited(_returnToExam(target));
   }
 
@@ -450,7 +633,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
 
   void _submitViaVoice() {
     if (_isSubmitting) {
-      unawaited(_speakFeedback('Your answers are already submitting.'));
+      unawaited(_speakFeedback('Submission is already in progress.'));
       return;
     }
     _awaitingSubmitConfirmation = true;
@@ -463,25 +646,23 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     final flagged = _flaggedIndexes.length;
     final summary = StringBuffer();
     if (unanswered > 0) {
-      summary.write(
-        'You still have $unanswered unanswered '
-        '${unanswered == 1 ? 'question' : 'questions'}. ',
-      );
+      summary.write('$unanswered unanswered. ');
     }
     if (flagged > 0) {
-      summary.write(
-        '$flagged question${flagged == 1 ? '' : 's'} flagged for review. ',
-      );
+      summary.write('$flagged flagged. ');
     }
-    summary.write('Say confirm submit to finish the exam now.');
+    if (summary.isEmpty) {
+      summary.write('Ready to submit. ');
+    }
+    summary.write('Say confirm submit.');
     unawaited(_speakFeedback(summary.toString()));
   }
 
   void _confirmSubmitViaVoice() {
     if (!_awaitingSubmitConfirmation) {
-      unawaited(_speakFeedback(
-        'Please say submit first, then say confirm submit.',
-      ));
+      unawaited(
+        _speakFeedback('Please say submit first, then say confirm submit.'),
+      );
       return;
     }
     _awaitingSubmitConfirmation = false;
@@ -490,6 +671,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
   }
 
   Future<void> _returnToExam(int index) async {
+    _listeningRestartTimer?.cancel();
     await _tts.stop();
     await _speech.cancel();
     if (!mounted) return;
@@ -498,7 +680,28 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       _isListening = false;
       _heardText = '';
     });
+    _syncVoiceSessionState();
+    _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.mcq);
     context.pop(index);
+  }
+
+  Future<void> _disableVoiceModeWithFeedback(String message) async {
+    _listeningRestartTimer?.cancel();
+    _submitConfirmationTimer?.cancel();
+    await _speech.cancel();
+    await _tts.stop();
+    if (!mounted) return;
+    setState(() {
+      _voiceModeEnabled = false;
+      _isListening = false;
+      _isSpeaking = false;
+      _heardText = '';
+      _awaitingSubmitConfirmation = false;
+    });
+    _syncVoiceSessionState();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   double _toDouble(dynamic value) {
@@ -692,6 +895,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
       _heardText = '';
     });
     setState(() => _isSubmitting = true);
+    _syncVoiceSessionState();
     try {
       final answers = _buildAnswers();
       final flaggedIds = _buildFlaggedIds();
@@ -742,6 +946,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
           isError: false,
           context: context,
         );
+        _voiceController.setVoiceEnabled(
+          false,
+          screen: QuizVoiceScreen.examReview,
+        );
         context.push(
           '/history-detail',
           extra: {
@@ -767,6 +975,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen> {
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
+        _syncVoiceSessionState();
       }
     }
   }
@@ -1134,7 +1343,8 @@ class _ReviewListeningOverlay extends StatefulWidget {
   });
 
   @override
-  State<_ReviewListeningOverlay> createState() => _ReviewListeningOverlayState();
+  State<_ReviewListeningOverlay> createState() =>
+      _ReviewListeningOverlayState();
 }
 
 class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
@@ -1149,9 +1359,10 @@ class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 1.0, end: 1.18).animate(
-      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 1.18,
+    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
   }
 
   @override
@@ -1160,26 +1371,61 @@ class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
     super.dispose();
   }
 
+  Widget _buildVoiceBars(Color color, {required bool active}) {
+    return SizedBox(
+      width: 38,
+      height: 18,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(4, (index) {
+              final double wave = math.sin(
+                (_pulse.value * math.pi * 2) + (index * 0.75),
+              );
+              final double height = active ? 6 + ((wave + 1) * 4.5) : 5;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 5,
+                height: height.clamp(5, 15),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: active ? 1 : 0.45),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final listening = widget.isListening;
     final speaking = widget.isSpeaking;
-    final borderColor = listening
+    final accentColor = listening
         ? const Color(0xFFEF4444)
         : speaking
-            ? const Color(0xFF2D4F88)
-            : const Color(0xFFD1D5DB);
-    final micBg = listening ? const Color(0xFFEF4444) : const Color(0xFF2D4F88);
+        ? const Color(0xFF2D4F88)
+        : const Color(0xFF5B6B88);
+    final panelGradient = listening
+        ? const [Color(0xFFFFF1F2), Color(0xFFFFFFFF), Color(0xFFFFFBFB)]
+        : speaking
+        ? const [Color(0xFFF3F7FF), Color(0xFFFFFFFF), Color(0xFFF8FBFF)]
+        : const [Color(0xFFF8FAFC), Color(0xFFFFFFFF), Color(0xFFF6F8FB)];
     final statusText = listening
         ? 'Listening...'
         : speaking
-            ? 'Speaking...'
-            : 'Voice mode active - tap mic to speak';
-    final statusColor = listening
-        ? const Color(0xFFB91C1C)
+        ? 'Speaking...'
+        : 'Hands-free review ready';
+    final helperText = listening
+        ? 'Say submit, back, unanswered, flagged, or question number.'
         : speaking
-            ? const Color(0xFF1E4C9A)
-            : const Color(0xFF6B7280);
+        ? 'Assistant is reading the review guidance.'
+        : 'Tap mic anytime to interrupt and speak.';
 
     return Container(
       color: Colors.transparent,
@@ -1189,16 +1435,23 @@ class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 42),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: borderColor, width: 1.5),
+              gradient: LinearGradient(
+                colors: panelGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.28),
+                width: 1.4,
+              ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
+                  color: Color(0x140F172A),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
                 ),
               ],
             ),
@@ -1206,12 +1459,24 @@ class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
               children: [
                 GestureDetector(
                   onTap: widget.onMicTap,
-                  child: listening
-                      ? ScaleTransition(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (listening || speaking)
+                        ScaleTransition(
                           scale: _scale,
-                          child: _ReviewMicCircle(bg: micBg),
-                        )
-                      : _ReviewMicCircle(bg: micBg),
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accentColor.withValues(alpha: 0.12),
+                            ),
+                          ),
+                        ),
+                      _ReviewMicCircle(bg: accentColor),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1219,37 +1484,74 @@ class _ReviewListeningOverlayState extends State<_ReviewListeningOverlay>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: accentColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildVoiceBars(
+                            accentColor,
+                            active: listening || speaking,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        statusText,
-                        style: TextStyle(
+                        helperText,
+                        style: const TextStyle(
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF334155),
                         ),
                       ),
                       if (widget.heardText.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 4),
                         Text(
                           'Heard: "${widget.heardText}"',
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF6B7280),
+                            color: Color(0xFF64748B),
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
+                      const QuizVoiceDebugPanel(),
                     ],
                   ),
                 ),
                 Tooltip(
                   message:
                       'Review: submit, back, unanswered, flagged, question 5, read',
-                  child: Icon(
-                    Icons.help_outline_rounded,
-                    size: 18,
-                    color: Colors.grey.shade400,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 18,
+                      color: accentColor.withValues(alpha: 0.8),
+                    ),
                   ),
                 ),
               ],
@@ -1271,7 +1573,21 @@ class _ReviewMicCircle extends StatelessWidget {
     return Container(
       width: 42,
       height: 42,
-      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [bg.withValues(alpha: 0.9), bg],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: bg.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: const Icon(Icons.mic, color: Colors.white, size: 20),
     );
   }

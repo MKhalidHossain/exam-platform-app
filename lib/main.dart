@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -8,6 +7,7 @@ import 'routes/app_router.dart';
 import 'services/installation_id_service.dart';
 import 'services/app_link_service.dart';
 import 'controllers/auth_controller.dart';
+import 'controllers/quiz_voice_controller.dart';
 import 'controllers/splash_controller.dart';
 import 'controllers/theme_controller.dart';
 
@@ -27,6 +27,7 @@ void main() async {
   // Initialize GetX
   Get.put(ThemeController());
   Get.put(AuthController(), permanent: true);
+  Get.put(QuizVoiceController(), permanent: true);
   Get.put(SplashController(), permanent: true);
 
   runApp(const MyApp());
@@ -61,7 +62,7 @@ class _MyAppState extends State<MyApp> {
 
     return Obx(() {
       final themeMode = themeController.isDarkMode
-          ? ThemeMode.dark 
+          ? ThemeMode.dark
           : ThemeMode.light;
       return MaterialApp.router(
         key: ValueKey<ThemeMode>(themeMode),

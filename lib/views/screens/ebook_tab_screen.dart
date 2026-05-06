@@ -175,13 +175,12 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
   Widget _buildBody() {
     final store = _store;
-    final allCategories =
-        store == null
-              ? const <EbookCategory>[]
-              : store.categories
-                    .where((item) => item.products.isNotEmpty)
-                    .toList()
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final allCategories = store == null
+        ? <EbookCategory>[]
+        : store.categories
+              .where((item) => item.products.isNotEmpty)
+              .toList(growable: true);
+    allCategories.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     final categories = store == null
         ? const <EbookCategory>[]
         : (_selectedCategoryId == null

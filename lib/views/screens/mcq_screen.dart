@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:get/get.dart';
+import '../../controllers/quiz_voice_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
+import '../widgets/quiz_voice_debug_panel.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -18,6 +23,7 @@ class McqScreen extends StatefulWidget {
   final DateTime? endTime;
   final int? durationMinutes;
   final bool timedMode;
+  final bool voiceModeEnabled;
 
   const McqScreen({
     super.key,
@@ -29,13 +35,15 @@ class McqScreen extends StatefulWidget {
     this.endTime,
     this.durationMinutes,
     this.timedMode = true,
+    this.voiceModeEnabled = false,
   });
 
   @override
   State<McqScreen> createState() => _McqScreenState();
 }
 
-class _McqScreenState extends State<McqScreen> {
+class _McqScreenState extends State<McqScreen>
+    with QuizVoiceRouteAware<McqScreen> {
   static const int _defaultDurationMinutes = 130;
 
   // ─── Exam state ────────────────────────────────────────────────────────────
@@ -58,8 +66,16 @@ class _McqScreenState extends State<McqScreen> {
   bool _voiceModeEnabled = false;
   bool _isListening = false;
   bool _speechAvailable = false;
+  bool _speechInitializing = false;
+  Timer? _listeningRestartTimer;
+  Timer? _voiceLoopRecoveryTimer;
   String? _speechLocaleId;
   String _heardText = '';
+
+  QuizVoiceController get _voiceController =>
+      Get.isRegistered<QuizVoiceController>()
+      ? Get.find<QuizVoiceController>()
+      : Get.put(QuizVoiceController(), permanent: true);
 
   int get _settingsQuestionCount {
     final total = widget.totalQuestionCount;
@@ -74,8 +90,10 @@ class _McqScreenState extends State<McqScreen> {
     super.initState();
     _questions = _buildQuestions(widget.questions);
     _tts = FlutterTts();
+    _voiceModeEnabled =
+        widget.voiceModeEnabled || _voiceController.isEnabledValue;
     _configureTts();
-    _initSpeech();
+    unawaited(_primeSpeechAvailability());
     final UserController userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
         : Get.put(UserController());
@@ -86,13 +104,21 @@ class _McqScreenState extends State<McqScreen> {
     } else {
       _remaining = null;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
     unawaited(_tts.stop());
     unawaited(_speech.cancel());
+    _voiceController.unbindScreen(QuizVoiceScreen.mcq);
     super.dispose();
   }
 
@@ -105,50 +131,228 @@ class _McqScreenState extends State<McqScreen> {
     _tts.setCompletionHandler(() {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
       // In voice mode, auto-start listening after every TTS completion.
       if (_voiceModeEnabled && !_isListening) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && _voiceModeEnabled && !_isSpeaking && !_isListening) {
-            _startListening();
-          }
-        });
+        _scheduleListeningRestart(const Duration(milliseconds: 500));
       }
     });
     _tts.setCancelHandler(() {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
       if (!mounted) return;
       setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
     });
+  }
+
+  void _bindVoiceSession({bool requestEntryAction = false}) {
+    _voiceController.bindScreen(
+      screen: QuizVoiceScreen.mcq,
+      onRecoverListening: () async {
+        await _forceVoiceRecovery();
+      },
+      onEntryAction: () async {
+        if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+        await _speakCurrentQuestion();
+      },
+      requestEntryAction: requestEntryAction,
+    );
+    _syncVoiceSessionState();
+  }
+
+  Future<void> _forceVoiceRecovery() async {
+    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    _voiceController.logEvent(
+      'force voice recovery',
+      screen: QuizVoiceScreen.mcq,
+    );
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    await _tts.stop();
+    await _speech.cancel();
+    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    setState(() {
+      _isSpeaking = false;
+      _isListening = false;
+      _heardText = '';
+    });
+    _syncVoiceSessionState();
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    await _startListening();
+  }
+
+  @override
+  void onVoiceRouteActive() {
+    if (!mounted) return;
+    _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+  }
+
+  @override
+  void onVoiceRouteInactive() {
+    if (!_voiceModeEnabled) return;
+    _voiceController.beginNavigation();
+  }
+
+  void _syncVoiceSessionState() {
+    _voiceController.setVoiceEnabled(
+      _voiceModeEnabled,
+      screen: QuizVoiceScreen.mcq,
+    );
+    _voiceController.markHeardText(_heardText);
+    if (!_voiceModeEnabled) return;
+    final phase = _isAutoSubmitting
+        ? QuizVoicePhase.submitting
+        : _isSpeaking
+        ? QuizVoicePhase.speaking
+        : _isListening
+        ? QuizVoicePhase.listening
+        : QuizVoicePhase.idle;
+    _voiceController.setPhase(phase, screen: QuizVoiceScreen.mcq);
   }
 
   // ─── STT initialisation ────────────────────────────────────────────────────
 
-  Future<void> _initSpeech() async {
-    final available = await _speech.initialize(
-      onError: (error) {
-        if (!mounted) return;
-        setState(() => _isListening = false);
-      },
-      onStatus: (status) {
-        if (!mounted) return;
-        if (status == 'done' || status == 'notListening') {
-          if (_isListening) setState(() => _isListening = false);
-        }
-      },
-    );
-    String? preferredLocaleId;
-    if (available) {
-      preferredLocaleId = await _resolvePreferredSpeechLocaleId();
-    }
-    if (mounted) {
+  Future<void> _primeSpeechAvailability() async {
+    final hasPermission = await _speech.hasPermission;
+    if (!hasPermission) {
+      if (!mounted) return;
       setState(() {
-        _speechAvailable = available;
-        _speechLocaleId = preferredLocaleId;
+        _speechAvailable = false;
+        _speechLocaleId = null;
       });
+      return;
     }
+    await _initSpeech();
+  }
+
+  Future<bool> _initSpeech({bool requestPermission = false}) async {
+    if (_speechInitializing) return _speechAvailable;
+    if (!requestPermission && !_speechAvailable) {
+      final hasPermission = await _speech.hasPermission;
+      if (!hasPermission) {
+        if (!mounted) return false;
+        setState(() {
+          _speechAvailable = false;
+          _speechLocaleId = null;
+        });
+        return false;
+      }
+    }
+
+    _speechInitializing = true;
+    try {
+      final available = await _speech.initialize(
+        onError: (error) {
+          if (!mounted) return;
+          _voiceController.logEvent(
+            'speech error: $error',
+            screen: QuizVoiceScreen.mcq,
+          );
+          setState(() => _isListening = false);
+          _syncVoiceSessionState();
+          _scheduleListeningRestart();
+        },
+        onStatus: (status) {
+          if (!mounted) return;
+          _voiceController.logEvent(
+            'speech status: $status',
+            screen: QuizVoiceScreen.mcq,
+          );
+          if (status == 'done' || status == 'notListening') {
+            if (_isListening) {
+              setState(() => _isListening = false);
+              _syncVoiceSessionState();
+            }
+            _scheduleListeningRestart();
+          }
+        },
+        options: [SpeechToText.androidNoBluetooth],
+      );
+      String? preferredLocaleId;
+      if (available) {
+        preferredLocaleId = await _resolvePreferredSpeechLocaleId();
+      }
+      if (mounted) {
+        setState(() {
+          _speechAvailable = available;
+          _speechLocaleId = preferredLocaleId;
+        });
+      }
+      if (_voiceModeEnabled && available) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _voiceModeEnabled && !_isSpeaking) {
+            unawaited(_speakCurrentQuestion());
+          }
+        });
+      }
+      return available;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _speechAvailable = false;
+          _speechLocaleId = null;
+        });
+      }
+      return false;
+    } finally {
+      _speechInitializing = false;
+    }
+  }
+
+  Future<void> _showSpeechUnavailableMessage() async {
+    final hasPermission = await _speech.hasPermission;
+    if (!mounted) return;
+    final message = hasPermission
+        ? 'Speech recognition is not available on this device right now.'
+        : 'Microphone permission is required for voice mode. If you denied it before, enable Microphone for this app in Android settings and try again.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _scheduleListeningRestart([
+    Duration delay = const Duration(milliseconds: 700),
+  ]) {
+    _listeningRestartTimer?.cancel();
+    if (!_voiceModeEnabled) return;
+    _listeningRestartTimer = Timer(delay, () {
+      if (!mounted ||
+          !_voiceModeEnabled ||
+          _isListening ||
+          _isSpeaking ||
+          _isAutoSubmitting) {
+        return;
+      }
+      unawaited(_startListening());
+    });
+  }
+
+  void _scheduleVoiceLoopRecovery({
+    Duration delay = const Duration(milliseconds: 1200),
+    int retries = 5,
+  }) {
+    _voiceLoopRecoveryTimer?.cancel();
+    if (!_voiceModeEnabled || retries <= 0) return;
+    _voiceLoopRecoveryTimer = Timer(delay, () {
+      if (!mounted || !_voiceModeEnabled || _isListening) return;
+      if (_isSpeaking) {
+        _scheduleVoiceLoopRecovery(
+          delay: const Duration(milliseconds: 900),
+          retries: retries - 1,
+        );
+        return;
+      }
+      unawaited(_startListening());
+      _scheduleVoiceLoopRecovery(
+        delay: const Duration(milliseconds: 1200),
+        retries: retries - 1,
+      );
+    });
   }
 
   Future<String?> _resolvePreferredSpeechLocaleId() async {
@@ -235,6 +439,7 @@ class _McqScreenState extends State<McqScreen> {
       _isListening = false;
       _isAutoSubmitting = true;
     });
+    _syncVoiceSessionState();
     _goToExamReview(autoSubmit: true);
   }
 
@@ -426,6 +631,10 @@ class _McqScreenState extends State<McqScreen> {
   // ─── TTS ───────────────────────────────────────────────────────────────────
 
   Future<void> _speakCurrentQuestion() async {
+    _voiceController.logEvent(
+      'speak current question',
+      screen: QuizVoiceScreen.mcq,
+    );
     final _Question question = _questions[_currentIndex];
     final buffer = StringBuffer();
     buffer.write('Question ${question.number}. ');
@@ -449,6 +658,7 @@ class _McqScreenState extends State<McqScreen> {
       _isSpeaking = true;
       _isListening = false;
     });
+    _syncVoiceSessionState();
     await _tts.speak(buffer.toString());
   }
 
@@ -464,6 +674,10 @@ class _McqScreenState extends State<McqScreen> {
 
   /// Speaks [text] and, in voice mode, auto-starts listening when done.
   Future<void> _speakFeedback(String text) async {
+    _voiceController.logEvent(
+      'speak feedback requested',
+      screen: QuizVoiceScreen.mcq,
+    );
     await _speech.cancel();
     await _tts.stop();
     if (!mounted) return;
@@ -471,6 +685,7 @@ class _McqScreenState extends State<McqScreen> {
       _isSpeaking = true;
       _isListening = false;
     });
+    _syncVoiceSessionState();
     await _tts.speak(text);
   }
 
@@ -478,6 +693,8 @@ class _McqScreenState extends State<McqScreen> {
 
   Future<void> _toggleVoiceMode() async {
     if (_voiceModeEnabled) {
+      _listeningRestartTimer?.cancel();
+      _voiceLoopRecoveryTimer?.cancel();
       await _tts.stop();
       await _speech.cancel();
       if (!mounted) return;
@@ -487,18 +704,13 @@ class _McqScreenState extends State<McqScreen> {
         _isSpeaking = false;
         _heardText = '';
       });
+      _syncVoiceSessionState();
       return;
     }
 
-    if (!_speechAvailable) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Speech recognition is not available on this device.',
-          ),
-        ),
-      );
+    final speechReady = await _initSpeech(requestPermission: true);
+    if (!speechReady) {
+      await _showSpeechUnavailableMessage();
       return;
     }
 
@@ -506,24 +718,47 @@ class _McqScreenState extends State<McqScreen> {
       _voiceModeEnabled = true;
       _heardText = '';
     });
+    _bindVoiceSession();
     // Auto-read the current question immediately.
     await Future.delayed(const Duration(milliseconds: 200));
-    if (mounted && _voiceModeEnabled) await _speakCurrentQuestion();
+    if (mounted && _voiceModeEnabled) {
+      _voiceController.setVoiceEnabled(
+        true,
+        screen: QuizVoiceScreen.mcq,
+        requestEntryAction: true,
+      );
+      await _speakCurrentQuestion();
+    }
   }
 
   // ─── STT listening ─────────────────────────────────────────────────────────
 
   /// Start the mic. TTS must be finished before calling — they never overlap.
   Future<void> _startListening() async {
-    if (!_speechAvailable || _isListening || _isSpeaking) return;
+    _voiceController.logEvent(
+      'start listening requested',
+      screen: QuizVoiceScreen.mcq,
+    );
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    if (_isListening || _isSpeaking) return;
+    if (!_speechAvailable) {
+      final speechReady = await _initSpeech();
+      if (!speechReady) return;
+    }
     setState(() {
       _isListening = true;
       _heardText = '';
     });
+    _syncVoiceSessionState();
+    _voiceController.logEvent(
+      'speech listen call started',
+      screen: QuizVoiceScreen.mcq,
+    );
     await _speech.listen(
       onResult: _onSpeechResult,
-      listenFor: const Duration(seconds: 15),
-      pauseFor: const Duration(seconds: 7),
+      listenFor: const Duration(minutes: 1),
+      pauseFor: const Duration(minutes: 1),
       localeId: _speechLocaleId,
       listenOptions: SpeechListenOptions(
         cancelOnError: false,
@@ -540,6 +775,7 @@ class _McqScreenState extends State<McqScreen> {
       _isSpeaking = false;
       _isListening = false;
     });
+    _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
     if (mounted) unawaited(_startListening());
   }
@@ -548,6 +784,7 @@ class _McqScreenState extends State<McqScreen> {
     await _speech.stop();
     if (!mounted) return;
     setState(() => _isListening = false);
+    _syncVoiceSessionState();
   }
 
   List<dynamic> _reviewQuestions() {
@@ -558,6 +795,7 @@ class _McqScreenState extends State<McqScreen> {
   }
 
   Future<void> _openExamReview({bool preserveVoiceMode = false}) async {
+    _voiceLoopRecoveryTimer?.cancel();
     await _tts.stop();
     await _speech.cancel();
     if (!mounted) return;
@@ -566,7 +804,9 @@ class _McqScreenState extends State<McqScreen> {
       _isListening = false;
       _heardText = '';
     });
+    _syncVoiceSessionState();
 
+    _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examReview);
     final result = await context.push<Object?>(
       '/exam-review',
       extra: {
@@ -576,6 +816,7 @@ class _McqScreenState extends State<McqScreen> {
         'selected': _selectedIndex,
         'flagged': _flaggedQuestions,
         'voiceModeEnabled': preserveVoiceMode,
+        'returnQuestionIndex': _currentIndex,
       },
     );
 
@@ -588,13 +829,23 @@ class _McqScreenState extends State<McqScreen> {
         _isListening = false;
         _heardText = '';
       });
-      if (preserveVoiceMode && _voiceModeEnabled) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && _voiceModeEnabled) {
-            unawaited(_speakCurrentQuestion());
-          }
-        });
-      }
+      _bindVoiceSession(requestEntryAction: preserveVoiceMode);
+    } else if (preserveVoiceMode) {
+      setState(() {
+        _isSpeaking = false;
+        _isListening = false;
+        _heardText = '';
+      });
+      _bindVoiceSession(requestEntryAction: true);
+    }
+
+    if (preserveVoiceMode && _voiceModeEnabled) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _voiceModeEnabled) {
+          _scheduleVoiceLoopRecovery();
+          unawaited(_speakCurrentQuestion());
+        }
+      });
     }
   }
 
@@ -602,6 +853,7 @@ class _McqScreenState extends State<McqScreen> {
     bool autoSubmit = false,
     bool preserveVoiceMode = false,
   }) {
+    _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examReview);
     context.go(
       '/exam-review',
       extra: {
@@ -612,6 +864,7 @@ class _McqScreenState extends State<McqScreen> {
         'flagged': _flaggedQuestions,
         'autoSubmit': autoSubmit,
         'voiceModeEnabled': preserveVoiceMode,
+        'returnQuestionIndex': _currentIndex,
       },
     );
   }
@@ -619,8 +872,18 @@ class _McqScreenState extends State<McqScreen> {
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted) return;
     setState(() => _heardText = result.recognizedWords);
+    _voiceController.markHeardText(_heardText);
+    _voiceController.logTranscript(
+      result.recognizedWords,
+      isFinal: result.finalResult,
+      screen: QuizVoiceScreen.mcq,
+    );
     if (result.finalResult) {
       setState(() => _isListening = false);
+      _voiceController.setPhase(
+        QuizVoicePhase.processing,
+        screen: QuizVoiceScreen.mcq,
+      );
       final text = result.recognizedWords.trim();
       if (text.isNotEmpty) _handleVoiceCommand(text);
     }
@@ -629,161 +892,106 @@ class _McqScreenState extends State<McqScreen> {
   // ─── Voice command dispatcher ──────────────────────────────────────────────
 
   void _handleVoiceCommand(String rawText) {
-    final text = _normalizeCommand(rawText);
+    final result = QuizVoiceIntentParser.parse(QuizVoiceScreen.mcq, rawText);
+    _voiceController.logEvent(
+      'parsed intent: ${result.intent.name}'
+      '${result.numberValue != null ? ' (${result.numberValue})' : ''}',
+      screen: QuizVoiceScreen.mcq,
+    );
 
     // ── Select option (A / B / C / D) ──
-    final optionIndex = _parseOptionLetter(text);
+    final optionIndex = _parseOptionLetter(result.normalizedText);
     if (optionIndex != null) {
       _selectViaVoice(optionIndex);
       return;
     }
 
-    // ── Next ──
-    if (_wordMatch(text, ['next', 'skip', 'continue', 'go next', 'move on'])) {
-      _nextViaVoice();
-      return;
-    }
-
-    // ── Previous ──
-    if (_wordMatch(text, ['back', 'previous', 'go back', 'prev', 'last question'])) {
-      _previousViaVoice();
-      return;
-    }
-
-    // ── Go to question N ──
-    final qMatch = RegExp(r'(?:question|go to|number|q)\s*(\d+)').firstMatch(text);
-    if (qMatch != null) {
-      final n = int.tryParse(qMatch.group(1) ?? '') ?? 0;
-      _goToQuestionViaVoice(n - 1);
-      return;
-    }
-
-    // ── Flag ──
-    if (_wordMatch(text, ['flag', 'mark', 'bookmark', 'flag this', 'mark this'])) {
-      _flagViaVoice();
-      return;
-    }
-
-    // ── Read / repeat ──
-    if (_wordMatch(text, ['read', 'repeat', 'again', 'read again', 're-read', 'say again', 'read question'])) {
-      unawaited(_speakCurrentQuestion());
-      return;
-    }
-
-    // ── Explanation ──
-    if (_wordMatch(text, ['explain', 'explanation', 'why', 'show explanation', 'view explanation', 'read explanation'])) {
-      _explanationViaVoice();
-      return;
-    }
-
-    // ── Review ──
-    if (_wordMatch(text, [
-      'review',
-      'open review',
-      'exam review',
-      'review screen',
-      'go to review',
-      'check review',
-      'open exam review',
-      'show review',
-    ])) {
-      _reviewViaVoice();
-      return;
-    }
-
-    // ── Submit ──
-    if (_wordMatch(text, ['submit', 'done', 'finish', 'complete', 'end exam', 'submit exam'])) {
-      _submitViaVoice();
-      return;
-    }
-
-    // ── Stop / silence ──
-    // TTS is already stopped by _onSpeechResult (barge-in).
-    // Just start fresh listening so the user can say their answer.
-    if (_wordMatch(text, ['stop', 'quiet', 'silence', 'pause', 'stop reading', 'cancel'])) {
-      unawaited(_speech.cancel());
-      if (!mounted) return;
-      setState(() {
-        _isSpeaking = false;
-        _isListening = false;
-      });
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _voiceModeEnabled) unawaited(_startListening());
-      });
-      return;
-    }
-
-    // ── Help ──
-    if (_wordMatch(text, ['help', 'commands', 'what can i say', 'instructions'])) {
-      unawaited(_speakFeedback(
-        'Available voice commands. '
-        'To answer say first, second, third, or fourth. '
-        'You can also say select A, select B, select C, or select D. '
-        'Say next or skip to move forward. '
-        'Say back to go to the previous question. '
-        'Say question 5 to jump to any question. '
-        'Say flag to bookmark a question. '
-        'Say read to hear the question again. '
-        'Say explain to hear the explanation. '
-        'Say review to open the exam review screen. '
-        'Say submit to open review and confirm the exam. '
-        'Say stop to turn off listening.',
-      ));
-      return;
+    switch (result.intent) {
+      case QuizVoiceIntent.nextQuestion:
+        _nextViaVoice();
+        return;
+      case QuizVoiceIntent.goBack:
+        _previousViaVoice();
+        return;
+      case QuizVoiceIntent.questionNumber:
+        if (result.numberValue != null) {
+          _goToQuestionViaVoice(result.numberValue! - 1);
+          return;
+        }
+        break;
+      case QuizVoiceIntent.flagged:
+        _flagViaVoice();
+        return;
+      case QuizVoiceIntent.readSummary:
+        unawaited(_speakCurrentQuestion());
+        return;
+      case QuizVoiceIntent.explainQuestion:
+        _explanationViaVoice();
+        return;
+      case QuizVoiceIntent.openReview:
+        _reviewViaVoice();
+        return;
+      case QuizVoiceIntent.submit:
+        _submitViaVoice();
+        return;
+      case QuizVoiceIntent.stopVoiceMode:
+        unawaited(_disableVoiceModeWithFeedback('Voice mode turned off.'));
+        return;
+      case QuizVoiceIntent.pauseAssistant:
+        unawaited(_speech.cancel());
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _isListening = false;
+        });
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _voiceModeEnabled) unawaited(_startListening());
+        });
+        return;
+      case QuizVoiceIntent.help:
+        unawaited(
+          _speakFeedback(
+            'Available voice commands. '
+            'To answer say first, second, third, or fourth. '
+            'You can also say select A, select B, select C, or select D. '
+            'Say next or skip to move forward. '
+            'Say back to go to the previous question. '
+            'Say question 5 to jump to any question. '
+            'Say flag to bookmark a question. '
+            'Say read to hear the question again. '
+            'Say explain to hear the explanation. '
+            'Say review to open the exam review screen. '
+            'Say submit to open review and confirm the exam. '
+            'Say stop voice mode to turn off hands free mode.',
+          ),
+        );
+        return;
+      case QuizVoiceIntent.unknown:
+      case QuizVoiceIntent.startQuiz:
+      case QuizVoiceIntent.timedModeOn:
+      case QuizVoiceIntent.timedModeOff:
+      case QuizVoiceIntent.maxQuestions:
+      case QuizVoiceIntent.minQuestions:
+      case QuizVoiceIntent.increaseQuestions:
+      case QuizVoiceIntent.decreaseQuestions:
+      case QuizVoiceIntent.setQuestionCount:
+      case QuizVoiceIntent.startTest:
+      case QuizVoiceIntent.status:
+      case QuizVoiceIntent.retry:
+      case QuizVoiceIntent.cancel:
+      case QuizVoiceIntent.confirmSubmit:
+      case QuizVoiceIntent.unanswered:
+        break;
     }
 
     // ── Unrecognised ──
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
-    unawaited(_speakFeedback(
-      '${heard}Not recognised. '
-      'Try one of these commands: first, second, next, review, or help.',
-    ));
-  }
-
-  String _normalizeCommand(String rawText) {
-    var text = rawText.toLowerCase();
-    text = text.replaceAll("'", '');
-    text = text.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
-    const fillerPhrases = [
-      'please',
-      'can you',
-      'could you',
-      'would you',
-      'i want to',
-      'i wanna',
-      'let me',
-      'show me',
-      'take me to',
-      'go ahead and',
-      'i would like to',
-    ];
-    for (final filler in fillerPhrases) {
-      text = text.replaceAll(filler, ' ');
-    }
-
-    const phraseAliases = {
-      'go next': 'next',
-      'move next': 'next',
-      'move forward': 'next',
-      'go forward': 'next',
-      'go previous': 'back',
-      'previous question': 'back',
-      'go review': 'review',
-      'open the review': 'review',
-      'submit now': 'submit',
-      'finish exam': 'submit',
-      'read again': 'read',
-      'say again': 'read',
-      'read question': 'read',
-      'show explanation': 'explain',
-      'view explanation': 'explain',
-      'mark review': 'flag',
-    };
-    phraseAliases.forEach((from, to) {
-      text = text.replaceAll(from, to);
-    });
-
-    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    unawaited(
+      _speakFeedback(
+        '${heard}Not recognised. '
+        'Try one of these commands: first, second, next, review, or help.',
+      ),
+    );
   }
 
   /// Returns 0–3 if [text] maps to an answer letter, otherwise null.
@@ -793,10 +1001,14 @@ class _McqScreenState extends State<McqScreen> {
     // ── 0. Raw digit / number-word fast-path ──────────────────────────────
     // STT sometimes returns digits; also lets users say "1","2","3","4".
     switch (text.trim()) {
-      case '1': return 0;
-      case '2': return 1;
-      case '3': return 2;
-      case '4': return 3;
+      case '1':
+        return 0;
+      case '2':
+        return 1;
+      case '3':
+        return 2;
+      case '4':
+        return 3;
     }
 
     // ── Word map — letters + numbers + ordinals + homophones ──────────────
@@ -836,11 +1048,30 @@ class _McqScreenState extends State<McqScreen> {
     // ── 3. Explicit selection phrases anywhere in the text ─────────────────
     // Handles: "I think it's B", "my answer is 3", "I'll go with first"
     const selectionTriggers = [
-      'option', 'number', 'select', 'choose', 'answer', 'pick',
-      'i choose', 'i pick', 'i select', 'i think',
-      "i'll go with", 'i ll go with', 'go with', "it's", 'it s', 'its',
-      'my answer is', 'the answer is', 'answer is',
-      "i'll say", 'i ll say', 'i say', 'i want', 'i think it',
+      'option',
+      'number',
+      'select',
+      'choose',
+      'answer',
+      'pick',
+      'i choose',
+      'i pick',
+      'i select',
+      'i think',
+      "i'll go with",
+      'i ll go with',
+      'go with',
+      "it's",
+      'it s',
+      'its',
+      'my answer is',
+      'the answer is',
+      'answer is',
+      "i'll say",
+      'i ll say',
+      'i say',
+      'i want',
+      'i think it',
     ];
     for (final trigger in selectionTriggers) {
       final idx = text.indexOf(trigger);
@@ -878,9 +1109,6 @@ class _McqScreenState extends State<McqScreen> {
     return null;
   }
 
-  bool _wordMatch(String text, List<String> keywords) =>
-      keywords.any((kw) => text == kw || text.contains(kw));
-
   // ─── Voice actions ─────────────────────────────────────────────────────────
 
   void _selectViaVoice(int optionIndex) {
@@ -894,11 +1122,13 @@ class _McqScreenState extends State<McqScreen> {
       final letter = question.correctIndex != null
           ? String.fromCharCode(65 + question.correctIndex!)
           : '';
-      unawaited(_speakFeedback(
-        letter.isNotEmpty
-            ? 'This question is already answered. The correct answer was $letter.'
-            : 'This question is already answered.',
-      ));
+      unawaited(
+        _speakFeedback(
+          letter.isNotEmpty
+              ? 'This question is already answered. The correct answer was $letter.'
+              : 'This question is already answered.',
+        ),
+      );
       return;
     }
     if (_selectedIndex[_currentIndex] == optionIndex) {
@@ -914,15 +1144,19 @@ class _McqScreenState extends State<McqScreen> {
     if (correct == null) {
       unawaited(_speakFeedback('You selected option $letter.'));
     } else if (optionIndex == correct) {
-      unawaited(_speakFeedback(
-        'Correct! Option $letter is the right answer. Say next to continue.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Correct! Option $letter is the right answer. Say next to continue.',
+        ),
+      );
     } else {
       final correctLetter = String.fromCharCode(65 + correct);
-      unawaited(_speakFeedback(
-        'Incorrect. The correct answer is option $correctLetter. '
-        'Say next to move on.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Incorrect. The correct answer is option $correctLetter. '
+          'Say next to move on.',
+        ),
+      );
     }
   }
 
@@ -931,9 +1165,11 @@ class _McqScreenState extends State<McqScreen> {
     final isFlagged = _flaggedQuestions.contains(_currentIndex);
 
     if (!hasAnswer && !isFlagged) {
-      unawaited(_speakFeedback(
-        'Please select an answer or flag this question before moving on.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Please select an answer or flag this question before moving on.',
+        ),
+      );
       return;
     }
 
@@ -953,13 +1189,17 @@ class _McqScreenState extends State<McqScreen> {
     } else {
       final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
       if (covered.length < _questions.length) {
-        unawaited(_speakFeedback(
-          'You still have unanswered questions. Say submit when you are ready.',
-        ));
+        unawaited(
+          _speakFeedback(
+            'You still have unanswered questions. Say submit when you are ready.',
+          ),
+        );
       } else {
-        unawaited(_speakFeedback(
-          'You have reached the last question. Say submit to finish, or say back to review.',
-        ));
+        unawaited(
+          _speakFeedback(
+            'You have reached the last question. Say submit to finish, or say back to review.',
+          ),
+        );
       }
     }
   }
@@ -985,10 +1225,12 @@ class _McqScreenState extends State<McqScreen> {
 
   void _goToQuestionViaVoice(int index) {
     if (index < 0 || index >= _questions.length) {
-      unawaited(_speakFeedback(
-        'Question ${index + 1} does not exist. '
-        'There are ${_questions.length} questions total.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Question ${index + 1} does not exist. '
+          'There are ${_questions.length} questions total.',
+        ),
+      );
       return;
     }
     unawaited(_tts.stop());
@@ -1008,15 +1250,19 @@ class _McqScreenState extends State<McqScreen> {
   void _flagViaVoice() {
     _toggleFlag();
     final nowFlagged = _flaggedQuestions.contains(_currentIndex);
-    unawaited(_speakFeedback(nowFlagged ? 'Question flagged.' : 'Flag removed.'));
+    unawaited(
+      _speakFeedback(nowFlagged ? 'Question flagged.' : 'Flag removed.'),
+    );
   }
 
   void _explanationViaVoice() {
     final hasAnswer = _selectedIndex[_currentIndex] != null;
     if (!hasAnswer) {
-      unawaited(_speakFeedback(
-        'Please select an answer first to view the explanation.',
-      ));
+      unawaited(
+        _speakFeedback(
+          'Please select an answer first to view the explanation.',
+        ),
+      );
       return;
     }
     if (!_showExplanation) setState(() => _showExplanation = true);
@@ -1035,6 +1281,24 @@ class _McqScreenState extends State<McqScreen> {
     unawaited(_openExamReview(preserveVoiceMode: true));
   }
 
+  Future<void> _disableVoiceModeWithFeedback(String message) async {
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    await _speech.cancel();
+    await _tts.stop();
+    if (!mounted) return;
+    setState(() {
+      _voiceModeEnabled = false;
+      _isListening = false;
+      _isSpeaking = false;
+      _heardText = '';
+    });
+    _syncVoiceSessionState();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -1044,8 +1308,9 @@ class _McqScreenState extends State<McqScreen> {
     final bool canViewExplanation = selected != null;
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
     final bool canGoNext = selected != null || isFlagged;
-    final String timerLabel =
-        _remaining == null ? '--:--' : _formatDuration(_remaining!);
+    final String timerLabel = _remaining == null
+        ? '--:--'
+        : _formatDuration(_remaining!);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5FF),
@@ -1177,11 +1442,14 @@ class _McqScreenState extends State<McqScreen> {
                           });
                           // Auto-read the tapped question in voice mode.
                           if (_voiceModeEnabled) {
-                            Future.delayed(const Duration(milliseconds: 300), () {
-                              if (mounted && _voiceModeEnabled) {
-                                unawaited(_speakCurrentQuestion());
-                              }
-                            });
+                            Future.delayed(
+                              const Duration(milliseconds: 300),
+                              () {
+                                if (mounted && _voiceModeEnabled) {
+                                  unawaited(_speakCurrentQuestion());
+                                }
+                              },
+                            );
                           }
                         },
                         child: Container(
@@ -1304,8 +1572,7 @@ class _McqScreenState extends State<McqScreen> {
                     onPressed: _toggleFlag,
                     icon: Icon(
                       Icons.flag,
-                      color:
-                          isFlagged ? const Color(0xFFB76A00) : Colors.black,
+                      color: isFlagged ? const Color(0xFFB76A00) : Colors.black,
                     ),
                     label: Text(
                       'Flag',
@@ -1404,7 +1671,7 @@ class _McqScreenState extends State<McqScreen> {
                   isSpeaking: _isSpeaking,
                   heardText: _heardText,
                   onMicTap: _isSpeaking
-                      ? _interruptAndListen   // tap while TTS reads → stop TTS then open mic
+                      ? _interruptAndListen // tap while TTS reads → stop TTS then open mic
                       : (_isListening ? _stopListening : _startListening),
                 ),
               ),
@@ -1533,8 +1800,9 @@ class _DropdownHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color accentColor =
-        isEnabled ? const Color(0xFF2F6DE0) : const Color(0xFF9CA3AF);
+    final Color accentColor = isEnabled
+        ? const Color(0xFF2F6DE0)
+        : const Color(0xFF9CA3AF);
 
     return GestureDetector(
       onTap: onTap,
@@ -1557,9 +1825,7 @@ class _DropdownHeader extends StatelessWidget {
               ),
             ),
             Icon(
-              isExpanded
-                  ? Icons.keyboard_arrow_up
-                  : Icons.keyboard_arrow_down,
+              isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
               color: accentColor,
             ),
           ],
@@ -1636,9 +1902,7 @@ class _VoiceModeButton extends StatelessWidget {
       icon = Icons.mic_off;
       tooltip = 'Speech recognition unavailable';
     } else if (isEnabled) {
-      bg = isListening
-          ? const Color(0xFFFFE4E4)
-          : const Color(0xFFDCFCE7);
+      bg = isListening ? const Color(0xFFFFE4E4) : const Color(0xFFDCFCE7);
       iconColor = isListening
           ? const Color(0xFFB91C1C)
           : const Color(0xFF166534);
@@ -1699,9 +1963,10 @@ class _ListeningOverlayState extends State<_ListeningOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 1.0, end: 1.18).animate(
-      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 1.18,
+    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
   }
 
   @override
@@ -1710,105 +1975,190 @@ class _ListeningOverlayState extends State<_ListeningOverlay>
     super.dispose();
   }
 
+  Widget _buildVoiceBars(Color color, {required bool active}) {
+    return SizedBox(
+      width: 38,
+      height: 18,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(4, (index) {
+              final double wave = math.sin(
+                (_pulse.value * math.pi * 2) + (index * 0.75),
+              );
+              final double height = active ? 6 + ((wave + 1) * 4.5) : 5;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 5,
+                height: height.clamp(5, 15),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: active ? 1 : 0.45),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool listening = widget.isListening;
     final bool speaking = widget.isSpeaking;
 
-    final Color borderColor = listening
+    final Color accentColor = listening
         ? const Color(0xFFEF4444)
         : speaking
-            ? const Color(0xFF2D4F88)
-            : const Color(0xFFD1D5DB);
+        ? const Color(0xFF2D4F88)
+        : const Color(0xFF5B6B88);
 
-    final Color micBg = listening
-        ? const Color(0xFFEF4444)
-        : const Color(0xFF2D4F88);
+    final List<Color> panelGradient = listening
+        ? const [Color(0xFFFFF1F2), Color(0xFFFFFFFF), Color(0xFFFFFBFB)]
+        : speaking
+        ? const [Color(0xFFF3F7FF), Color(0xFFFFFFFF), Color(0xFFF8FBFF)]
+        : const [Color(0xFFF8FAFC), Color(0xFFFFFFFF), Color(0xFFF6F8FB)];
 
     final String statusText = listening
         ? 'Listening...'
         : speaking
-            ? 'Speaking...'
-            : 'Voice mode active — tap mic to speak';
+        ? 'Speaking...'
+        : 'Hands-free mode ready';
 
-    final Color statusColor = listening
-        ? const Color(0xFFB91C1C)
+    final String helperText = listening
+        ? 'Say your answer or command naturally.'
         : speaking
-            ? const Color(0xFF1E4C9A)
-            : const Color(0xFF6B7280);
+        ? 'Assistant is reading the next step.'
+        : 'Tap mic anytime to interrupt and speak.';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: borderColor, width: 1.5),
+          gradient: LinearGradient(
+            colors: panelGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.28),
+            width: 1.4,
+          ),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 12,
-              offset: Offset(0, 4),
+              color: Color(0x140F172A),
+              blurRadius: 18,
+              offset: Offset(0, 8),
             ),
           ],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Mic button — pulses when listening
             GestureDetector(
               onTap: widget.onMicTap,
-              child: listening
-                  ? ScaleTransition(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (listening || speaking)
+                    ScaleTransition(
                       scale: _scale,
-                      child: _MicCircle(bg: micBg),
-                    )
-                  : _MicCircle(bg: micBg),
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accentColor.withValues(alpha: 0.12),
+                        ),
+                      ),
+                    ),
+                  _MicCircle(bg: accentColor),
+                ],
+              ),
             ),
             const SizedBox(width: 12),
-
-            // Status text + heard text
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _buildVoiceBars(
+                        accentColor,
+                        active: listening || speaking,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    statusText,
-                    style: TextStyle(
+                    helperText,
+                    style: const TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF334155),
                     ),
                   ),
                   if (widget.heardText.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
                       'Heard: "${widget.heardText}"',
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF6B7280),
+                        color: Color(0xFF64748B),
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
+                  const QuizVoiceDebugPanel(),
                 ],
               ),
             ),
-
-            // Help hint
             Tooltip(
               message:
                   'Answer: first / second / third / fourth\n'
                   'or: select A / select B / select C / select D\n'
                   'Other: next • back • flag • read • explain • submit',
-              child: Icon(
-                Icons.help_outline_rounded,
-                size: 18,
-                color: Colors.grey.shade400,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 18,
+                  color: accentColor.withValues(alpha: 0.8),
+                ),
               ),
             ),
           ],
@@ -1827,7 +2177,21 @@ class _MicCircle extends StatelessWidget {
     return Container(
       width: 42,
       height: 42,
-      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [bg.withValues(alpha: 0.9), bg],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: bg.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: const Icon(Icons.mic, color: Colors.white, size: 20),
     );
   }

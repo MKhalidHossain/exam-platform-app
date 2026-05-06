@@ -31,12 +31,14 @@ import '../views/screens/shared_ebook_redirect_screen.dart';
 import '../views/screens/shared_referral_redirect_screen.dart';
 import '../models/ebook_store_model.dart';
 import '../models/payment_success_details.dart';
+import '../utils/quiz_voice_route_observer.dart';
 import '../views/screens/ebook_category_screen.dart';
 import '../views/screens/ebook_detail_screen.dart';
 
 GoRouter getRouter() {
   return GoRouter(
     initialLocation: '/splash',
+    observers: [quizVoiceRouteObserver],
     redirect: (context, state) {
       return null;
     },
@@ -284,6 +286,7 @@ GoRouter getRouter() {
           String? effectivitySheetContent;
           String? bodyOfKnowledgeContent;
           bool timedMode = true;
+          bool voiceModeEnabled = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -316,6 +319,10 @@ GoRouter getRouter() {
             bodyOfKnowledgeContent = extra['bodyOfKnowledgeContent']
                 ?.toString();
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            voiceModeEnabled = parseBool(
+              extra['voiceModeEnabled'],
+              fallback: voiceModeEnabled,
+            );
           }
           return ExamSessionScreen(
             courseTitle: title,
@@ -325,6 +332,7 @@ GoRouter getRouter() {
             effectivitySheetContent: effectivitySheetContent,
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
             timedMode: timedMode,
+            voiceModeEnabled: voiceModeEnabled,
           );
         },
       ),
@@ -339,6 +347,7 @@ GoRouter getRouter() {
           int? totalQuestionCount;
           bool timedMode = true;
           bool regenerate = false;
+          bool voiceModeEnabled = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -368,6 +377,10 @@ GoRouter getRouter() {
             totalQuestionCount = parseInt(extra['totalQuestionCount']);
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
             regenerate = parseBool(extra['regenerate'], fallback: regenerate);
+            voiceModeEnabled = parseBool(
+              extra['voiceModeEnabled'],
+              fallback: voiceModeEnabled,
+            );
           }
           return ExamLoadingScreen(
             courseTitle: title,
@@ -376,6 +389,7 @@ GoRouter getRouter() {
             totalQuestionCount: totalQuestionCount,
             timedMode: timedMode,
             regenerate: regenerate,
+            voiceModeEnabled: voiceModeEnabled,
           );
         },
       ),
@@ -393,6 +407,7 @@ GoRouter getRouter() {
           int? totalQuestionCount;
           bool timedMode = true;
           int? sessionId;
+          bool voiceModeEnabled = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -433,6 +448,10 @@ GoRouter getRouter() {
             durationMinutes = parseInt(extra['durationMinutes']);
             totalQuestionCount = parseInt(extra['totalQuestionCount']);
             timedMode = parseBool(extra['timedMode'], fallback: timedMode);
+            voiceModeEnabled = parseBool(
+              extra['voiceModeEnabled'],
+              fallback: voiceModeEnabled,
+            );
             final rawSessionId = extra['sessionId'];
             if (rawSessionId != null) {
               sessionId = int.tryParse(rawSessionId.toString());
@@ -448,6 +467,7 @@ GoRouter getRouter() {
             endTime: endTime,
             durationMinutes: durationMinutes,
             timedMode: timedMode,
+            voiceModeEnabled: voiceModeEnabled,
           );
         },
       ),
@@ -464,6 +484,7 @@ GoRouter getRouter() {
           List<int>? timeSpentSec;
           bool autoSubmit = false;
           bool voiceModeEnabled = false;
+          int returnQuestionIndex = 0;
           bool parseBool(dynamic value, {bool fallback = false}) {
             if (value == null) return fallback;
             if (value is bool) return value;
@@ -493,6 +514,9 @@ GoRouter getRouter() {
               extra['voiceModeEnabled'],
               fallback: voiceModeEnabled,
             );
+            returnQuestionIndex =
+                int.tryParse(extra['returnQuestionIndex']?.toString() ?? '') ??
+                returnQuestionIndex;
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
               selected = rawSelected.map(
@@ -522,6 +546,7 @@ GoRouter getRouter() {
             timeSpentSec: timeSpentSec,
             autoSubmit: autoSubmit,
             voiceModeEnabled: voiceModeEnabled,
+            returnQuestionIndex: returnQuestionIndex,
           );
         },
       ),
