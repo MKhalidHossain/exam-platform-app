@@ -1,449 +1,283 @@
+export 'voice_intent.dart';
+
 import '../controllers/quiz_voice_controller.dart';
-import 'voice_command_matcher.dart';
+import '../services/voice_assistant_settings_service.dart';
+import '../services/voice_command_learning_service.dart';
+import 'voice_command_normalizer.dart';
+import 'voice_intent.dart';
 
-enum QuizVoiceIntent {
-  unknown,
-  stopVoiceMode,
-  help,
-  startQuiz,
-  nextQuestion,
-  goBack,
-  pauseAssistant,
-  timedModeOn,
-  timedModeOff,
-  maxQuestions,
-  minQuestions,
-  increaseQuestions,
-  decreaseQuestions,
-  setQuestionCount,
-  startTest,
-  explainQuestion,
-  openReview,
-  status,
-  retry,
-  cancel,
-  questionNumber,
-  confirmSubmit,
-  submit,
-  unanswered,
-  flagged,
-  readSummary,
-}
-
-class QuizVoiceIntentResult {
-  final QuizVoiceIntent intent;
-  final String rawText;
+class VoiceParseResult {
+  final VoiceIntent? intent;
+  final double confidence;
   final String normalizedText;
-  final int? numberValue;
+  final String heardText;
 
-  const QuizVoiceIntentResult({
+  const VoiceParseResult({
     required this.intent,
-    required this.rawText,
+    required this.confidence,
     required this.normalizedText,
-    this.numberValue,
+    required this.heardText,
   });
 }
 
 class QuizVoiceIntentParser {
-  static QuizVoiceIntentResult parse(QuizVoiceScreen screen, String rawText) {
-    final normalized = _normalizeForScreen(screen, rawText);
+  static const double executeConfidenceThreshold = 0.78;
+  static const double confirmationConfidenceThreshold = 0.60;
+  static const double submitConfidenceThreshold = 0.90;
+  static final VoiceCommandLearningService _learningService =
+      VoiceCommandLearningService();
 
-    switch (screen) {
-      case QuizVoiceScreen.quizSettings:
-        return _parseSettings(rawText, normalized);
-      case QuizVoiceScreen.examSession:
-        return _parseSession(rawText, normalized);
-      case QuizVoiceScreen.examLoading:
-        return _parseLoading(rawText, normalized);
-      case QuizVoiceScreen.mcq:
-        return _parseMcq(rawText, normalized);
-      case QuizVoiceScreen.examReview:
-        return _parseReview(rawText, normalized);
-      case QuizVoiceScreen.none:
-        return QuizVoiceIntentResult(
-          intent: QuizVoiceIntent.unknown,
-          rawText: rawText,
-          normalizedText: normalized,
-        );
-    }
-  }
-
-  static QuizVoiceIntentResult _parseSettings(
-    String rawText,
-    String normalized,
-  ) {
-    if (_matches(normalized, _stopCommands)) {
-      return _result(QuizVoiceIntent.stopVoiceMode, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'help',
-      'commands',
-      'what can i say',
-      'read',
-      'repeat',
-    ])) {
-      return _result(QuizVoiceIntent.help, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'start',
-      'start quiz',
-      'begin quiz',
-      'begin exam',
-      'start exam',
-    ])) {
-      return _result(QuizVoiceIntent.startQuiz, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'back',
-      'go back',
-      'return',
-      'go home',
-      'home',
-    ])) {
-      return _result(QuizVoiceIntent.goBack, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'timed mode on',
-      'turn timed mode on',
-      'enable timed mode',
-      'timer on',
-      'timed on',
-    ])) {
-      return _result(QuizVoiceIntent.timedModeOn, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'timed mode off',
-      'turn timed mode off',
-      'disable timed mode',
-      'timer off',
-      'untimed mode',
-      'timed off',
-    ])) {
-      return _result(QuizVoiceIntent.timedModeOff, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'maximum questions',
-      'max questions',
-      'all questions',
-    ])) {
-      return _result(QuizVoiceIntent.maxQuestions, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'minimum questions',
-      'min questions',
-      'one question',
-    ])) {
-      return _result(QuizVoiceIntent.minQuestions, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'increase questions',
-      'more questions',
-      'next questions',
-    ])) {
-      return _result(QuizVoiceIntent.increaseQuestions, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'decrease questions',
-      'less questions',
-      'fewer questions',
-    ])) {
-      return _result(QuizVoiceIntent.decreaseQuestions, rawText, normalized);
-    }
-
-    final requestedCount = _extractRequestedQuestionCount(normalized);
-    if (requestedCount != null) {
-      return _result(
-        QuizVoiceIntent.setQuestionCount,
-        rawText,
-        normalized,
-        numberValue: requestedCount,
+  static Future<VoiceParseResult> parse(
+    QuizVoiceScreen screen,
+    String heardText,
+  ) async {
+    final normalizedText = _normalizeForScreen(heardText);
+    if (normalizedText.isEmpty) {
+      return VoiceParseResult(
+        intent: null,
+        confidence: 0,
+        normalizedText: normalizedText,
+        heardText: heardText,
       );
     }
 
-    return _result(QuizVoiceIntent.unknown, rawText, normalized);
-  }
-
-  static QuizVoiceIntentResult _parseSession(
-    String rawText,
-    String normalized,
-  ) {
-    if (_matches(normalized, _stopCommands)) {
-      return _result(QuizVoiceIntent.stopVoiceMode, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'help',
-      'commands',
-      'what can i say',
-      'read',
-      'repeat',
-    ])) {
-      return _result(QuizVoiceIntent.help, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'start',
-      'start quiz',
-      'start test',
-      'begin quiz',
-      'begin exam',
-      'start exam',
-      'continue',
-    ])) {
-      return _result(QuizVoiceIntent.startTest, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'back',
-      'go back',
-      'return',
-      'return to settings',
-      'back to settings',
-    ])) {
-      return _result(QuizVoiceIntent.goBack, rawText, normalized);
-    }
-    return _result(QuizVoiceIntent.unknown, rawText, normalized);
-  }
-
-  static QuizVoiceIntentResult _parseLoading(
-    String rawText,
-    String normalized,
-  ) {
-    if (_matches(normalized, _stopCommands)) {
-      return _result(QuizVoiceIntent.stopVoiceMode, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'status',
-      'read',
-      'repeat',
-      'help',
-      'commands',
-      'what can i say',
-    ])) {
-      return _result(QuizVoiceIntent.status, rawText, normalized);
-    }
-    if (_matches(normalized, ['retry', 'try again', 'start again'])) {
-      return _result(QuizVoiceIntent.retry, rawText, normalized);
-    }
-    if (_matches(normalized, ['cancel', 'back', 'go back', 'return'])) {
-      return _result(QuizVoiceIntent.cancel, rawText, normalized);
-    }
-    return _result(QuizVoiceIntent.unknown, rawText, normalized);
-  }
-
-  static QuizVoiceIntentResult _parseMcq(String rawText, String normalized) {
-    if (_matches(normalized, _stopCommands)) {
-      return _result(QuizVoiceIntent.stopVoiceMode, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'next',
-      'skip',
-      'continue',
-      'go next',
-      'move on',
-    ])) {
-      return _result(QuizVoiceIntent.nextQuestion, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'back',
-      'previous',
-      'go back',
-      'prev',
-      'last question',
-    ])) {
-      return _result(QuizVoiceIntent.goBack, rawText, normalized);
-    }
-    final targetQuestionNumber = _extractQuestionNumber(normalized);
-    if (targetQuestionNumber != null) {
-      return _result(
-        QuizVoiceIntent.questionNumber,
-        rawText,
-        normalized,
-        numberValue: targetQuestionNumber,
-      );
-    }
-    if (_matches(normalized, [
-      'flag',
-      'mark',
-      'bookmark',
-      'flag this',
-      'mark this',
-    ])) {
-      return _result(QuizVoiceIntent.flagged, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'read',
-      'repeat',
-      'again',
-      'read again',
-      're read',
-      'say again',
-      'read question',
-    ])) {
-      return _result(QuizVoiceIntent.readSummary, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'explain',
-      'explanation',
-      'why',
-      'show explanation',
-      'view explanation',
-      'read explanation',
-    ])) {
-      return _result(QuizVoiceIntent.explainQuestion, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'review',
-      'open review',
-      'exam review',
-      'review screen',
-      'go to review',
-      'check review',
-      'open exam review',
-      'show review',
-    ])) {
-      return _result(QuizVoiceIntent.openReview, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'submit',
-      'done',
-      'finish',
-      'complete',
-      'end exam',
-      'submit exam',
-    ])) {
-      return _result(QuizVoiceIntent.submit, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'quiet',
-      'silence',
-      'pause',
-      'stop reading',
-      'cancel',
-    ])) {
-      return _result(QuizVoiceIntent.pauseAssistant, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'help',
-      'commands',
-      'what can i say',
-      'instructions',
-    ])) {
-      return _result(QuizVoiceIntent.help, rawText, normalized);
-    }
-    return _result(QuizVoiceIntent.unknown, rawText, normalized);
-  }
-
-  static QuizVoiceIntentResult _parseReview(String rawText, String normalized) {
-    if (_matches(normalized, _stopCommands)) {
-      return _result(QuizVoiceIntent.stopVoiceMode, rawText, normalized);
-    }
-
-    final targetQuestionNumber = _extractQuestionNumber(normalized);
-    if (targetQuestionNumber != null) {
-      return _result(
-        QuizVoiceIntent.questionNumber,
-        rawText,
-        normalized,
-        numberValue: targetQuestionNumber,
+    final aliasMatch = _matchAliases(normalizedText, _aliasesFor(screen));
+    if (aliasMatch != null) {
+      return VoiceParseResult(
+        intent: aliasMatch.intent,
+        confidence: aliasMatch.confidence,
+        normalizedText: normalizedText,
+        heardText: heardText,
       );
     }
 
-    if (_matches(normalized, [
-      'confirm',
-      'confirm submit',
-      'yes submit',
-      'submit confirm',
-      'confirm finish',
-    ])) {
-      return _result(QuizVoiceIntent.confirmSubmit, rawText, normalized);
+    if (screen == QuizVoiceScreen.quizSettings &&
+        requestedQuestionCountFrom(normalizedText) != null) {
+      return VoiceParseResult(
+        intent: VoiceIntent.setQuestionCount,
+        confidence: 0.92,
+        normalizedText: normalizedText,
+        heardText: heardText,
+      );
     }
-    if (_matches(normalized, [
-      'submit',
-      'finish',
-      'done',
-      'complete',
-      'submit exam',
-    ])) {
-      return _result(QuizVoiceIntent.submit, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'back',
-      'return',
-      'go back',
-      'take me back',
-      'go to previous question',
-      'return to previous question',
-      'return to last question',
-      'previous question',
-      'last question',
-      'return to question',
-      'back to exam',
-    ])) {
-      return _result(QuizVoiceIntent.goBack, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'unanswered',
-      'review unanswered',
-      'open unanswered',
-    ])) {
-      return _result(QuizVoiceIntent.unanswered, rawText, normalized);
-    }
-    if (_matches(normalized, ['flagged', 'review flagged', 'open flagged'])) {
-      return _result(QuizVoiceIntent.flagged, rawText, normalized);
-    }
-    if (_matches(normalized, [
-      'read',
-      'repeat',
-      'again',
-      'summary',
-      'review',
-    ])) {
-      return _result(QuizVoiceIntent.readSummary, rawText, normalized);
-    }
-    if (_matches(normalized, ['help', 'commands', 'what can i say'])) {
-      return _result(QuizVoiceIntent.help, rawText, normalized);
-    }
-    return _result(QuizVoiceIntent.unknown, rawText, normalized);
-  }
 
-  static QuizVoiceIntentResult _result(
-    QuizVoiceIntent intent,
-    String rawText,
-    String normalized, {
-    int? numberValue,
-  }) {
-    return QuizVoiceIntentResult(
-      intent: intent,
-      rawText: rawText,
-      normalizedText: normalized,
-      numberValue: numberValue,
+    if ((screen == QuizVoiceScreen.mcq ||
+            screen == QuizVoiceScreen.examReview) &&
+        questionNumberFrom(normalizedText) != null) {
+      return VoiceParseResult(
+        intent: VoiceIntent.questionNumber,
+        confidence: 0.92,
+        normalizedText: normalizedText,
+        heardText: heardText,
+      );
+    }
+
+    final learnedIntent = await _learningService.findLearnedIntent(
+      normalizedText,
+    );
+    if (learnedIntent != null && _isIntentAvailable(screen, learnedIntent)) {
+      return VoiceParseResult(
+        intent: learnedIntent,
+        confidence: 0.95,
+        normalizedText: normalizedText,
+        heardText: heardText,
+      );
+    }
+
+    final fuzzyMatch = _matchAliases(
+      normalizedText,
+      _aliasesFor(screen),
+      exactOnly: false,
+    );
+    if (fuzzyMatch != null) {
+      return VoiceParseResult(
+        intent: fuzzyMatch.intent,
+        confidence: fuzzyMatch.confidence,
+        normalizedText: normalizedText,
+        heardText: heardText,
+      );
+    }
+
+    return VoiceParseResult(
+      intent: null,
+      confidence: 0,
+      normalizedText: normalizedText,
+      heardText: heardText,
     );
   }
 
-  static bool _matches(String text, List<String> keywords) =>
-      VoiceCommandMatcher.matchesAny(text, keywords);
+  static Future<void> rememberCorrection(
+    String heardText,
+    VoiceIntent intent,
+  ) async {
+    await _learningService.rememberCorrection(heardText, intent);
+  }
 
-  static String _normalizeForScreen(QuizVoiceScreen screen, String rawText) {
-    var text = rawText.toLowerCase();
-    text = text.replaceAll("'", '');
-    text = text.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
+  static bool shouldExecute(VoiceParseResult result) {
+    return shouldExecuteWithSensitivity(result, CommandSensitivity.normal);
+  }
 
-    const fillerPhrases = [
-      'please',
-      'can you',
-      'could you',
-      'would you',
-      'i want to',
-      'i wanna',
-      'let me',
-      'show me',
-      'take me to',
-      'go ahead and',
-      'i would like to',
-    ];
-    for (final filler in fillerPhrases) {
-      text = text.replaceAll(filler, ' ');
+  static bool shouldExecuteWithSensitivity(
+    VoiceParseResult result,
+    CommandSensitivity sensitivity,
+  ) {
+    final intent = result.intent;
+    if (intent == null) return false;
+    return result.confidence >= _executionThresholdFor(intent, sensitivity);
+  }
+
+  static String? confidenceFeedback(VoiceParseResult result) {
+    return confidenceFeedbackWithSensitivity(result, CommandSensitivity.normal);
+  }
+
+  static String? confidenceFeedbackWithSensitivity(
+    VoiceParseResult result,
+    CommandSensitivity sensitivity,
+  ) {
+    if (shouldExecuteWithSensitivity(result, sensitivity)) return null;
+    final intent = result.intent;
+    if (intent == VoiceIntent.submit || intent == VoiceIntent.confirmSubmit) {
+      return 'I did not understand. Say help to hear commands.';
+    }
+    if (intent != null &&
+        result.confidence >= _confirmationThresholdFor(sensitivity)) {
+      return 'Did you mean ${commandLabelFor(intent)}?';
+    }
+    return 'I did not understand. Say help to hear commands.';
+  }
+
+  static String commandLabelFor(VoiceIntent intent) {
+    return switch (intent) {
+      VoiceIntent.optionA => 'option a',
+      VoiceIntent.optionB => 'option b',
+      VoiceIntent.optionC => 'option c',
+      VoiceIntent.optionD => 'option d',
+      VoiceIntent.next => 'next',
+      VoiceIntent.back => 'back',
+      VoiceIntent.repeat => 'repeat',
+      VoiceIntent.flag => 'flag',
+      VoiceIntent.explain => 'explain',
+      VoiceIntent.review => 'review',
+      VoiceIntent.submit => 'submit',
+      VoiceIntent.confirmSubmit => 'confirm submit',
+      VoiceIntent.help => 'help',
+      VoiceIntent.stopVoice => 'stop voice',
+      VoiceIntent.startQuiz => 'start quiz',
+      VoiceIntent.startTest => 'start test',
+      VoiceIntent.timedModeOn => 'timed mode on',
+      VoiceIntent.timedModeOff => 'timed mode off',
+      VoiceIntent.maxQuestions => 'maximum questions',
+      VoiceIntent.minQuestions => 'minimum questions',
+      VoiceIntent.increaseQuestions => 'increase questions',
+      VoiceIntent.decreaseQuestions => 'decrease questions',
+      VoiceIntent.setQuestionCount => 'set question count',
+      VoiceIntent.status => 'status',
+      VoiceIntent.retry => 'retry',
+      VoiceIntent.cancel => 'cancel',
+      VoiceIntent.questionNumber => 'question number',
+      VoiceIntent.pauseAssistant => 'pause',
+      VoiceIntent.unanswered => 'unanswered',
+    };
+  }
+
+  static bool canLearnCorrection(VoiceIntent? intent) {
+    return intent != null &&
+        intent != VoiceIntent.submit &&
+        intent != VoiceIntent.confirmSubmit;
+  }
+
+  static bool isConfirmationText(String heardText) {
+    final normalizedText = _normalizeForScreen(heardText);
+    return const {
+      'yes',
+      'yeah',
+      'yep',
+      'confirm',
+      'correct',
+      'right',
+      'that is right',
+    }.contains(normalizedText);
+  }
+
+  static int? requestedQuestionCountFrom(String normalizedText) {
+    final digitMatch = RegExp(
+      r'^(?:set|choose|make|use)?\s*(?:questions?|question count)?\s*(?:to|two)?\s*(\d+)$',
+    ).firstMatch(normalizedText);
+    if (digitMatch != null) {
+      return int.tryParse(digitMatch.group(1) ?? '');
     }
 
-    final aliases = <String, String>{
+    final wordMatch = RegExp(
+      r'^(?:set|choose|make|use)?\s*(?:questions?|question count)?\s*(?:to|two)?\s*([a-z\s]+)$',
+    ).firstMatch(normalizedText);
+    if (wordMatch == null) return null;
+    return _parseSpokenNumber(wordMatch.group(1) ?? '');
+  }
+
+  static int? questionNumberFrom(String normalizedText) {
+    final digitMatch = RegExp(
+      r'^(?:question|go to question|go two question|go to|go two|number|q)\s*(\d+)$',
+    ).firstMatch(normalizedText);
+    if (digitMatch != null) {
+      return int.tryParse(digitMatch.group(1) ?? '');
+    }
+
+    final wordMatch = RegExp(
+      r'^(?:question|go to question|go two question|go to|go two|number|q)\s+([a-z\s]+)$',
+    ).firstMatch(normalizedText);
+    if (wordMatch == null) return null;
+
+    final parsed = _parseSpokenNumber(wordMatch.group(1) ?? '');
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
+  static _AliasMatch? _matchAliases(
+    String normalizedText,
+    List<_AliasGroup> groups, {
+    bool exactOnly = true,
+  }) {
+    _AliasMatch? bestMatch;
+    for (final group in groups) {
+      for (final alias in group.aliases) {
+        final normalizedAlias = VoiceCommandNormalizer.normalize(alias);
+        if (normalizedText == normalizedAlias) {
+          return _AliasMatch(group.intent, 1);
+        }
+        if (exactOnly) continue;
+        if (group.intent == VoiceIntent.confirmSubmit) {
+          continue;
+        }
+        final confidence = _similarity(normalizedText, normalizedAlias);
+        if (bestMatch == null || confidence > bestMatch.confidence) {
+          bestMatch = _AliasMatch(group.intent, confidence);
+        }
+      }
+    }
+    if (bestMatch == null ||
+        bestMatch.confidence < confirmationConfidenceThreshold) {
+      return null;
+    }
+    return bestMatch;
+  }
+
+  static bool _isIntentAvailable(QuizVoiceScreen screen, VoiceIntent intent) {
+    return _aliasesFor(screen).any((group) => group.intent == intent);
+  }
+
+  static String _normalizeForScreen(String heardText) {
+    var normalizedText = VoiceCommandNormalizer.normalize(heardText);
+    for (final phrase in _fillerPhrases) {
+      normalizedText = normalizedText.replaceAll(
+        RegExp('(^|\\s)${RegExp.escape(phrase)}(?=\\s|\$)'),
+        ' ',
+      );
+    }
+    return normalizedText.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static List<_AliasGroup> _aliasesFor(QuizVoiceScreen screen) {
+    return [
       ..._globalAliases,
       ...switch (screen) {
         QuizVoiceScreen.quizSettings => _settingsAliases,
@@ -451,50 +285,67 @@ class QuizVoiceIntentParser {
         QuizVoiceScreen.examLoading => _loadingAliases,
         QuizVoiceScreen.mcq => _mcqAliases,
         QuizVoiceScreen.examReview => _reviewAliases,
-        QuizVoiceScreen.none => const <String, String>{},
+        QuizVoiceScreen.none => const <_AliasGroup>[],
       },
+    ];
+  }
+
+  static double _executionThresholdFor(
+    VoiceIntent intent,
+    CommandSensitivity sensitivity,
+  ) {
+    if (intent == VoiceIntent.submit) return submitConfidenceThreshold;
+    return switch (sensitivity) {
+      CommandSensitivity.strict => 0.86,
+      CommandSensitivity.normal => executeConfidenceThreshold,
+      CommandSensitivity.flexible => 0.70,
     };
-
-    aliases.forEach((from, to) {
-      text = text.replaceAll(from, to);
-    });
-
-    return VoiceCommandMatcher.normalizeText(
-      text.replaceAll(RegExp(r'\s+'), ' ').trim(),
-    );
   }
 
-  static int? _extractRequestedQuestionCount(String text) {
-    final digitMatch = RegExp(
-      r'(?:set|choose|make|use)?\s*(?:questions?|question count)?\s*(?:to)?\s*(\d+)',
-    ).firstMatch(text);
-    if (digitMatch != null) {
-      return int.tryParse(digitMatch.group(1) ?? '');
-    }
-
-    final wordMatch = RegExp(
-      r'(?:set|choose|make|use)?\s*(?:questions?|question count)?\s*(?:to)?\s*([a-z\s-]+)',
-    ).firstMatch(text);
-    if (wordMatch == null) return null;
-    return _parseSpokenNumber(wordMatch.group(1) ?? '');
+  static double _confirmationThresholdFor(CommandSensitivity sensitivity) {
+    return switch (sensitivity) {
+      CommandSensitivity.strict => 0.68,
+      CommandSensitivity.normal => confirmationConfidenceThreshold,
+      CommandSensitivity.flexible => 0.52,
+    };
   }
 
-  static int? _extractQuestionNumber(String text) {
-    final digitMatch = RegExp(
-      r'(?:question|go to|number|q)\s*(\d+)',
-    ).firstMatch(text);
-    if (digitMatch != null) {
-      return int.tryParse(digitMatch.group(1) ?? '');
+  static double _similarity(String first, String second) {
+    if (first == second) return 1;
+    if (first.isEmpty || second.isEmpty) return 0;
+
+    final distance = _levenshtein(first, second);
+    final longest = first.length > second.length ? first.length : second.length;
+    return 1 - (distance / longest);
+  }
+
+  static int _levenshtein(String first, String second) {
+    if (first == second) return 0;
+    if (first.isEmpty) return second.length;
+    if (second.isEmpty) return first.length;
+
+    final previous = List<int>.generate(second.length + 1, (index) => index);
+    final current = List<int>.filled(second.length + 1, 0);
+
+    for (int i = 0; i < first.length; i++) {
+      current[0] = i + 1;
+      for (int j = 0; j < second.length; j++) {
+        final substitutionCost = first[i] == second[j] ? 0 : 1;
+        final insertion = current[j] + 1;
+        final deletion = previous[j + 1] + 1;
+        final substitution = previous[j] + substitutionCost;
+        current[j + 1] = [
+          insertion,
+          deletion,
+          substitution,
+        ].reduce((a, b) => a < b ? a : b);
+      }
+      for (int j = 0; j <= second.length; j++) {
+        previous[j] = current[j];
+      }
     }
 
-    final wordMatch = RegExp(
-      r'(?:question|go to|number|q)\s+([a-z\s-]+)',
-    ).firstMatch(text);
-    if (wordMatch == null) return null;
-
-    final parsed = _parseSpokenNumber(wordMatch.group(1) ?? '');
-    if (parsed == null || parsed <= 0) return null;
-    return parsed;
+    return previous[second.length];
   }
 
   static int? _parseSpokenNumber(String rawValue) {
@@ -541,13 +392,14 @@ class QuizVoiceIntentParser {
       'ninety': 90,
     };
 
-    final cleaned = rawValue
-        .replaceAll('-', ' ')
+    final tokens = rawValue
         .replaceAll(RegExp(r'[^a-z\s]'), ' ')
-        .trim();
-    if (cleaned.isEmpty) return null;
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((token) => token.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return null;
 
-    final tokens = cleaned.split(RegExp(r'\s+'));
     int total = 0;
     int current = 0;
     bool matchedAny = false;
@@ -568,10 +420,8 @@ class QuizVoiceIntentParser {
         matchedAny = true;
         continue;
       }
-      if (token == 'and') {
-        continue;
-      }
-      break;
+      if (token == 'and') continue;
+      return null;
     }
 
     total += current;
@@ -579,82 +429,217 @@ class QuizVoiceIntentParser {
     return total;
   }
 
-  static const List<String> _stopCommands = [
-    'stop',
-    'stop voice',
-    'stop voice mode',
-    'turn off voice',
-    'disable voice',
-    'exit voice mode',
+  static const List<String> _fillerPhrases = [
+    'please',
+    'can you',
+    'could you',
+    'would you',
+    'i want to',
+    'i want two',
+    'i wanna',
+    'let me',
+    'show me',
+    'take me to',
+    'take me two',
+    'go ahead and',
+    'i would like to',
+    'i would like two',
   ];
 
-  static const Map<String, String> _globalAliases = {
-    'read again': 'read',
-    'say again': 'read',
-  };
+  static const List<_AliasGroup> _globalAliases = [
+    _AliasGroup(VoiceIntent.stopVoice, [
+      'stop voice',
+      'voice off',
+      'stop voice mode',
+      'turn off voice',
+    ]),
+    _AliasGroup(VoiceIntent.help, ['help', 'commands']),
+  ];
 
-  static const Map<String, String> _settingsAliases = {
-    'timed mode enable': 'timed mode on',
-    'enable timer': 'timed mode on',
-    'disable timer': 'timed mode off',
-    'without time': 'timed mode off',
-    'with time': 'timed mode on',
-    'number of questions': 'questions',
-    'question number': 'questions',
-    'start the quiz': 'start quiz',
-    'begin the quiz': 'start quiz',
-    'return home': 'go home',
-  };
+  static const List<_AliasGroup> _settingsAliases = [
+    _AliasGroup(VoiceIntent.startQuiz, [
+      'start quiz',
+      'start',
+      'begin quiz',
+      'begin exam',
+      'start exam',
+    ]),
+    _AliasGroup(VoiceIntent.back, ['back', 'previous', 'go home', 'home']),
+    _AliasGroup(VoiceIntent.timedModeOn, [
+      'timed mode on',
+      'turn timed mode on',
+      'enable timed mode',
+      'timer on',
+    ]),
+    _AliasGroup(VoiceIntent.timedModeOff, [
+      'timed mode off',
+      'turn timed mode off',
+      'disable timed mode',
+      'timer off',
+      'untimed mode',
+    ]),
+    _AliasGroup(VoiceIntent.maxQuestions, [
+      'maximum questions',
+      'max questions',
+      'all questions',
+    ]),
+    _AliasGroup(VoiceIntent.minQuestions, [
+      'minimum questions',
+      'min questions',
+      'one question',
+    ]),
+    _AliasGroup(VoiceIntent.increaseQuestions, [
+      'increase questions',
+      'more questions',
+      'next questions',
+    ]),
+    _AliasGroup(VoiceIntent.decreaseQuestions, [
+      'decrease questions',
+      'less questions',
+      'fewer questions',
+    ]),
+  ];
 
-  static const Map<String, String> _sessionAliases = {
-    'begin the test': 'start test',
-    'start the test': 'start test',
-    'start the quiz': 'start quiz',
-    'go to settings': 'back to settings',
-    'return settings': 'back to settings',
-  };
+  static const List<_AliasGroup> _sessionAliases = [
+    _AliasGroup(VoiceIntent.startTest, [
+      'start test',
+      'start quiz',
+      'start',
+      'begin test',
+      'begin quiz',
+      'begin exam',
+      'continue',
+    ]),
+    _AliasGroup(VoiceIntent.back, [
+      'back',
+      'previous',
+      'return',
+      'return to settings',
+      'back to settings',
+    ]),
+  ];
 
-  static const Map<String, String> _loadingAliases = {'start again': 'retry'};
+  static const List<_AliasGroup> _loadingAliases = [
+    _AliasGroup(VoiceIntent.status, ['status', 'repeat', 'again', 'read']),
+    _AliasGroup(VoiceIntent.retry, ['retry', 'try again', 'start again']),
+    _AliasGroup(VoiceIntent.cancel, ['cancel']),
+    _AliasGroup(VoiceIntent.back, ['back', 'previous', 'return']),
+  ];
 
-  static const Map<String, String> _mcqAliases = {
-    'go next': 'next',
-    'move next': 'next',
-    'move forward': 'next',
-    'go forward': 'next',
-    'go previous': 'back',
-    'previous question': 'back',
-    'go review': 'review',
-    'open the review': 'review',
-    'submit now': 'submit',
-    'finish exam': 'submit',
-    'read question': 'read',
-    'show explanation': 'explain',
-    'view explanation': 'explain',
-    'mark review': 'flag',
-  };
+  static const List<_AliasGroup> _mcqAliases = [
+    _AliasGroup(VoiceIntent.optionA, [
+      '1',
+      'a',
+      'ay',
+      'hey',
+      'one',
+      'first',
+      'option a',
+      'answer a',
+      'select a',
+      'letter a',
+    ]),
+    _AliasGroup(VoiceIntent.optionB, [
+      '2',
+      'b',
+      'bee',
+      'be',
+      'two',
+      'second',
+      'option b',
+      'answer b',
+      'select b',
+      'letter b',
+    ]),
+    _AliasGroup(VoiceIntent.optionC, [
+      '3',
+      'c',
+      'see',
+      'sea',
+      'three',
+      'third',
+      'option c',
+      'answer c',
+      'select c',
+      'letter c',
+    ]),
+    _AliasGroup(VoiceIntent.optionD, [
+      '4',
+      'd',
+      'dee',
+      'four',
+      'fourth',
+      'option d',
+      'answer d',
+      'select d',
+      'letter d',
+    ]),
+    _AliasGroup(VoiceIntent.next, ['next', 'skip', 'continue']),
+    _AliasGroup(VoiceIntent.back, ['back', 'previous']),
+    _AliasGroup(VoiceIntent.repeat, [
+      'repeat',
+      'again',
+      'read',
+      'read question',
+    ]),
+    _AliasGroup(VoiceIntent.flag, ['flag', 'mark', 'bookmark']),
+    _AliasGroup(VoiceIntent.explain, [
+      'explain',
+      'why',
+      'show explanation',
+      'view explanation',
+    ]),
+    _AliasGroup(VoiceIntent.review, [
+      'review',
+      'open review',
+      'show review',
+      'go to review',
+    ]),
+    _AliasGroup(VoiceIntent.submit, [
+      'submit',
+      'finish',
+      'done',
+      'complete',
+      'submit exam',
+    ]),
+    _AliasGroup(VoiceIntent.pauseAssistant, [
+      'quiet',
+      'silence',
+      'pause',
+      'stop reading',
+    ]),
+  ];
 
-  static const Map<String, String> _reviewAliases = {
-    'go previous': 'back',
-    'go back to exam': 'back',
-    'return to exam': 'back',
-    'take me back': 'back',
-    'go to previous question': 'back',
-    'return to previous question': 'back',
-    'return to last question': 'back',
-    'previous question': 'back',
-    'last question': 'back',
-    'open unanswered': 'unanswered',
-    'review unanswered': 'unanswered',
-    'open flagged': 'flagged',
-    'review flagged': 'flagged',
-    'finish exam': 'submit',
-    'submit now': 'submit',
-    'submit exam now': 'submit exam',
-    'finish now': 'submit',
-    'yes confirm': 'confirm submit',
-    'confirm now': 'confirm submit',
-    'confirm summit': 'confirm submit',
-    'confirm sumit': 'confirm submit',
-    'review summary': 'summary',
-  };
+  static const List<_AliasGroup> _reviewAliases = [
+    _AliasGroup(VoiceIntent.confirmSubmit, [
+      'confirm',
+      'yes submit',
+      'confirm submit',
+    ]),
+    _AliasGroup(VoiceIntent.submit, [
+      'submit',
+      'finish',
+      'done',
+      'complete',
+      'submit exam',
+    ]),
+    _AliasGroup(VoiceIntent.back, ['back', 'previous', 'return']),
+    _AliasGroup(VoiceIntent.unanswered, ['unanswered']),
+    _AliasGroup(VoiceIntent.flag, ['flag', 'mark', 'bookmark', 'flagged']),
+    _AliasGroup(VoiceIntent.repeat, ['repeat', 'again', 'read', 'summary']),
+  ];
+}
+
+class _AliasGroup {
+  final VoiceIntent intent;
+  final List<String> aliases;
+
+  const _AliasGroup(this.intent, this.aliases);
+}
+
+class _AliasMatch {
+  final VoiceIntent intent;
+  final double confidence;
+
+  const _AliasMatch(this.intent, this.confidence);
 }

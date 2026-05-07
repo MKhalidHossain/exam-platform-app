@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+import '../../controllers/quiz_voice_controller.dart';
 
 class QuizVoiceOverlay extends StatefulWidget {
   final bool isListening;
@@ -70,213 +73,285 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final bool preparing = widget.isPreparingToListen && !widget.isListening;
-    final bool listening = widget.isListening || preparing;
-    final bool activelyListening = widget.isListening;
-    final bool speaking = widget.isSpeaking;
+    final QuizVoiceController controller =
+        Get.isRegistered<QuizVoiceController>()
+        ? Get.find<QuizVoiceController>()
+        : Get.put(QuizVoiceController(), permanent: true);
 
-    final Color accentColor = preparing
-        ? const Color(0xFFF59E0B)
-        : listening
-        ? const Color(0xFFDC2626)
-        : speaking
-        ? const Color(0xFF274B8A)
-        : const Color(0xFF475569);
+    return Obx(() {
+      final bool preparing = widget.isPreparingToListen && !widget.isListening;
+      final bool listening = widget.isListening || preparing;
+      final bool activelyListening = widget.isListening;
+      final bool speaking = widget.isSpeaking;
+      final VoiceState voiceState = controller.voiceState.value;
+      final String recognizedCommand = controller.recognizedCommand.value;
+      final String retryMessage = controller.retryMessage.value;
+      final bool debugEnabled = controller.isDebugPanelExpanded.value;
+      final bool showHeardText =
+          controller.assistantSettings.value.showHeardText;
+      final int confidencePercent = (controller.commandConfidence.value * 100)
+          .round()
+          .clamp(0, 100);
 
-    final String statusText = listening
-        ? 'Listening'
-        : speaking
-        ? 'Speaking'
-        : 'Ready';
+      final String statusText = _statusTextFor(
+        voiceState,
+        speaking: speaking,
+        listening: listening,
+        preparing: preparing,
+      );
+      final Color accentColor = _accentColorFor(statusText);
 
-    final int listeningSeconds = _listeningStartedAt == null
-        ? 0
-        : DateTime.now().difference(_listeningStartedAt!).inSeconds;
+      final int listeningSeconds = _listeningStartedAt == null
+          ? 0
+          : DateTime.now().difference(_listeningStartedAt!).inSeconds;
 
-    final String helperText = preparing
-        ? 'Microphone is warming up. Start speaking in a moment.'
-        : listening
-        ? listeningSeconds >= 8
-              ? "I'm still listening. Take your time and say your command."
-              : widget.listeningHint
-        : speaking
-        ? widget.speakingHint
-        : widget.idleHint;
-    final List<String> instructionItems = widget.instructionItems
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
+      final String helperText = retryMessage.isNotEmpty
+          ? retryMessage
+          : preparing
+          ? 'Microphone is warming up. Start speaking in a moment.'
+          : listening
+          ? listeningSeconds >= 8
+                ? "I'm still listening. Take your time and say your command."
+                : widget.listeningHint
+          : speaking
+          ? widget.speakingHint
+          : widget.idleHint;
+      final List<String> instructionItems = widget.instructionItems
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottomPadding),
-        child: Material(
-          color: Colors.transparent,
-          child: AnimatedBuilder(
-            animation: _motion,
-            builder: (context, child) {
-              final pulseWave = (math.sin(_motion.value * math.pi * 2) + 1) / 2;
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottomPadding),
+          child: Material(
+            color: Colors.transparent,
+            child: AnimatedBuilder(
+              animation: _motion,
+              builder: (context, child) {
+                final pulseWave =
+                    (math.sin(_motion.value * math.pi * 2) + 1) / 2;
 
-              return CustomPaint(
-                foregroundPainter: activelyListening
-                    ? _ShineBorderPainter(progress: _motion.value)
-                    : null,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: accentColor.withValues(alpha: 0.18),
-                      width: 1.2,
+                return CustomPaint(
+                  foregroundPainter: activelyListening
+                      ? _ShineBorderPainter(progress: _motion.value)
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                    boxShadow: [
-                      const BoxShadow(
-                        color: Color(0x160F172A),
-                        blurRadius: 18,
-                        offset: Offset(0, 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.18),
+                        width: 1.2,
                       ),
-                      if (activelyListening)
-                        BoxShadow(
-                          color: const Color(
-                            0xFFFE8FB5,
-                          ).withValues(alpha: 0.18 + (pulseWave * 0.14)),
-                          blurRadius: 22,
-                          spreadRadius: 1,
+                      boxShadow: [
+                        const BoxShadow(
+                          color: Color(0x160F172A),
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
                         ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      GestureDetector(
-                        onTap: widget.onMicTap,
-                        child: Transform.scale(
-                          scale: activelyListening ? 1 + (pulseWave * 0.08) : 1,
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: accentColor,
-                            ),
-                            child: const Icon(
-                              Icons.mic_rounded,
-                              color: Colors.white,
-                              size: 22,
+                        if (activelyListening)
+                          BoxShadow(
+                            color: const Color(
+                              0xFFFE8FB5,
+                            ).withValues(alpha: 0.18 + (pulseWave * 0.14)),
+                            blurRadius: 22,
+                            spreadRadius: 1,
+                          ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: widget.onMicTap,
+                          child: Transform.scale(
+                            scale: activelyListening
+                                ? 1 + (pulseWave * 0.08)
+                                : 1,
+                            child: Container(
+                              width: 46,
+                              height: 46,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: accentColor,
+                              ),
+                              child: const Icon(
+                                Icons.mic_rounded,
+                                color: Colors.white,
+                                size: 21,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: accentColor.withValues(alpha: 0.10),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    statusText,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: accentColor,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(
+                                        alpha: 0.10,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      statusText,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: accentColor,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                _VoiceBars(
-                                  animation: _motion,
-                                  color: accentColor,
-                                  active: activelyListening,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              helperText,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF334155),
-                              ),
-                            ),
-                            if (!listening && instructionItems.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: instructionItems
-                                    .take(3)
-                                    .map(
-                                      (item) => Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFEFF4FF,
-                                          ).withValues(alpha: 0.9),
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          border: Border.all(
-                                            color: const Color(0xFFCEDDF8),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          item,
-                                          style: const TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF1E3A6F),
-                                          ),
+                                  const SizedBox(width: 8),
+                                  _VoiceBars(
+                                    animation: _motion,
+                                    color: accentColor,
+                                    active: activelyListening,
+                                  ),
+                                  if (recognizedCommand.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Command: $recognizedCommand',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF334155),
                                         ),
                                       ),
-                                    )
-                                    .toList(growable: false),
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
-                            if (widget.heardText.trim().isNotEmpty) ...[
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 7),
                               Text(
-                                'Heard: "${widget.heardText.trim()}"',
+                                helperText,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: Color(0xFF64748B),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: retryMessage.isEmpty
+                                      ? const Color(0xFF334155)
+                                      : const Color(0xFF9A3412),
                                 ),
                               ),
+                              if (debugEnabled &&
+                                  recognizedCommand.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Confidence: $confidencePercent%',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                              if (!listening &&
+                                  retryMessage.isEmpty &&
+                                  instructionItems.isNotEmpty) ...[
+                                const SizedBox(height: 7),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: instructionItems
+                                      .take(3)
+                                      .map(
+                                        (item) => Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(
+                                              0xFFEFF4FF,
+                                            ).withValues(alpha: 0.9),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFCEDDF8),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            item,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF1E3A6F),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                ),
+                              ],
+                              if (showHeardText &&
+                                  widget.heardText.trim().isNotEmpty) ...[
+                                const SizedBox(height: 5),
+                                Text(
+                                  'Heard: "${widget.heardText.trim()}"',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
+  }
+
+  String _statusTextFor(
+    VoiceState state, {
+    required bool speaking,
+    required bool listening,
+    required bool preparing,
+  }) {
+    if (speaking || state == VoiceState.speaking) return 'Speaking';
+    if (listening || state == VoiceState.listening) return 'Listening';
+    if (preparing || state == VoiceState.processing) return 'Processing';
+    return 'Paused';
+  }
+
+  Color _accentColorFor(String statusText) {
+    return switch (statusText) {
+      'Listening' => const Color(0xFFDC2626),
+      'Speaking' => const Color(0xFF274B8A),
+      'Processing' => const Color(0xFFF59E0B),
+      _ => const Color(0xFF475569),
+    };
   }
 }
 
@@ -303,7 +378,7 @@ class _ShineBorderPainter extends CustomPainter {
           Color(0xFF60A5FA),
           Color(0x00F97316),
         ],
-        stops: const [0.0, 0.18, 0.42, 0.76, 1.0],
+        stops: const [0.0, 0.18, 0.42, 0.62, 0.82, 1.0],
       ).createShader(rect);
 
     canvas.drawRRect(rrect, paint);

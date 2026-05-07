@@ -12,8 +12,11 @@ import '../../controllers/quiz_voice_controller.dart';
 import '../../services/exam_service.dart';
 import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_model.dart';
+import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
+import '../../utils/voice_submit_confirmation_guard.dart';
 import 'history_models.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
@@ -60,15 +63,25 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   bool _isPreparingToListen = false;
   bool _isSpeaking = false;
   bool _awaitingSubmitConfirmation = false;
+  final VoiceSubmitConfirmationGuard _submitConfirmationGuard =
+      VoiceSubmitConfirmationGuard();
   Timer? _listeningRestartTimer;
   Timer? _submitConfirmationTimer;
   String? _speechLocaleId;
   String _heardText = '';
+  final VoiceCommandProcessor _voiceCommandProcessor = VoiceCommandProcessor();
+  final String _voiceScreenToken =
+      'examReview-${DateTime.now().microsecondsSinceEpoch}';
 
   QuizVoiceController get _voiceController =>
       Get.isRegistered<QuizVoiceController>()
       ? Get.find<QuizVoiceController>()
       : Get.put(QuizVoiceController(), permanent: true);
+
+  bool get _autoListenEnabled =>
+      _voiceController.assistantSettings.value.autoListenOnScreenOpen;
+  bool get _isCurrentVoiceScreen =>
+      _voiceController.isCurrentScreenToken(_voiceScreenToken);
 
   @override
   void initState() {
@@ -80,6 +93,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     unawaited(_primeSpeechAvailability());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !widget.autoSubmit) {
+        _activateVoiceScreen();
         _bindVoiceSession(requestEntryAction: false);
       }
     });
@@ -98,8 +112,33 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     _submitConfirmationTimer?.cancel();
     unawaited(_tts.stop());
     unawaited(_speech.cancel());
-    _voiceController.unbindScreen(QuizVoiceScreen.examReview);
+    _submitConfirmationGuard.clear();
+    _voiceController.unbindScreen(
+      QuizVoiceScreen.examReview,
+      screenToken: _voiceScreenToken,
+    );
     super.dispose();
+  }
+
+  void _activateVoiceScreen() {
+    _voiceController.activateScreen(
+      QuizVoiceScreen.examReview,
+      _voiceScreenToken,
+      onDeactivate: _hardStopInactiveVoice,
+    );
+  }
+
+  Future<void> _hardStopInactiveVoice() async {
+    _listeningRestartTimer?.cancel();
+    _submitConfirmationTimer?.cancel();
+    await _tts.stop();
+    await _speech.cancel();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
   }
 
   List<int> get _answeredIndexes => List<int>.generate(
@@ -118,32 +157,41 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   ).where((i) => widget.flagged.contains(i)).toList();
 
   Future<void> _configureTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.5);
-    await _tts.setPitch(1.0);
+    await _applyVoiceAssistantSettings();
     _tts.setCompletionHandler(() {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
-      if (_voiceModeEnabled && !_isSubmitting && !_isListening) {
+      if (_voiceModeEnabled &&
+          _autoListenEnabled &&
+          !_isSubmitting &&
+          !_isListening) {
         _scheduleListeningRestart(const Duration(milliseconds: 400));
       }
     });
     _tts.setCancelHandler(() {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
   }
 
+  Future<void> _applyVoiceAssistantSettings() async {
+    final settings = _voiceController.assistantSettings.value;
+    await _tts.setLanguage(settings.languageCode);
+    await _tts.setSpeechRate(settings.voiceSpeed);
+    await _tts.setPitch(settings.voicePitch);
+  }
+
   void _bindVoiceSession({bool requestEntryAction = false}) {
     _voiceController.bindScreen(
       screen: QuizVoiceScreen.examReview,
+      screenToken: _voiceScreenToken,
       onRecoverListening: () async {
         await _forceVoiceRecovery();
       },
@@ -156,13 +204,17 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         }
         await _speakReviewSummary();
       },
-      requestEntryAction: requestEntryAction,
+      requestEntryAction: requestEntryAction && _autoListenEnabled,
     );
     _syncVoiceSessionState();
   }
 
   Future<void> _forceVoiceRecovery() async {
-    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isSubmitting ||
+        widget.autoSubmit) {
       return;
     }
     _voiceController.logEvent(
@@ -173,18 +225,33 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     _submitConfirmationTimer?.cancel();
     await _tts.stop();
     await _speech.cancel();
-    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+    _submitConfirmationGuard.clear();
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isSubmitting ||
+        widget.autoSubmit) {
       return;
     }
     setState(() {
       _isSpeaking = false;
       _isListening = false;
+      _isPreparingToListen = false;
       _heardText = '';
       _awaitingSubmitConfirmation = false;
     });
+    _voiceController.setVoiceState(
+      VoiceState.idle,
+      screen: QuizVoiceScreen.examReview,
+    );
     _syncVoiceSessionState();
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    if (!mounted || !_voiceModeEnabled || _isSubmitting || widget.autoSubmit) {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isSubmitting ||
+        widget.autoSubmit ||
+        _isSpeaking) {
       return;
     }
     await _startListening();
@@ -193,13 +260,15 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   @override
   void onVoiceRouteActive() {
     if (!mounted || widget.autoSubmit) return;
+    _activateVoiceScreen();
     _bindVoiceSession(requestEntryAction: false);
   }
 
   @override
   void onVoiceRouteInactive() {
-    if (!_voiceModeEnabled || widget.autoSubmit) return;
-    _voiceController.beginNavigation();
+    if (widget.autoSubmit) return;
+    if (_voiceModeEnabled) _voiceController.beginNavigation();
+    _voiceController.deactivateScreen(_voiceScreenToken);
   }
 
   void _syncVoiceSessionState() {
@@ -250,7 +319,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     try {
       final available = await _speech.initialize(
         onError: (error) {
-          if (!mounted) return;
+          if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech error: $error',
             screen: QuizVoiceScreen.examReview,
@@ -263,10 +332,15 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
           _scheduleListeningRestart();
         },
         onStatus: (status) {
-          if (!mounted) return;
+          if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech status: $status',
             screen: QuizVoiceScreen.examReview,
+          );
+          _voiceController.onSpeechStatus(
+            status,
+            screen: QuizVoiceScreen.examReview,
+            screenToken: _voiceScreenToken,
           );
           if (status == 'listening' &&
               (!_isListening || _isPreparingToListen)) {
@@ -307,7 +381,11 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         });
       }
       return available;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _voiceController.logEvent(
+        'speech initialize failed: $error\n$stackTrace',
+        screen: QuizVoiceScreen.examReview,
+      );
       if (mounted) {
         setState(() {
           _speechAvailable = false;
@@ -335,7 +413,8 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     Duration delay = const Duration(milliseconds: 700),
   ]) {
     _listeningRestartTimer?.cancel();
-    if (!_voiceModeEnabled) return;
+    if (!_voiceModeEnabled || !_autoListenEnabled) return;
+    final retryDelay = enforceMinimumVoiceListenRetryDelay(delay);
     if (mounted &&
         !_isListening &&
         !_isSpeaking &&
@@ -343,8 +422,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         !_isPreparingToListen) {
       setState(() => _isPreparingToListen = true);
     }
-    _listeningRestartTimer = Timer(delay, () {
+    _listeningRestartTimer = Timer(retryDelay, () {
       if (!mounted ||
+          !_isCurrentVoiceScreen ||
           !_voiceModeEnabled ||
           _isListening ||
           _isSpeaking ||
@@ -360,6 +440,13 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       final systemLocale = await _speech.systemLocale();
       final locales = await _speech.locales();
       final localeIds = locales.map((locale) => locale.localeId).toSet();
+      final configuredLocaleId =
+          _voiceController.assistantSettings.value.languageCode;
+      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
+      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
+      if (localeIds.contains(configuredSpeechLocaleId)) {
+        return configuredSpeechLocaleId;
+      }
 
       final String? systemLocaleId = systemLocale?.localeId;
       if (systemLocaleId != null &&
@@ -408,8 +495,22 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     return buffer.toString();
   }
 
-  Future<void> _speakReviewSummary() async {
-    await _speakFeedback(_buildReviewSummary());
+  Future<void> _speakReviewSummary({bool force = false}) async {
+    final text = _buildReviewSummary();
+    final attemptKey = widget.examId?.trim().isNotEmpty == true
+        ? widget.examId!.trim()
+        : widget.courseTitle;
+    final shouldSpeak = _voiceController.speakOnce(
+      key: 'review_summary_$attemptKey',
+      text: text,
+      force: force,
+      screen: QuizVoiceScreen.examReview,
+    );
+    if (!shouldSpeak) {
+      _scheduleListeningRestart();
+      return;
+    }
+    await _speakFeedback(text);
   }
 
   Future<void> _speakFeedback(String text) async {
@@ -419,6 +520,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     );
     await _speech.cancel();
     await _tts.stop();
+    await _applyVoiceAssistantSettings();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
@@ -467,6 +569,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   }
 
   Future<void> _startListening() async {
+    if (!_isCurrentVoiceScreen) return;
     _voiceController.logEvent(
       'start listening requested',
       screen: QuizVoiceScreen.examReview,
@@ -480,6 +583,8 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
+    await _tts.stop();
+    if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
       if (!speechReady) {
@@ -491,25 +596,14 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       'speech listen call starting',
       screen: QuizVoiceScreen.examReview,
     );
-    bool started = false;
-    try {
-      started = await _speech.listen(
-        onResult: _onSpeechResult,
-        listenFor: const Duration(minutes: 1),
-        pauseFor: const Duration(minutes: 1),
-        localeId: _speechLocaleId,
-        listenOptions: SpeechListenOptions(
-          cancelOnError: false,
-          partialResults: true,
-        ),
-      );
-    } catch (error) {
-      _voiceController.logEvent(
-        'speech listen start failed: $error',
-        screen: QuizVoiceScreen.examReview,
-      );
-    }
-    if (!mounted) return;
+    final started = await startSpeechListeningSafely(
+      speech: _speech,
+      controller: _voiceController,
+      screen: QuizVoiceScreen.examReview,
+      onResult: _onSpeechResult,
+      localeId: _speechLocaleId,
+    );
+    if (!mounted || !_isCurrentVoiceScreen) return;
     if (!started) {
       setState(() {
         _isListening = false;
@@ -536,7 +630,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   Future<void> _stopListening() async {
     await _speech.stop();
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
       _isListening = false;
       _isPreparingToListen = false;
@@ -546,7 +640,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   Future<void> _interruptAndListen() async {
     await _tts.stop();
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
       _isSpeaking = false;
       _isListening = false;
@@ -554,11 +648,11 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     });
     _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
-    if (mounted) unawaited(_startListening());
+    if (mounted && _isCurrentVoiceScreen) unawaited(_startListening());
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -577,57 +671,72 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       );
       final text = result.recognizedWords.trim();
       if (text.isNotEmpty) {
-        _handleVoiceCommand(text);
+        unawaited(_handleVoiceCommand(text));
       }
     }
   }
 
-  void _handleVoiceCommand(String rawText) {
-    final result = QuizVoiceIntentParser.parse(
-      QuizVoiceScreen.examReview,
-      rawText,
+  Future<void> _handleVoiceCommand(String rawText) async {
+    final decision = await _voiceCommandProcessor.process(
+      screen: QuizVoiceScreen.examReview,
+      heardText: rawText,
+      sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
     );
+    final result = decision.parseResult;
+    final questionNumber = decision.questionNumber;
     _voiceController.logEvent(
-      'parsed intent: ${result.intent.name}'
-      '${result.numberValue != null ? ' (${result.numberValue})' : ''}',
+      'parsed intent: ${result.intent?.name ?? 'none'}'
+      '${questionNumber != null ? ' ($questionNumber)' : ''}'
+      ' confidence: ${result.confidence.toStringAsFixed(2)}',
       screen: QuizVoiceScreen.examReview,
     );
+    _voiceController.markCommandResult(
+      command: result.intent == null
+          ? null
+          : QuizVoiceIntentParser.commandLabelFor(result.intent!),
+      confidence: result.confidence,
+      retry: decision.feedback,
+    );
+    if (!decision.shouldExecute && decision.feedback != null) {
+      unawaited(_speakFeedback(decision.feedback!));
+      return;
+    }
 
-    switch (result.intent) {
-      case QuizVoiceIntent.stopVoiceMode:
+    switch (decision.intent) {
+      case VoiceIntent.stopVoice:
         unawaited(_disableVoiceModeWithFeedback('Voice mode turned off.'));
         return;
-      case QuizVoiceIntent.questionNumber:
-        if (result.numberValue != null) {
-          _goToQuestionViaVoice(result.numberValue! - 1);
+      case VoiceIntent.questionNumber:
+        if (questionNumber != null) {
+          _goToQuestionViaVoice(questionNumber - 1);
           return;
         }
         break;
-      case QuizVoiceIntent.confirmSubmit:
+      case VoiceIntent.confirmSubmit:
         _confirmSubmitViaVoice();
         return;
-      case QuizVoiceIntent.submit:
+      case VoiceIntent.submit:
         _submitViaVoice();
         return;
-      case QuizVoiceIntent.goBack:
+      case VoiceIntent.back:
         _returnToQuestionViaVoice();
         return;
-      case QuizVoiceIntent.unanswered:
+      case VoiceIntent.unanswered:
         _jumpToBucketViaVoice(
           _unansweredIndexes,
           'There are no unanswered questions.',
         );
         return;
-      case QuizVoiceIntent.flagged:
+      case VoiceIntent.flag:
         _jumpToBucketViaVoice(
           _flaggedIndexes,
           'There are no flagged questions.',
         );
         return;
-      case QuizVoiceIntent.readSummary:
-        unawaited(_speakReviewSummary());
+      case VoiceIntent.repeat:
+        unawaited(_speakReviewSummary(force: true));
         return;
-      case QuizVoiceIntent.help:
+      case VoiceIntent.help:
         unawaited(
           _speakFeedback(
             'Review commands. '
@@ -641,23 +750,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
           ),
         );
         return;
-      case QuizVoiceIntent.unknown:
-      case QuizVoiceIntent.startQuiz:
-      case QuizVoiceIntent.nextQuestion:
-      case QuizVoiceIntent.timedModeOn:
-      case QuizVoiceIntent.timedModeOff:
-      case QuizVoiceIntent.maxQuestions:
-      case QuizVoiceIntent.minQuestions:
-      case QuizVoiceIntent.increaseQuestions:
-      case QuizVoiceIntent.decreaseQuestions:
-      case QuizVoiceIntent.setQuestionCount:
-      case QuizVoiceIntent.startTest:
-      case QuizVoiceIntent.explainQuestion:
-      case QuizVoiceIntent.openReview:
-      case QuizVoiceIntent.status:
-      case QuizVoiceIntent.pauseAssistant:
-      case QuizVoiceIntent.retry:
-      case QuizVoiceIntent.cancel:
+      default:
         break;
     }
 
@@ -715,10 +808,12 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   void _armSubmitConfirmation() {
     if (_awaitingSubmitConfirmation) return;
+    _submitConfirmationGuard.requestSubmit();
     setState(() => _awaitingSubmitConfirmation = true);
     _submitConfirmationTimer?.cancel();
     _submitConfirmationTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted) return;
+      _submitConfirmationGuard.clear();
       setState(() => _awaitingSubmitConfirmation = false);
     });
   }
@@ -733,7 +828,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   }
 
   void _confirmSubmitViaVoice() {
-    if (!_awaitingSubmitConfirmation) {
+    if (!_submitConfirmationGuard.confirmSubmit()) {
       unawaited(
         _speakFeedback('Please say submit first, then say confirm submit.'),
       );
@@ -782,6 +877,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     _submitConfirmationTimer?.cancel();
     await _speech.cancel();
     await _tts.stop();
+    _submitConfirmationGuard.clear();
     if (!mounted) return;
     setState(() {
       _voiceModeEnabled = false;
@@ -967,6 +1063,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   Future<void> _submitFinalAnswers() async {
     if (_isSubmitting) return;
     _awaitingSubmitConfirmation = false;
+    _submitConfirmationGuard.clear();
     _submitConfirmationTimer?.cancel();
     final examId = widget.examId?.trim();
     if (examId == null || examId.isEmpty) {

@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+
+import '../services/voice_assistant_settings_service.dart';
 
 enum QuizVoiceScreen {
   none,
@@ -23,30 +27,68 @@ enum QuizVoicePhase {
   submitting,
 }
 
+enum VoiceState {
+  disabled,
+  idle,
+  speaking,
+  listening,
+  processing,
+  paused,
+  error,
+}
+
 typedef QuizVoiceAsyncCallback = Future<void> Function();
 
 class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   static const Duration _idleRecoveryThreshold = Duration(seconds: 1);
   static const Duration _processingRecoveryThreshold = Duration(seconds: 5);
-  static const Duration _speakingRecoveryThreshold = Duration(seconds: 8);
-  static const Duration _listeningRecoveryThreshold = Duration(seconds: 55);
+  static const Duration _speakingRecoveryThreshold = Duration(seconds: 28);
+  static const Duration _listeningRecoveryThreshold = Duration(seconds: 15);
+  static const Duration _activationRecoveryDelay = Duration(milliseconds: 450);
+  static const Duration _speechStatusRecoveryDelay = Duration(
+    milliseconds: 650,
+  );
+  static const Duration _speakingRetryDelay = Duration(milliseconds: 700);
+  static const Duration _healthCheckInterval = Duration(seconds: 4);
+  static const Duration _healthRecoveryCooldown = Duration(seconds: 2);
 
   final RxBool isEnabled = false.obs;
   final RxBool isDebugPanelExpanded = false.obs;
   final Rx<QuizVoiceScreen> activeScreen = QuizVoiceScreen.none.obs;
   final Rx<QuizVoicePhase> phase = QuizVoicePhase.disabled.obs;
+  final Rx<VoiceState> voiceState = VoiceState.disabled.obs;
   final RxString heardText = ''.obs;
+  final RxString recognizedCommand = ''.obs;
+  final RxDouble commandConfidence = 0.0.obs;
+  final RxString retryMessage = ''.obs;
+  final Rx<VoiceAssistantSettings> assistantSettings =
+      VoiceAssistantSettings.defaults().obs;
   final RxList<String> recentLogs = <String>[].obs;
 
+  final VoiceAssistantSettingsService _settingsService =
+      VoiceAssistantSettingsService();
+
   Timer? _watchdogTimer;
+  Timer? _activationRecoveryTimer;
   QuizVoiceAsyncCallback? _recoveryCallback;
   QuizVoiceAsyncCallback? _entryCallback;
+  QuizVoiceAsyncCallback? _activeDeactivateCallback;
+  QuizVoiceScreen? _boundScreen;
+  QuizVoiceScreen? _activeScreen;
+  String? _activeScreenToken;
   bool _entryActionPending = false;
   bool _recoveryInFlight = false;
+  bool _recoveryRunning = false;
+  String? _activeScreenName;
   DateTime _lastPhaseChangeAt = DateTime.now();
   DateTime _lastRecoveryAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastHealthRecoveryAt = DateTime.fromMillisecondsSinceEpoch(0);
+  final Set<String> _spokenKeys = <String>{};
 
   bool get isEnabledValue => isEnabled.value;
+  VoiceState get currentStateValue => voiceState.value;
+  bool get autoListenOnScreenOpenValue =>
+      assistantSettings.value.autoListenOnScreenOpen;
   bool get _shouldDeferReactiveMutation =>
       SchedulerBinding.instance.schedulerPhase ==
       SchedulerPhase.persistentCallbacks;
@@ -62,13 +104,26 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     action();
   }
 
+  bool get hasActiveScreen => _activeScreenToken != null;
+
+  bool isCurrentScreenToken(String token) => _activeScreenToken == token;
+
+  bool isCurrentScreen(QuizVoiceScreen screen, String token) {
+    final isCurrent = _activeScreen == screen && _activeScreenToken == token;
+    if (!isCurrent) {
+      logEvent('[Voice][${screen.name}][IGNORED old token]', screen: screen);
+    }
+    return isCurrent;
+  }
+
   @override
   void onInit() {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     logEvent('controller initialized');
+    unawaited(loadAssistantSettings());
     _watchdogTimer = Timer.periodic(
-      const Duration(milliseconds: 1200),
+      _healthCheckInterval,
       (_) => _onWatchdogTick(),
     );
   }
@@ -78,25 +133,27 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     logEvent('controller closing');
     WidgetsBinding.instance.removeObserver(this);
     _watchdogTimer?.cancel();
+    _activationRecoveryTimer?.cancel();
     super.onClose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     logEvent('app lifecycle: $state');
-    if (state == AppLifecycleState.resumed && isEnabled.value) {
-      Future<void>.delayed(const Duration(milliseconds: 600), () {
-        requestRecovery(force: true, preferEntryAction: false);
-      });
+    if (state == AppLifecycleState.resumed) {
+      _scheduleActivationRecovery(reason: 'app resumed');
     }
   }
 
   void bindScreen({
     required QuizVoiceScreen screen,
+    String? screenToken,
     QuizVoiceAsyncCallback? onRecoverListening,
     QuizVoiceAsyncCallback? onEntryAction,
     bool requestEntryAction = false,
   }) {
+    if (screenToken != null && !isCurrentScreen(screen, screenToken)) return;
+    _boundScreen = screen;
     _recoveryCallback = onRecoverListening;
     _entryCallback = onEntryAction;
     _runReactiveMutation(() {
@@ -112,17 +169,120 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
         if (phase.value == QuizVoicePhase.disabled) {
           phase.value = QuizVoicePhase.idle;
         }
-        requestRecovery(force: true, preferEntryAction: requestEntryAction);
+        requestRecovery(
+          force: true,
+          preferEntryAction: requestEntryAction,
+          screenToken: screenToken,
+        );
       }
     });
   }
 
-  void unbindScreen(QuizVoiceScreen screen) {
-    if (activeScreen.value != screen) return;
+  void unbindScreen(QuizVoiceScreen screen, {String? screenToken}) {
+    if (screenToken != null && !isCurrentScreen(screen, screenToken)) return;
+    if (_boundScreen != screen) return;
+    if (screenToken != null) {
+      deactivateScreen(screenToken);
+    } else {
+      onScreenDeactivated(screen.name);
+    }
+    _boundScreen = null;
     _recoveryCallback = null;
     _entryCallback = null;
     _runReactiveMutation(() {
       logEvent('unbind screen', screen: screen);
+    });
+  }
+
+  void activateScreen(
+    QuizVoiceScreen screen,
+    String token, {
+    QuizVoiceAsyncCallback? onDeactivate,
+  }) {
+    if (_activeScreen == screen && _activeScreenToken == token) return;
+
+    final previousDeactivate = _activeDeactivateCallback;
+    final previousScreen = _activeScreen;
+    final previousToken = _activeScreenToken;
+    if (previousToken != null && previousToken != token) {
+      logEvent(
+        '[Voice][${previousScreen?.name ?? 'none'}][INACTIVE]',
+        screen: previousScreen,
+      );
+      _activationRecoveryTimer?.cancel();
+      _activationRecoveryTimer = null;
+      _recoveryCallback = null;
+      _entryCallback = null;
+      _entryActionPending = false;
+      _recoveryRunning = false;
+      _recoveryInFlight = false;
+      if (previousDeactivate != null) {
+        unawaited(previousDeactivate());
+      }
+    }
+
+    _activeScreen = screen;
+    _activeScreenToken = token;
+    _activeDeactivateCallback = onDeactivate;
+    _activeScreenName = screen.name;
+    activeScreen.value = screen;
+    logEvent('[Voice][${screen.name}][ACTIVE]', screen: screen);
+    _scheduleActivationRecovery(reason: 'screen activated', screenToken: token);
+  }
+
+  void deactivateScreen(String token) {
+    if (_activeScreenToken != token) {
+      logEvent('[Voice][IGNORED old token] deactivate');
+      return;
+    }
+
+    final screen = _activeScreen;
+    logEvent('[Voice][${screen?.name ?? 'none'}][INACTIVE]', screen: screen);
+    _activationRecoveryTimer?.cancel();
+    _activationRecoveryTimer = null;
+    _activeScreen = null;
+    _activeScreenToken = null;
+    _activeDeactivateCallback = null;
+    _activeScreenName = null;
+    _boundScreen = null;
+    _recoveryCallback = null;
+    _entryCallback = null;
+    _entryActionPending = false;
+    _recoveryRunning = false;
+    _recoveryInFlight = false;
+  }
+
+  void onScreenActivated(String screenName) {
+    _activeScreenName = screenName;
+    logEvent('screen activated: $screenName');
+    _scheduleActivationRecovery(reason: 'screen activated');
+  }
+
+  void onScreenDeactivated(String screenName) {
+    if (_activeScreenName != screenName) return;
+    logEvent('screen deactivated: $screenName');
+    _activeScreenName = null;
+    _activationRecoveryTimer?.cancel();
+    _activationRecoveryTimer = null;
+  }
+
+  void onSpeechStatus(
+    String status, {
+    required QuizVoiceScreen screen,
+    String? screenToken,
+  }) {
+    if (screenToken != null && !isCurrentScreen(screen, screenToken)) return;
+    if (screen.name != _activeScreenName) return;
+    if (status != 'done' && status != 'notListening') return;
+
+    logEvent(
+      'speech status recovery scheduled after unexpected $status',
+      screen: screen,
+    );
+    _activationRecoveryTimer?.cancel();
+    _activationRecoveryTimer = Timer(_speechStatusRecoveryDelay, () {
+      _activationRecoveryTimer = null;
+      _requestHealthRecovery('speech status $status', screenToken: screenToken);
     });
   }
 
@@ -139,14 +299,17 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       if (!enabled) {
         logEvent('voice disabled', screen: screen, phaseOverride: phase.value);
         phase.value = QuizVoicePhase.disabled;
+        _setVoiceStateLocked(VoiceState.disabled, screen: screen);
         heardText.value = '';
         _entryActionPending = false;
+        _spokenKeys.clear();
         _lastPhaseChangeAt = DateTime.now();
         return;
       }
 
       if (phase.value == QuizVoicePhase.disabled) {
         phase.value = QuizVoicePhase.idle;
+        _setVoiceStateLocked(VoiceState.idle, screen: screen);
       }
       _lastPhaseChangeAt = DateTime.now();
 
@@ -175,6 +338,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       }
       final previous = phase.value;
       phase.value = next;
+      _setVoiceStateLocked(_voiceStateForPhase(next), screen: screen);
       _lastPhaseChangeAt = DateTime.now();
       if (previous != next) {
         logEvent(
@@ -184,6 +348,18 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
         );
       }
     });
+  }
+
+  bool setVoiceState(VoiceState next, {QuizVoiceScreen? screen}) {
+    var didTransition = false;
+    _runReactiveMutation(() {
+      didTransition = _setVoiceStateLocked(next, screen: screen);
+      if (didTransition) {
+        phase.value = _phaseForVoiceState(next);
+        _lastPhaseChangeAt = DateTime.now();
+      }
+    });
+    return didTransition;
   }
 
   void beginNavigation({QuizVoiceScreen? targetScreen}) {
@@ -199,6 +375,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
           phaseOverride: QuizVoicePhase.navigating,
         );
         phase.value = QuizVoicePhase.navigating;
+        _setVoiceStateLocked(VoiceState.paused, screen: targetScreen);
         _lastPhaseChangeAt = DateTime.now();
       }
     });
@@ -210,9 +387,62 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     });
   }
 
+  void markCommandResult({
+    String? command,
+    double confidence = 0,
+    String? retry,
+  }) {
+    _runReactiveMutation(() {
+      recognizedCommand.value = command ?? '';
+      commandConfidence.value = confidence.clamp(0, 1).toDouble();
+      retryMessage.value = retry ?? '';
+    });
+  }
+
+  bool speakOnce({
+    required String key,
+    required String text,
+    bool force = false,
+    QuizVoiceScreen? screen,
+  }) {
+    final normalizedKey = key.trim();
+    if (normalizedKey.isEmpty) return true;
+
+    if (!force && _spokenKeys.contains(normalizedKey)) {
+      final compact = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final preview = compact.length > 80
+          ? '${compact.substring(0, 80)}...'
+          : compact;
+      logEvent(
+        'speak once skipped: $normalizedKey'
+        '${preview.isNotEmpty ? ' "$preview"' : ''}',
+        screen: screen,
+      );
+      return false;
+    }
+
+    _spokenKeys.add(normalizedKey);
+    logEvent(
+      'speak once accepted: $normalizedKey${force ? ' (force)' : ''}',
+      screen: screen,
+    );
+    return true;
+  }
+
+  void clearSpokenOnceKeys({String? prefix}) {
+    if (prefix == null || prefix.isEmpty) {
+      _spokenKeys.clear();
+      return;
+    }
+    _spokenKeys.removeWhere((key) => key.startsWith(prefix));
+  }
+
   void clearHeardText() {
     _runReactiveMutation(() {
       heardText.value = '';
+      recognizedCommand.value = '';
+      commandConfidence.value = 0;
+      retryMessage.value = '';
     });
   }
 
@@ -225,18 +455,89 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     });
   }
 
-  void requestRecovery({bool force = false, bool preferEntryAction = false}) {
+  Future<void> loadAssistantSettings() async {
+    final settings = await _settingsService.loadSettings();
+    _runReactiveMutation(() {
+      assistantSettings.value = settings;
+      logEvent('voice assistant settings loaded');
+    });
+  }
+
+  Future<void> updateAssistantSettings(VoiceAssistantSettings settings) async {
+    await _settingsService.saveSettings(settings);
+    _runReactiveMutation(() {
+      assistantSettings.value = settings;
+      logEvent('voice assistant settings updated');
+    });
+  }
+
+  // TTS/STT configuration is part of the voice lifecycle. Screens provide the
+  // Flutter plugin instances, while the controller owns settings and locale
+  // resolution so behavior stays consistent across quiz voice screens.
+  Future<void> applyTtsSettings(FlutterTts tts) async {
+    final settings = assistantSettings.value;
+    await tts.setLanguage(settings.languageCode);
+    await tts.setSpeechRate(settings.voiceSpeed);
+    await tts.setPitch(settings.voicePitch);
+  }
+
+  Future<String?> resolvePreferredSpeechLocaleId(SpeechToText speech) async {
+    try {
+      final systemLocale = await speech.systemLocale();
+      final locales = await speech.locales();
+      final localeIds = locales.map((locale) => locale.localeId).toSet();
+      final configuredLocaleId = assistantSettings.value.languageCode;
+      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
+
+      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
+      if (localeIds.contains(configuredSpeechLocaleId)) {
+        return configuredSpeechLocaleId;
+      }
+
+      final systemLocaleId = systemLocale?.localeId;
+      if (systemLocaleId != null &&
+          systemLocaleId.toLowerCase().startsWith('en')) {
+        return systemLocaleId;
+      }
+
+      for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
+        if (localeIds.contains(fallback)) return fallback;
+      }
+
+      return systemLocaleId;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void requestRecovery({
+    bool force = false,
+    bool preferEntryAction = false,
+    String? screenToken,
+  }) {
     if (_shouldDeferReactiveMutation) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (isClosed) return;
-        requestRecovery(force: force, preferEntryAction: preferEntryAction);
+        requestRecovery(
+          force: force,
+          preferEntryAction: preferEntryAction,
+          screenToken: screenToken,
+        );
       });
       return;
     }
-    if (!isEnabled.value || _recoveryInFlight) return;
+    if (screenToken != null && !isCurrentScreenToken(screenToken)) {
+      logEvent('[Voice][RECOVERY skipped] old token');
+      return;
+    }
+    if (!isEnabled.value || _recoveryRunning || _recoveryInFlight) {
+      logEvent('[Voice][RECOVERY skipped] busy or disabled');
+      return;
+    }
     final now = DateTime.now();
     if (!force &&
-        now.difference(_lastRecoveryAt) < const Duration(milliseconds: 900)) {
+        now.difference(_lastRecoveryAt) < const Duration(seconds: 2)) {
+      logEvent('[Voice][RECOVERY skipped] debounced');
       return;
     }
 
@@ -250,9 +551,11 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       'request recovery, force=$force, preferEntryAction=$preferEntryAction',
     );
     _recoveryInFlight = true;
+    _recoveryRunning = true;
     _lastRecoveryAt = now;
     Future<void>(() async {
       try {
+        if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
         if ((preferEntryAction || _entryActionPending) && entryAction != null) {
           logEvent('running entry action for recovery');
           _entryActionPending = false;
@@ -266,29 +569,100 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       } finally {
         logEvent('recovery action completed');
         _recoveryInFlight = false;
+        _recoveryRunning = false;
       }
     });
+  }
+
+  void _scheduleActivationRecovery({
+    required String reason,
+    String? screenToken,
+  }) {
+    _activationRecoveryTimer?.cancel();
+    if (!isEnabled.value) return;
+
+    _activationRecoveryTimer = Timer(_activationRecoveryDelay, () {
+      _activationRecoveryTimer = null;
+      if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
+      _recoverAfterActivation(reason, screenToken: screenToken);
+    });
+  }
+
+  void _recoverAfterActivation(String reason, {String? screenToken}) {
+    switch (voiceState.value) {
+      case VoiceState.speaking:
+        _activationRecoveryTimer?.cancel();
+        _activationRecoveryTimer = Timer(_speakingRetryDelay, () {
+          _activationRecoveryTimer = null;
+          if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
+          _recoverAfterActivation(reason, screenToken: screenToken);
+        });
+        return;
+      case VoiceState.listening:
+      case VoiceState.processing:
+        return;
+      case VoiceState.idle:
+      case VoiceState.disabled:
+      case VoiceState.paused:
+      case VoiceState.error:
+        _requestHealthRecovery('activation: $reason', screenToken: screenToken);
+        return;
+    }
+  }
+
+  void _requestHealthRecovery(String reason, {String? screenToken}) {
+    if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
+    if (!isEnabled.value || _activeScreenName == null) return;
+    if (_recoveryInFlight || _recoveryRunning) {
+      logEvent('[Voice][RECOVERY skipped] $reason');
+      return;
+    }
+    if (_recoveryCallback == null && !_entryActionPending) return;
+    if (voiceState.value == VoiceState.speaking) {
+      return;
+    }
+
+    final now = DateTime.now();
+    if (now.difference(_lastHealthRecoveryAt) < _healthRecoveryCooldown) {
+      logEvent('health recovery throttled: $reason');
+      return;
+    }
+
+    _lastHealthRecoveryAt = now;
+    logEvent('health recovery requested: $reason');
+    requestRecovery(
+      force: true,
+      preferEntryAction: false,
+      screenToken: screenToken ?? _activeScreenToken,
+    );
   }
 
   void _onWatchdogTick() {
     if (!isEnabled.value || _recoveryInFlight) return;
     if (_recoveryCallback == null && !_entryActionPending) return;
+    if (_activeScreenName == null) return;
 
     final Duration inactiveFor = DateTime.now().difference(_lastPhaseChangeAt);
 
-    switch (phase.value) {
-      case QuizVoicePhase.disabled:
-      case QuizVoicePhase.submitting:
-        return;
-      case QuizVoicePhase.listening:
+    if (phase.value == QuizVoicePhase.disabled ||
+        phase.value == QuizVoicePhase.submitting) {
+      return;
+    }
+
+    switch (voiceState.value) {
+      case VoiceState.listening:
         if (inactiveFor < _listeningRecoveryThreshold) return;
         logEvent(
-          'watchdog detected stale listening after $inactiveFor',
+          '[Voice][STALE LISTEN restart] after $inactiveFor',
           phaseOverride: QuizVoicePhase.listening,
         );
-        requestRecovery(force: true, preferEntryAction: false);
+        requestRecovery(
+          force: true,
+          preferEntryAction: false,
+          screenToken: _activeScreenToken,
+        );
         return;
-      case QuizVoicePhase.speaking:
+      case VoiceState.speaking:
         if (inactiveFor < _speakingRecoveryThreshold) return;
         logEvent(
           'watchdog detected stale speaking after $inactiveFor',
@@ -296,23 +670,22 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
         );
         requestRecovery(force: true, preferEntryAction: false);
         return;
-      case QuizVoicePhase.processing:
+      case VoiceState.processing:
         if (inactiveFor < _processingRecoveryThreshold) return;
-        logEvent(
-          'watchdog detected stale processing after $inactiveFor',
-          phaseOverride: QuizVoicePhase.processing,
-        );
-        requestRecovery(force: true, preferEntryAction: false);
+        _requestHealthRecovery('watchdog stale processing after $inactiveFor');
         return;
-      case QuizVoicePhase.idle:
-      case QuizVoicePhase.navigating:
+      case VoiceState.paused:
+      case VoiceState.error:
+      case VoiceState.disabled:
+      case VoiceState.idle:
         break;
     }
 
     if (inactiveFor < _idleRecoveryThreshold) return;
 
-    logEvent('watchdog requested recovery after $inactiveFor');
-    requestRecovery(preferEntryAction: _entryActionPending);
+    _requestHealthRecovery(
+      'watchdog ${voiceState.value.name} after $inactiveFor',
+    );
   }
 
   void logEvent(
@@ -351,6 +724,45 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       screen: screen,
     );
   }
+
+  bool _setVoiceStateLocked(VoiceState next, {QuizVoiceScreen? screen}) {
+    if (!isEnabled.value &&
+        next != VoiceState.disabled &&
+        next != VoiceState.paused) {
+      return false;
+    }
+
+    final previous = voiceState.value;
+    if (previous == next) return false;
+
+    voiceState.value = next;
+    logEvent(
+      'voice state $previous -> $next',
+      screen: screen ?? activeScreen.value,
+    );
+    return true;
+  }
+
+  VoiceState _voiceStateForPhase(QuizVoicePhase phaseValue) =>
+      switch (phaseValue) {
+        QuizVoicePhase.disabled => VoiceState.disabled,
+        QuizVoicePhase.idle => VoiceState.idle,
+        QuizVoicePhase.speaking => VoiceState.speaking,
+        QuizVoicePhase.listening => VoiceState.listening,
+        QuizVoicePhase.processing => VoiceState.processing,
+        QuizVoicePhase.navigating => VoiceState.paused,
+        QuizVoicePhase.submitting => VoiceState.processing,
+      };
+
+  QuizVoicePhase _phaseForVoiceState(VoiceState state) => switch (state) {
+    VoiceState.disabled => QuizVoicePhase.disabled,
+    VoiceState.idle => QuizVoicePhase.idle,
+    VoiceState.speaking => QuizVoicePhase.speaking,
+    VoiceState.listening => QuizVoicePhase.listening,
+    VoiceState.processing => QuizVoicePhase.processing,
+    VoiceState.paused => QuizVoicePhase.idle,
+    VoiceState.error => QuizVoicePhase.idle,
+  };
 
   String _screenLabel(QuizVoiceScreen screen) => switch (screen) {
     QuizVoiceScreen.none => 'none',

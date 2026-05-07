@@ -9,7 +9,9 @@ import 'package:get/get.dart';
 import '../../controllers/quiz_voice_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
@@ -73,8 +75,11 @@ class _McqScreenState extends State<McqScreen>
   Timer? _voiceLoopRecoveryTimer;
   String? _speechLocaleId;
   String _heardText = '';
+  final VoiceCommandProcessor _voiceCommandProcessor = VoiceCommandProcessor();
   bool _isQuestionNarrationActive = false;
   int _ttsSessionId = 0;
+  final String _voiceScreenToken =
+      'mcq-${DateTime.now().microsecondsSinceEpoch}';
 
   QuizVoiceController get _voiceController =>
       Get.isRegistered<QuizVoiceController>()
@@ -86,6 +91,11 @@ class _McqScreenState extends State<McqScreen>
     if (total != null && total > 0) return total;
     return _questions.length;
   }
+
+  bool get _autoListenEnabled =>
+      _voiceController.assistantSettings.value.autoListenOnScreenOpen;
+  bool get _isCurrentVoiceScreen =>
+      _voiceController.isCurrentScreenToken(_voiceScreenToken);
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -110,6 +120,7 @@ class _McqScreenState extends State<McqScreen>
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        _activateVoiceScreen();
         _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
       }
     });
@@ -122,44 +133,74 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
-    _voiceController.unbindScreen(QuizVoiceScreen.mcq);
+    _voiceController.unbindScreen(
+      QuizVoiceScreen.mcq,
+      screenToken: _voiceScreenToken,
+    );
     super.dispose();
+  }
+
+  void _activateVoiceScreen() {
+    _voiceController.activateScreen(
+      QuizVoiceScreen.mcq,
+      _voiceScreenToken,
+      onDeactivate: _hardStopInactiveVoice,
+    );
+  }
+
+  Future<void> _hardStopInactiveVoice() async {
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    await _stopTtsPlayback();
+    await _speech.cancel();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
   }
 
   // ─── TTS configuration ─────────────────────────────────────────────────────
 
   Future<void> _configureTts() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.5);
-    await _tts.setPitch(1.0);
+    await _applyVoiceAssistantSettings();
     await _tts.awaitSpeakCompletion(true);
     _tts.setCompletionHandler(() {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       // In voice mode, auto-start listening after every TTS completion.
-      if (_voiceModeEnabled && !_isListening) {
+      if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
         _scheduleListeningRestart(const Duration(milliseconds: 500));
       }
     });
     _tts.setCancelHandler(() {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentVoiceScreen) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
   }
 
+  Future<void> _applyVoiceAssistantSettings() async {
+    final settings = _voiceController.assistantSettings.value;
+    await _tts.setLanguage(settings.languageCode);
+    await _tts.setSpeechRate(settings.voiceSpeed);
+    await _tts.setPitch(settings.voicePitch);
+  }
+
   void _bindVoiceSession({bool requestEntryAction = false}) {
     _voiceController.bindScreen(
       screen: QuizVoiceScreen.mcq,
+      screenToken: _voiceScreenToken,
       onRecoverListening: () async {
         await _forceVoiceRecovery();
       },
@@ -167,13 +208,18 @@ class _McqScreenState extends State<McqScreen>
         if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
         await _speakCurrentQuestion();
       },
-      requestEntryAction: requestEntryAction,
+      requestEntryAction: requestEntryAction && _autoListenEnabled,
     );
     _syncVoiceSessionState();
   }
 
   Future<void> _forceVoiceRecovery() async {
-    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isAutoSubmitting) {
+      return;
+    }
     _voiceController.logEvent(
       'force voice recovery',
       screen: QuizVoiceScreen.mcq,
@@ -182,28 +228,45 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
-    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isAutoSubmitting) {
+      return;
+    }
     setState(() {
       _isSpeaking = false;
       _isListening = false;
+      _isPreparingToListen = false;
       _heardText = '';
     });
+    _voiceController.setVoiceState(
+      VoiceState.idle,
+      screen: QuizVoiceScreen.mcq,
+    );
     _syncVoiceSessionState();
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    if (!mounted || !_voiceModeEnabled || _isAutoSubmitting) return;
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted ||
+        !_isCurrentVoiceScreen ||
+        !_voiceModeEnabled ||
+        _isAutoSubmitting ||
+        _isSpeaking) {
+      return;
+    }
     await _startListening();
   }
 
   @override
   void onVoiceRouteActive() {
     if (!mounted) return;
+    _activateVoiceScreen();
     _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
   }
 
   @override
   void onVoiceRouteInactive() {
-    if (!_voiceModeEnabled) return;
-    _voiceController.beginNavigation();
+    if (_voiceModeEnabled) _voiceController.beginNavigation();
+    _voiceController.deactivateScreen(_voiceScreenToken);
   }
 
   void _syncVoiceSessionState() {
@@ -256,7 +319,7 @@ class _McqScreenState extends State<McqScreen>
     try {
       final available = await _speech.initialize(
         onError: (error) {
-          if (!mounted) return;
+          if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech error: $error',
             screen: QuizVoiceScreen.mcq,
@@ -269,10 +332,15 @@ class _McqScreenState extends State<McqScreen>
           _scheduleListeningRestart();
         },
         onStatus: (status) {
-          if (!mounted) return;
+          if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech status: $status',
             screen: QuizVoiceScreen.mcq,
+          );
+          _voiceController.onSpeechStatus(
+            status,
+            screen: QuizVoiceScreen.mcq,
+            screenToken: _voiceScreenToken,
           );
           if (status == 'listening' &&
               (!_isListening || _isPreparingToListen)) {
@@ -313,7 +381,11 @@ class _McqScreenState extends State<McqScreen>
         });
       }
       return available;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _voiceController.logEvent(
+        'speech initialize failed: $error\n$stackTrace',
+        screen: QuizVoiceScreen.mcq,
+      );
       if (mounted) {
         setState(() {
           _speechAvailable = false;
@@ -341,7 +413,8 @@ class _McqScreenState extends State<McqScreen>
     Duration delay = const Duration(milliseconds: 700),
   ]) {
     _listeningRestartTimer?.cancel();
-    if (!_voiceModeEnabled) return;
+    if (!_voiceModeEnabled || !_autoListenEnabled) return;
+    final retryDelay = enforceMinimumVoiceListenRetryDelay(delay);
     if (mounted &&
         !_isListening &&
         !_isSpeaking &&
@@ -349,8 +422,9 @@ class _McqScreenState extends State<McqScreen>
         !_isPreparingToListen) {
       setState(() => _isPreparingToListen = true);
     }
-    _listeningRestartTimer = Timer(delay, () {
+    _listeningRestartTimer = Timer(retryDelay, () {
       if (!mounted ||
+          !_isCurrentVoiceScreen ||
           !_voiceModeEnabled ||
           _isListening ||
           _isSpeaking ||
@@ -367,11 +441,17 @@ class _McqScreenState extends State<McqScreen>
   }) {
     _voiceLoopRecoveryTimer?.cancel();
     if (!_voiceModeEnabled || retries <= 0) return;
-    _voiceLoopRecoveryTimer = Timer(delay, () {
-      if (!mounted || !_voiceModeEnabled || _isListening) return;
+    final retryDelay = enforceMinimumVoiceListenRetryDelay(delay);
+    _voiceLoopRecoveryTimer = Timer(retryDelay, () {
+      if (!mounted ||
+          !_isCurrentVoiceScreen ||
+          !_voiceModeEnabled ||
+          _isListening) {
+        return;
+      }
       if (_isSpeaking) {
         _scheduleVoiceLoopRecovery(
-          delay: const Duration(milliseconds: 900),
+          delay: minimumVoiceListenRetryDelay,
           retries: retries - 1,
         );
         return;
@@ -389,6 +469,13 @@ class _McqScreenState extends State<McqScreen>
       final systemLocale = await _speech.systemLocale();
       final locales = await _speech.locales();
       final localeIds = locales.map((locale) => locale.localeId).toSet();
+      final configuredLocaleId =
+          _voiceController.assistantSettings.value.languageCode;
+      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
+      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
+      if (localeIds.contains(configuredSpeechLocaleId)) {
+        return configuredSpeechLocaleId;
+      }
 
       final String? systemLocaleId = systemLocale?.localeId;
       if (systemLocaleId != null &&
@@ -663,6 +750,12 @@ class _McqScreenState extends State<McqScreen>
     return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  String _shortSpeechText(String text, {int maxLength = 600}) {
+    final normalized = _normalizeSpeechText(text);
+    if (normalized.length <= maxLength) return normalized;
+    return '${normalized.substring(0, maxLength).trim()}...';
+  }
+
   List<String> _buildQuestionSpeechSegments(_Question question) {
     final segments = <String>[
       'Question ${question.number}.',
@@ -691,12 +784,26 @@ class _McqScreenState extends State<McqScreen>
     await _tts.stop();
   }
 
-  Future<void> _speakCurrentQuestion() async {
+  Future<void> _speakCurrentQuestion({bool force = false}) async {
     _voiceController.logEvent(
       'speak current question',
       screen: QuizVoiceScreen.mcq,
     );
     final _Question question = _questions[_currentIndex];
+    final segments = _buildQuestionSpeechSegments(question);
+    final questionKey = widget.examId?.trim().isNotEmpty == true
+        ? widget.examId!.trim()
+        : widget.courseTitle;
+    final shouldSpeak = _voiceController.speakOnce(
+      key: 'question_${questionKey}_$_currentIndex',
+      text: segments.join(' '),
+      force: force,
+      screen: QuizVoiceScreen.mcq,
+    );
+    if (!shouldSpeak) {
+      _scheduleListeningRestart();
+      return;
+    }
     await _speech.cancel();
     await _stopTtsPlayback();
     if (!mounted) return;
@@ -705,7 +812,7 @@ class _McqScreenState extends State<McqScreen>
       _isListening = false;
     });
     _syncVoiceSessionState();
-    final segments = _buildQuestionSpeechSegments(question);
+    await _applyVoiceAssistantSettings();
     final sessionId = ++_ttsSessionId;
     _isQuestionNarrationActive = true;
 
@@ -722,7 +829,7 @@ class _McqScreenState extends State<McqScreen>
       if (isActiveSession) {
         setState(() => _isSpeaking = false);
         _syncVoiceSessionState();
-        if (_voiceModeEnabled && !_isListening) {
+        if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
           _scheduleListeningRestart(const Duration(milliseconds: 500));
         }
       }
@@ -736,7 +843,7 @@ class _McqScreenState extends State<McqScreen>
       setState(() => _isSpeaking = false);
       return;
     }
-    await _speakCurrentQuestion();
+    await _speakCurrentQuestion(force: true);
   }
 
   /// Speaks [text] and, in voice mode, auto-starts listening when done.
@@ -747,6 +854,7 @@ class _McqScreenState extends State<McqScreen>
     );
     await _speech.cancel();
     await _stopTtsPlayback();
+    await _applyVoiceAssistantSettings();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
@@ -802,6 +910,7 @@ class _McqScreenState extends State<McqScreen>
 
   /// Start the mic. TTS must be finished before calling — they never overlap.
   Future<void> _startListening() async {
+    if (!_isCurrentVoiceScreen) return;
     _voiceController.logEvent(
       'start listening requested',
       screen: QuizVoiceScreen.mcq,
@@ -814,6 +923,8 @@ class _McqScreenState extends State<McqScreen>
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
+    await _tts.stop();
+    if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
       if (!speechReady) {
@@ -825,25 +936,14 @@ class _McqScreenState extends State<McqScreen>
       'speech listen call starting',
       screen: QuizVoiceScreen.mcq,
     );
-    bool started = false;
-    try {
-      started = await _speech.listen(
-        onResult: _onSpeechResult,
-        listenFor: const Duration(minutes: 1),
-        pauseFor: const Duration(minutes: 1),
-        localeId: _speechLocaleId,
-        listenOptions: SpeechListenOptions(
-          cancelOnError: false,
-          partialResults: true,
-        ),
-      );
-    } catch (error) {
-      _voiceController.logEvent(
-        'speech listen start failed: $error',
-        screen: QuizVoiceScreen.mcq,
-      );
-    }
-    if (!mounted) return;
+    final started = await startSpeechListeningSafely(
+      speech: _speech,
+      controller: _voiceController,
+      screen: QuizVoiceScreen.mcq,
+      onResult: _onSpeechResult,
+      localeId: _speechLocaleId,
+    );
+    if (!mounted || !_isCurrentVoiceScreen) return;
     if (!started) {
       setState(() {
         _isListening = false;
@@ -871,7 +971,7 @@ class _McqScreenState extends State<McqScreen>
   /// Tap-while-reading: stop TTS first, then open the mic.
   Future<void> _interruptAndListen() async {
     await _stopTtsPlayback();
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
       _isSpeaking = false;
       _isListening = false;
@@ -879,12 +979,12 @@ class _McqScreenState extends State<McqScreen>
     });
     _syncVoiceSessionState();
     await Future.delayed(const Duration(milliseconds: 250));
-    if (mounted) unawaited(_startListening());
+    if (mounted && _isCurrentVoiceScreen) unawaited(_startListening());
   }
 
   Future<void> _stopListening() async {
     await _speech.stop();
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
       _isListening = false;
       _isPreparingToListen = false;
@@ -975,7 +1075,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    if (!mounted) return;
+    if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -993,59 +1093,82 @@ class _McqScreenState extends State<McqScreen>
         screen: QuizVoiceScreen.mcq,
       );
       final text = result.recognizedWords.trim();
-      if (text.isNotEmpty) _handleVoiceCommand(text);
+      if (text.isNotEmpty) unawaited(_handleVoiceCommand(text));
     }
   }
 
   // ─── Voice command dispatcher ──────────────────────────────────────────────
 
-  void _handleVoiceCommand(String rawText) {
-    final result = QuizVoiceIntentParser.parse(QuizVoiceScreen.mcq, rawText);
+  Future<void> _handleVoiceCommand(String rawText) async {
+    final decision = await _voiceCommandProcessor.process(
+      screen: QuizVoiceScreen.mcq,
+      heardText: rawText,
+      sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
+    );
+    final result = decision.parseResult;
+    final questionNumber = decision.questionNumber;
     _voiceController.logEvent(
-      'parsed intent: ${result.intent.name}'
-      '${result.numberValue != null ? ' (${result.numberValue})' : ''}',
+      'parsed intent: ${result.intent?.name ?? 'none'}'
+      '${questionNumber != null ? ' ($questionNumber)' : ''}'
+      ' confidence: ${result.confidence.toStringAsFixed(2)}',
       screen: QuizVoiceScreen.mcq,
     );
-
-    // ── Select option (A / B / C / D) ──
-    final optionIndex = _parseOptionLetter(result.normalizedText);
-    if (optionIndex != null) {
-      _selectViaVoice(optionIndex);
+    _voiceController.markCommandResult(
+      command: result.intent == null
+          ? null
+          : QuizVoiceIntentParser.commandLabelFor(result.intent!),
+      confidence: result.confidence,
+      retry: decision.feedback,
+    );
+    if (!decision.shouldExecute && decision.feedback != null) {
+      unawaited(_speakFeedback(decision.feedback!));
       return;
     }
 
-    switch (result.intent) {
-      case QuizVoiceIntent.nextQuestion:
+    switch (decision.intent) {
+      case VoiceIntent.optionA:
+        _selectViaVoice(0);
+        return;
+      case VoiceIntent.optionB:
+        _selectViaVoice(1);
+        return;
+      case VoiceIntent.optionC:
+        _selectViaVoice(2);
+        return;
+      case VoiceIntent.optionD:
+        _selectViaVoice(3);
+        return;
+      case VoiceIntent.next:
         _nextViaVoice();
         return;
-      case QuizVoiceIntent.goBack:
+      case VoiceIntent.back:
         _previousViaVoice();
         return;
-      case QuizVoiceIntent.questionNumber:
-        if (result.numberValue != null) {
-          _goToQuestionViaVoice(result.numberValue! - 1);
+      case VoiceIntent.questionNumber:
+        if (questionNumber != null) {
+          _goToQuestionViaVoice(questionNumber - 1);
           return;
         }
         break;
-      case QuizVoiceIntent.flagged:
+      case VoiceIntent.flag:
         _flagViaVoice();
         return;
-      case QuizVoiceIntent.readSummary:
-        unawaited(_speakCurrentQuestion());
+      case VoiceIntent.repeat:
+        unawaited(_speakCurrentQuestion(force: true));
         return;
-      case QuizVoiceIntent.explainQuestion:
+      case VoiceIntent.explain:
         _explanationViaVoice();
         return;
-      case QuizVoiceIntent.openReview:
+      case VoiceIntent.review:
         _reviewViaVoice();
         return;
-      case QuizVoiceIntent.submit:
+      case VoiceIntent.submit:
         _submitViaVoice();
         return;
-      case QuizVoiceIntent.stopVoiceMode:
+      case VoiceIntent.stopVoice:
         unawaited(_disableVoiceModeWithFeedback('Voice mode turned off.'));
         return;
-      case QuizVoiceIntent.pauseAssistant:
+      case VoiceIntent.pauseAssistant:
         unawaited(_speech.cancel());
         if (!mounted) return;
         setState(() {
@@ -1056,7 +1179,7 @@ class _McqScreenState extends State<McqScreen>
           if (mounted && _voiceModeEnabled) unawaited(_startListening());
         });
         return;
-      case QuizVoiceIntent.help:
+      case VoiceIntent.help:
         unawaited(
           _speakFeedback(
             'Available voice commands. '
@@ -1074,21 +1197,7 @@ class _McqScreenState extends State<McqScreen>
           ),
         );
         return;
-      case QuizVoiceIntent.unknown:
-      case QuizVoiceIntent.startQuiz:
-      case QuizVoiceIntent.timedModeOn:
-      case QuizVoiceIntent.timedModeOff:
-      case QuizVoiceIntent.maxQuestions:
-      case QuizVoiceIntent.minQuestions:
-      case QuizVoiceIntent.increaseQuestions:
-      case QuizVoiceIntent.decreaseQuestions:
-      case QuizVoiceIntent.setQuestionCount:
-      case QuizVoiceIntent.startTest:
-      case QuizVoiceIntent.status:
-      case QuizVoiceIntent.retry:
-      case QuizVoiceIntent.cancel:
-      case QuizVoiceIntent.confirmSubmit:
-      case QuizVoiceIntent.unanswered:
+      default:
         break;
     }
 
@@ -1100,121 +1209,6 @@ class _McqScreenState extends State<McqScreen>
         'Try one of these commands: first, second, next, review, or help.',
       ),
     );
-  }
-
-  /// Returns 0–3 if [text] maps to an answer letter, otherwise null.
-  ///
-  /// Tries five layers so natural speech and number-based input both work.
-  int? _parseOptionLetter(String text) {
-    // ── 0. Raw digit / number-word fast-path ──────────────────────────────
-    // STT sometimes returns digits; also lets users say "1","2","3","4".
-    switch (text.trim()) {
-      case '1':
-        return 0;
-      case '2':
-        return 1;
-      case '3':
-        return 2;
-      case '4':
-        return 3;
-    }
-
-    // ── Word map — letters + numbers + ordinals + homophones ──────────────
-    // 'A' is the hardest because it doubles as an article.
-    // Numbers and ordinals are the most reliable STT output for option picks.
-    const Map<String, int> wordMap = {
-      // ── A / option 1 / first ──
-      'a': 0, 'ay': 0, 'aye': 0, 'eh': 0, 'hey': 0, 'hay': 0,
-      'alpha': 0, 'ace': 0, 'eight': 0,
-      'one': 0, 'first': 0, 'won': 0,
-      // ── B / option 2 / second ──
-      'b': 1, 'be': 1, 'bee': 1, 'bi': 1, 'by': 1, 'bye': 1,
-      'bay': 1, 'buy': 1, 'bea': 1, 'bravo': 1,
-      'two': 1, 'second': 1, 'to': 1, 'too': 1,
-      // ── C / option 3 / third ──
-      'c': 2, 'see': 2, 'sea': 2, 'si': 2, 'key': 2, 'charlie': 2,
-      'three': 2, 'third': 2, 'free': 2,
-      // ── D / option 4 / fourth ──
-      'd': 3, 'de': 3, 'dee': 3, 'di': 3, 'day': 3, 'delta': 3,
-      'four': 3, 'fourth': 3, 'for': 3, 'fore': 3,
-    };
-
-    final words = text
-        .split(RegExp(r'\s+'))
-        .map((w) => w.replaceAll(RegExp(r'[^a-z]'), ''))
-        .where((w) => w.isNotEmpty)
-        .toList();
-
-    // ── 1. Full-text exact match ───────────────────────────────────────────
-    if (wordMap.containsKey(text)) return wordMap[text];
-
-    // ── 2. Single word (strip punctuation) ────────────────────────────────
-    if (words.length == 1 && wordMap.containsKey(words[0])) {
-      return wordMap[words[0]];
-    }
-
-    // ── 3. Explicit selection phrases anywhere in the text ─────────────────
-    // Handles: "I think it's B", "my answer is 3", "I'll go with first"
-    const selectionTriggers = [
-      'option',
-      'number',
-      'select',
-      'choose',
-      'answer',
-      'pick',
-      'i choose',
-      'i pick',
-      'i select',
-      'i think',
-      "i'll go with",
-      'i ll go with',
-      'go with',
-      "it's",
-      'it s',
-      'its',
-      'my answer is',
-      'the answer is',
-      'answer is',
-      "i'll say",
-      'i ll say',
-      'i say',
-      'i want',
-      'i think it',
-    ];
-    for (final trigger in selectionTriggers) {
-      final idx = text.indexOf(trigger);
-      if (idx < 0) continue;
-      final after = text.substring(idx + trigger.length).trim();
-      // Check digit immediately after trigger (e.g. "option 2")
-      final digitMatch = RegExp(r'^([1-4])').firstMatch(after);
-      if (digitMatch != null) {
-        return int.parse(digitMatch.group(1)!) - 1;
-      }
-      final firstWord = after
-          .split(RegExp(r'\s+'))
-          .map((w) => w.replaceAll(RegExp(r'[^a-z]'), ''))
-          .firstWhere((w) => w.isNotEmpty, orElse: () => '');
-      if (wordMap.containsKey(firstWord)) return wordMap[firstWord];
-    }
-
-    // ── 4. Last word is a letter / number ─────────────────────────────────
-    // Handles: "I think B", "probably third", "going with two"
-    // Skip bare 'a' here to avoid article false-positives.
-    if (words.isNotEmpty) {
-      final last = words.last;
-      if (last != 'a' && wordMap.containsKey(last)) return wordMap[last];
-    }
-
-    // ── 5. Short input (≤ 3 words) — scan every word ──────────────────────
-    // Handles: "it's b", "is see", "say two", "think dee"
-    if (words.length <= 3) {
-      for (final word in words) {
-        if (word == 'a' && words.length == 1) return 0;
-        if (word != 'a' && wordMap.containsKey(word)) return wordMap[word];
-      }
-    }
-
-    return null;
   }
 
   // ─── Voice actions ─────────────────────────────────────────────────────────
@@ -1376,7 +1370,7 @@ class _McqScreenState extends State<McqScreen>
     if (!_showExplanation) setState(() => _showExplanation = true);
     final question = _questions[_currentIndex];
     final text = question.explanation.isNotEmpty
-        ? question.explanation
+        ? _shortSpeechText(question.explanation)
         : 'No explanation available for this question.';
     unawaited(_speakFeedback('Explanation. $text'));
   }

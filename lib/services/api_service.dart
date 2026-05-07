@@ -15,6 +15,17 @@ import 'storage_service.dart';
 class ApiService {
   final StorageService _storageService = StorageService();
   static Completer<bool>? _refreshCompleter;
+  static const int _maxDebugLogChars = 700;
+
+  void _debugPrintLimited(String label, Object? value) {
+    final raw = value?.toString() ?? 'null';
+    final compact = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final text = compact.length > _maxDebugLogChars
+        ? '${compact.substring(0, _maxDebugLogChars)}... '
+              '[truncated ${compact.length - _maxDebugLogChars} chars]'
+        : compact;
+    debugPrint('$label$text');
+  }
 
   Future<void> _clearInvalidSession() async {
     await _storageService.clearSessionData();
@@ -152,7 +163,7 @@ class ApiService {
       debugPrint('📡 HTTP POST Request:');
       debugPrint('   URL: $uri');
       debugPrint('   Headers: $headers');
-      debugPrint('   Body: $bodyJson');
+      _debugPrintLimited('   Body: ', bodyJson);
 
       final responseFuture = http.post(uri, headers: headers, body: bodyJson);
       final response = timeout == null
@@ -161,7 +172,7 @@ class ApiService {
 
       debugPrint('📡 HTTP POST Response:');
       debugPrint('   Status Code: ${response.statusCode}');
-      debugPrint('   Response Body: ${response.body}');
+      _debugPrintLimited('   Response Body: ', response.body);
       debugPrint('   Response Headers: ${response.headers}');
 
       if (response.statusCode == 401 && allowRefresh) {
@@ -294,7 +305,7 @@ class ApiService {
 
       debugPrint('📡 HTTP PUT Multipart Response:');
       debugPrint('   Status Code: ${response.statusCode}');
-      debugPrint('   Response Body: ${response.body}');
+      _debugPrintLimited('   Response Body: ', response.body);
 
       if (response.statusCode == 401 && allowRefresh) {
         final refreshed = await _refreshToken();
@@ -426,7 +437,7 @@ class ApiService {
 
       debugPrint('🔍 Parsing Response:');
       debugPrint('   Status Code: ${response.statusCode}');
-      debugPrint('   Response Structure: $jsonData');
+      _debugPrintLimited('   Response Structure: ', jsonData);
 
       // Handle response structure: {success: true, message: "...", data: {...}}
       final success =
@@ -446,7 +457,7 @@ class ApiService {
             debugPrint('❌ Error parsing data with fromJson:');
             debugPrint('   Error: $e');
             debugPrint('   Stack Trace: $stackTrace');
-            debugPrint('   Response Data: $responseData');
+            _debugPrintLimited('   Response Data: ', responseData);
             // Return success but without parsed data
             parsedData = null;
           }
@@ -472,7 +483,7 @@ class ApiService {
       debugPrint('❌ Error in _handleResponse:');
       debugPrint('   Error: $e');
       debugPrint('   Stack Trace: $stackTrace');
-      debugPrint('   Response Body: ${response.body}');
+      _debugPrintLimited('   Response Body: ', response.body);
       final userMessage = ErrorHandler.getMessageFromErrorBody(
         response.body,
         statusCode: response.statusCode,
@@ -513,8 +524,8 @@ class ApiService {
     debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.register}');
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
-    debugPrint('   Body (JSON): $bodyJson');
-    debugPrint('   Body (Map): $body');
+    _debugPrintLimited('   Body (JSON): ', bodyJson);
+    _debugPrintLimited('   Body (Map): ', body);
 
     final response = await post<AuthResponse>(
       ApiEndpoints.register,
@@ -565,8 +576,8 @@ class ApiService {
     );
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
-    debugPrint('   Body (JSON): $bodyJson');
-    debugPrint('   Body (Map): $body');
+    _debugPrintLimited('   Body (JSON): ', bodyJson);
+    _debugPrintLimited('   Body (Map): ', body);
 
     final response = await post<OtpResponse>(
       ApiEndpoints.forgetPassword,
@@ -600,8 +611,8 @@ class ApiService {
     );
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
-    debugPrint('   Body (JSON): $bodyJson');
-    debugPrint('   Body (Map): $body');
+    _debugPrintLimited('   Body (JSON): ', bodyJson);
+    _debugPrintLimited('   Body (Map): ', body);
 
     final response = await post<Map<String, dynamic>>(
       ApiEndpoints.resetPassword,
@@ -637,8 +648,8 @@ class ApiService {
     debugPrint('   Endpoint: ${AppConstants.baseUrl}${ApiEndpoints.login}');
     debugPrint('   Method: POST');
     debugPrint('   Content-Type: application/json');
-    debugPrint('   Body (JSON): $bodyJson');
-    debugPrint('   Body (Map): $body');
+    _debugPrintLimited('   Body (JSON): ', bodyJson);
+    _debugPrintLimited('   Body (Map): ', body);
 
     final response = await post<AuthResponse>(
       ApiEndpoints.login,
