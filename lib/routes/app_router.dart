@@ -287,6 +287,7 @@ GoRouter getRouter() {
           String? bodyOfKnowledgeContent;
           bool timedMode = true;
           bool voiceModeEnabled = false;
+          bool voicePracticeMode = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -323,6 +324,10 @@ GoRouter getRouter() {
               extra['voiceModeEnabled'],
               fallback: voiceModeEnabled,
             );
+            voicePracticeMode = parseBool(
+              extra['voicePracticeMode'],
+              fallback: voicePracticeMode,
+            );
           }
           return ExamSessionScreen(
             courseTitle: title,
@@ -333,6 +338,7 @@ GoRouter getRouter() {
             bodyOfKnowledgeContent: bodyOfKnowledgeContent,
             timedMode: timedMode,
             voiceModeEnabled: voiceModeEnabled,
+            voicePracticeMode: voicePracticeMode,
           );
         },
       ),
@@ -348,6 +354,7 @@ GoRouter getRouter() {
           bool timedMode = true;
           bool regenerate = false;
           bool voiceModeEnabled = false;
+          bool voicePracticeMode = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -381,6 +388,10 @@ GoRouter getRouter() {
               extra['voiceModeEnabled'],
               fallback: voiceModeEnabled,
             );
+            voicePracticeMode = parseBool(
+              extra['voicePracticeMode'],
+              fallback: voicePracticeMode,
+            );
           }
           return ExamLoadingScreen(
             courseTitle: title,
@@ -390,6 +401,7 @@ GoRouter getRouter() {
             timedMode: timedMode,
             regenerate: regenerate,
             voiceModeEnabled: voiceModeEnabled,
+            voicePracticeMode: voicePracticeMode,
           );
         },
       ),
@@ -408,6 +420,7 @@ GoRouter getRouter() {
           bool timedMode = true;
           int? sessionId;
           bool voiceModeEnabled = false;
+          bool voicePracticeMode = false;
 
           int? parseInt(dynamic value) {
             if (value == null) return null;
@@ -452,6 +465,10 @@ GoRouter getRouter() {
               extra['voiceModeEnabled'],
               fallback: voiceModeEnabled,
             );
+            voicePracticeMode = parseBool(
+              extra['voicePracticeMode'],
+              fallback: voicePracticeMode,
+            );
             final rawSessionId = extra['sessionId'];
             if (rawSessionId != null) {
               sessionId = int.tryParse(rawSessionId.toString());
@@ -468,6 +485,7 @@ GoRouter getRouter() {
             durationMinutes: durationMinutes,
             timedMode: timedMode,
             voiceModeEnabled: voiceModeEnabled,
+            voicePracticeMode: voicePracticeMode,
           );
         },
       ),
@@ -478,7 +496,7 @@ GoRouter getRouter() {
           final extra = state.extra;
           String title = 'API 570 - Piping Inspector';
           List<dynamic> questions = const [];
-          Map<int, int> selected = const {};
+          Map<int, Set<int>> selected = const {};
           Set<int> flagged = const {};
           String? examId;
           List<int>? timeSpentSec;
@@ -519,12 +537,29 @@ GoRouter getRouter() {
                 returnQuestionIndex;
             final rawSelected = extra['selected'];
             if (rawSelected is Map) {
-              selected = rawSelected.map(
-                (key, value) => MapEntry(
-                  int.tryParse(key.toString()) ?? 0,
-                  int.tryParse(value.toString()) ?? 0,
-                ),
-              );
+              selected = rawSelected.map<int, Set<int>>((key, value) {
+                final index = int.tryParse(key.toString()) ?? 0;
+                if (value is Set) {
+                  return MapEntry(
+                    index,
+                    value
+                        .map((item) => int.tryParse(item.toString()) ?? -1)
+                        .where((item) => item >= 0)
+                        .toSet(),
+                  );
+                }
+                if (value is List) {
+                  return MapEntry(
+                    index,
+                    value
+                        .map((item) => int.tryParse(item.toString()) ?? -1)
+                        .where((item) => item >= 0)
+                        .toSet(),
+                  );
+                }
+                final parsed = int.tryParse(value.toString()) ?? -1;
+                return MapEntry(index, parsed >= 0 ? <int>{parsed} : <int>{});
+              });
             }
             final rawFlagged = extra['flagged'];
             if (rawFlagged is Set) {
@@ -537,6 +572,9 @@ GoRouter getRouter() {
                   .toSet();
             }
           }
+          final voiceAnalytics = extra is Map && extra['voiceAnalytics'] is Map
+              ? Map<String, dynamic>.from(extra['voiceAnalytics'] as Map)
+              : null;
           return ExamReviewScreen(
             courseTitle: title,
             questions: questions,
@@ -544,6 +582,7 @@ GoRouter getRouter() {
             flagged: flagged,
             examId: examId,
             timeSpentSec: timeSpentSec,
+            voiceAnalytics: voiceAnalytics,
             autoSubmit: autoSubmit,
             voiceModeEnabled: voiceModeEnabled,
             returnQuestionIndex: returnQuestionIndex,

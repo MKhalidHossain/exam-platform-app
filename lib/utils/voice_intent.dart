@@ -27,5 +27,6 @@ enum VoiceIntent {
   cancel,
   questionNumber,
   pauseAssistant,
+  resumeAssistant,
   unanswered,
 }

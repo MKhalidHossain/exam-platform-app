@@ -26,6 +26,7 @@ class ExamSessionScreen extends StatefulWidget {
   final String? bodyOfKnowledgeContent;
   final bool timedMode;
   final bool voiceModeEnabled;
+  final bool voicePracticeMode;
 
   const ExamSessionScreen({
     super.key,
@@ -37,6 +38,7 @@ class ExamSessionScreen extends StatefulWidget {
     this.bodyOfKnowledgeContent,
     this.timedMode = true,
     this.voiceModeEnabled = false,
+    this.voicePracticeMode = false,
   });
 
   @override
@@ -76,7 +78,8 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
     super.initState();
     _tts = FlutterTts();
     _voiceModeEnabled =
-        widget.voiceModeEnabled || _voiceController.isEnabledValue;
+        widget.voicePracticeMode &&
+        (widget.voiceModeEnabled || _voiceController.isEnabledValue);
     _configureTts();
     unawaited(_primeSpeechAvailability());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -668,6 +671,7 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
             widget.totalQuestionCount ?? widget.questionCount ?? 1,
         'timedMode': widget.timedMode,
         'voiceModeEnabled': _voiceModeEnabled,
+        'voicePracticeMode': widget.voicePracticeMode,
       },
     );
   }
@@ -712,12 +716,13 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
                     ),
                   ),
                 ),
-                _SessionVoiceModeButton(
-                  isEnabled: _voiceModeEnabled,
-                  isListening: _isListening || _isPreparingToListen,
-                  speechAvailable: _speechAvailable,
-                  onTap: _toggleVoiceMode,
-                ),
+                if (widget.voicePracticeMode)
+                  _SessionVoiceModeButton(
+                    isEnabled: _voiceModeEnabled,
+                    isListening: _isListening || _isPreparingToListen,
+                    speechAvailable: _speechAvailable,
+                    onTap: _toggleVoiceMode,
+                  ),
               ],
             ),
             const SizedBox(height: 26),
@@ -752,9 +757,9 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
             ),
             const SizedBox(height: 18),
             _SessionCard(
-              title: 'Start Test',
+              title: 'Start Manual Practice',
               description:
-                  'Begin your full exam simulation with timed closed-book and open-book sections.',
+                  'Begin manual practice with full question interaction.',
               isPrimary: true,
               onTap: _startQuiz,
             ),

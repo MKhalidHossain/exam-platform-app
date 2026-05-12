@@ -66,6 +66,7 @@ class ExamService {
     required List<dynamic> answers,
     List<String>? flaggedQuestionIds,
     List<int>? timeSpentSec,
+    Map<String, dynamic>? reviewData,
   }) async {
     final body = <String, dynamic>{'answers': answers};
     if (flaggedQuestionIds != null) {
@@ -73,6 +74,9 @@ class ExamService {
     }
     if (timeSpentSec != null) {
       body['timeSpent'] = timeSpentSec;
+    }
+    if (reviewData != null) {
+      body['reviewData'] = reviewData;
     }
 
     return _apiService.post<Map<String, dynamic>>(

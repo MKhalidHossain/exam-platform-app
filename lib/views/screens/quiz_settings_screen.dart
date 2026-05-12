@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../controllers/quiz_voice_controller.dart';
@@ -12,13 +12,12 @@ import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../services/api_service.dart';
 import '../../utils/api_endpoints.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
-import '../widgets/quiz_voice_debug_panel.dart';
-import '../widgets/quiz_voice_overlay.dart';
 
 class QuizSettingsScreen extends StatefulWidget {
   final String courseTitle;
@@ -425,44 +424,6 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     }
   }
 
-  Future<void> _toggleVoiceMode() async {
-    if (_voiceModeEnabled) {
-      _listeningRestartTimer?.cancel();
-      await _tts.stop();
-      await _speech.cancel();
-      if (!mounted) return;
-      setState(() {
-        _voiceModeEnabled = false;
-        _isListening = false;
-        _isSpeaking = false;
-        _heardText = '';
-      });
-      _syncVoiceSessionState();
-      return;
-    }
-
-    final speechReady = await _initSpeech(requestPermission: true);
-    if (!speechReady) {
-      await _showSpeechUnavailableMessage();
-      return;
-    }
-
-    setState(() {
-      _voiceModeEnabled = true;
-      _heardText = '';
-    });
-    _bindVoiceSession(requestEntryAction: false);
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (mounted && _voiceModeEnabled) {
-      _voiceController.setVoiceEnabled(
-        true,
-        screen: QuizVoiceScreen.quizSettings,
-        requestEntryAction: true,
-      );
-      await _speakSettingsSummary();
-    }
-  }
-
   Future<void> _showSpeechUnavailableMessage() async {
     final hasPermission = await _speech.hasPermission;
     if (!mounted) return;
@@ -599,31 +560,6 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       'speech listen active',
       screen: QuizVoiceScreen.quizSettings,
     );
-  }
-
-  Future<void> _stopListening() async {
-    await _speech.stop();
-    if (!mounted || !_isCurrentVoiceScreen) return;
-    setState(() {
-      _isListening = false;
-      _isPreparingToListen = false;
-    });
-    _syncVoiceSessionState();
-  }
-
-  Future<void> _interruptAndListen() async {
-    await _tts.stop();
-    if (!mounted || !_isCurrentVoiceScreen) return;
-    setState(() {
-      _isSpeaking = false;
-      _isListening = false;
-      _isPreparingToListen = false;
-    });
-    _syncVoiceSessionState();
-    await Future.delayed(const Duration(milliseconds: 250));
-    if (mounted && _isCurrentVoiceScreen) {
-      unawaited(_startListening());
-    }
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
@@ -802,10 +738,143 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         'bodyOfKnowledgeContent': widget.bodyOfKnowledgeContent,
         'timedMode': _effectiveTimedMode,
         'voiceModeEnabled': _voiceModeEnabled,
+        'voicePracticeMode': false,
       },
     );
     if (!mounted || !_voiceModeEnabled) return;
     _bindVoiceSession(requestEntryAction: false);
+  }
+
+  Future<void> _startManualPractice() async {
+    if (_voiceModeEnabled) {
+      await _speech.cancel();
+      await _tts.stop();
+      if (!mounted) return;
+      setState(() {
+        _voiceModeEnabled = false;
+        _isListening = false;
+        _isSpeaking = false;
+        _heardText = '';
+      });
+      _syncVoiceSessionState();
+    }
+    await _startQuiz();
+  }
+
+  Future<void> _startVoicePractice() async {
+    final speechReady = await _initSpeech(requestPermission: true);
+    if (!speechReady) {
+      await _showSpeechUnavailableMessage();
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyAccepted =
+        prefs.getBool(AppConstants.voicePracticeDisclaimerAcceptedKey) ?? false;
+
+    if (!alreadyAccepted) {
+      final accepted = await _showVoicePracticeDisclaimer();
+      if (accepted != true) return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _voiceModeEnabled = true;
+      _heardText = '';
+    });
+    _voiceController.setVoiceEnabled(
+      true,
+      screen: QuizVoiceScreen.quizSettings,
+    );
+
+    final examId = widget.examId?.trim();
+    if (examId == null || examId.isEmpty) {
+      unawaited(
+        _speakFeedback('Exam ID is missing. Please go back and try again.'),
+      );
+      return;
+    }
+
+    _cacheSelectedQuestionCount(_effectiveQuestionCount.toInt());
+    unawaited(_tts.stop());
+    unawaited(_speech.cancel());
+    _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examLoading);
+    context.push(
+      '/exam-loading',
+      extra: {
+        'courseTitle': widget.courseTitle,
+        'examId': examId,
+        'questionCount': _effectiveQuestionCount.toInt(),
+        'totalQuestionCount': _totalQuestions,
+        'timedMode': false,
+        'voiceModeEnabled': true,
+        'voicePracticeMode': true,
+      },
+    );
+  }
+
+  Future<bool?> _showVoicePracticeDisclaimer() async {
+    var dontShowAgain = false;
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Voice Practice Safety'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Use Voice Practice only when it is safe to do so. Do not interact with the app if you are distracted or driving in unsafe conditions. Your safety comes first.',
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Voice Practice Mode is provided for educational purposes only. Users must use the feature safely and avoid using it in any situation that may cause distraction or risk.',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: dontShowAgain,
+                    onChanged: (value) {
+                      setDialogState(() => dontShowAgain = value ?? false);
+                    },
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text("Don't show again"),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    if (dontShowAgain) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(
+                        AppConstants.voicePracticeDisclaimerAcceptedKey,
+                        true,
+                      );
+                    }
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('I Understand, Start Voice Practice'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _goBackHome() {
@@ -891,12 +960,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         backgroundColor: const Color(0xFFF2F5FF),
         body: SafeArea(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              12,
-              20,
-              _voiceModeEnabled ? 156 : 24,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             children: [
               Row(
                 children: [
@@ -914,12 +978,6 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
                         color: Color(0xFF2D4F88),
                       ),
                     ),
-                  ),
-                  _SettingsVoiceModeButton(
-                    isEnabled: _voiceModeEnabled,
-                    isListening: _isListening || _isPreparingToListen,
-                    speechAvailable: _speechAvailable,
-                    onTap: _toggleVoiceMode,
                   ),
                 ],
               ),
@@ -1074,329 +1132,50 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
                 ),
                 const SizedBox(height: 24),
               ],
-              _PrimaryButton(label: 'Start Quiz', onTap: _startQuiz),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final useRow = constraints.maxWidth >= 640;
+                  final manualButton = _PrimaryButton(
+                    label: 'Start Manual Practice',
+                    subtext:
+                        'Begin manual practice with full question interaction.',
+                    icon: Icons.touch_app_rounded,
+                    onTap: _startManualPractice,
+                  );
+                  final voiceButton = _PrimaryButton(
+                    label: 'Start Voice Practice',
+                    subtext: 'Practice hands-free using voice commands.',
+                    icon: Icons.play_circle_fill_rounded,
+                    onTap: _startVoicePractice,
+                  );
+                  if (useRow) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: manualButton),
+                        const SizedBox(width: 12),
+                        Expanded(child: voiceButton),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      manualButton,
+                      const SizedBox(height: 12),
+                      voiceButton,
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 18),
               const ApiDisclaimerSection(),
             ],
           ),
         ),
-        bottomSheet: _voiceModeEnabled
-            ? QuizVoiceOverlay(
-                isListening: _isListening || _isPreparingToListen,
-                isPreparingToListen: _isPreparingToListen,
-                isSpeaking: _isSpeaking,
-                heardText: _heardText,
-                onMicTap: _isSpeaking
-                    ? _interruptAndListen
-                    : (_isListening ? _stopListening : _startListening),
-                listeningHint:
-                    'Say start quiz, set questions, timed mode on or off, or go back.',
-                speakingHint: 'Assistant is speaking.',
-                idleHint: 'Tap the mic or say a settings command.',
-                instructionItems: const <String>[
-                  'start quiz',
-                  'set questions',
-                  'timed mode on',
-                  'timed mode off',
-                  'go back',
-                ],
-              )
-            : null,
+        bottomSheet: null,
       );
     });
-  }
-}
-
-class _SettingsVoiceModeButton extends StatelessWidget {
-  final bool isEnabled;
-  final bool isListening;
-  final bool speechAvailable;
-  final VoidCallback onTap;
-
-  const _SettingsVoiceModeButton({
-    required this.isEnabled,
-    required this.isListening,
-    required this.speechAvailable,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bg;
-    final Color iconColor;
-    final IconData icon;
-    if (!speechAvailable) {
-      bg = Colors.transparent;
-      iconColor = Colors.grey.shade400;
-      icon = Icons.mic_off;
-    } else if (isEnabled) {
-      bg = isListening ? const Color(0xFFFFE4E4) : const Color(0xFFDCFCE7);
-      iconColor = isListening
-          ? const Color(0xFFB91C1C)
-          : const Color(0xFF166534);
-      icon = Icons.mic;
-    } else {
-      bg = Colors.transparent;
-      iconColor = const Color(0xFF274B8A);
-      icon = Icons.mic_none;
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, color: iconColor, size: 22),
-      ),
-    );
-  }
-}
-
-class _SettingsListeningOverlay extends StatefulWidget {
-  final bool isListening;
-  final bool isSpeaking;
-  final String heardText;
-  final VoidCallback onMicTap;
-
-  const _SettingsListeningOverlay({
-    required this.isListening,
-    required this.isSpeaking,
-    required this.heardText,
-    required this.onMicTap,
-  });
-
-  @override
-  State<_SettingsListeningOverlay> createState() =>
-      _SettingsListeningOverlayState();
-}
-
-class _SettingsListeningOverlayState extends State<_SettingsListeningOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-    _scale = Tween<double>(
-      begin: 1.0,
-      end: 1.18,
-    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  Widget _buildVoiceBars(Color color, {required bool active}) {
-    return SizedBox(
-      width: 38,
-      height: 18,
-      child: AnimatedBuilder(
-        animation: _pulse,
-        builder: (context, child) {
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(4, (index) {
-              final double wave = math.sin(
-                (_pulse.value * math.pi * 2) + (index * 0.75),
-              );
-              final double height = active ? 6 + ((wave + 1) * 4.5) : 5;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 5,
-                height: height.clamp(5, 15),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: active ? 1 : 0.45),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              );
-            }),
-          );
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final listening = widget.isListening;
-    final speaking = widget.isSpeaking;
-    final accentColor = listening
-        ? const Color(0xFFEF4444)
-        : speaking
-        ? const Color(0xFF2D4F88)
-        : const Color(0xFF5B6B88);
-    final panelGradient = listening
-        ? const [Color(0xFFFFF1F2), Color(0xFFFFFFFF), Color(0xFFFFFBFB)]
-        : speaking
-        ? const [Color(0xFFF3F7FF), Color(0xFFFFFFFF), Color(0xFFF8FBFF)]
-        : const [Color(0xFFF8FAFC), Color(0xFFFFFFFF), Color(0xFFF6F8FB)];
-    final statusText = listening
-        ? 'Listening...'
-        : speaking
-        ? 'Speaking...'
-        : 'Hands-free settings ready';
-    final helperText = listening
-        ? 'Say set questions, timed mode on or off, start quiz, or go back.'
-        : speaking
-        ? 'Assistant is reading the settings.'
-        : 'Tap mic anytime to interrupt and speak.';
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: panelGradient,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: accentColor.withValues(alpha: 0.28),
-              width: 1.4,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x140F172A),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: widget.onMicTap,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (listening || speaking)
-                      ScaleTransition(
-                        scale: _scale,
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accentColor.withValues(alpha: 0.12),
-                          ),
-                        ),
-                      ),
-                    _SettingsMicCircle(bg: accentColor),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                              color: accentColor,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _buildVoiceBars(
-                          accentColor,
-                          active: listening || speaking,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      helperText,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    if (widget.heardText.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Heard: "${widget.heardText}"',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF64748B),
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const QuizVoiceDebugPanel(),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsMicCircle extends StatelessWidget {
-  final Color bg;
-
-  const _SettingsMicCircle({required this.bg});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [bg.withValues(alpha: 0.9), bg],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: bg.withValues(alpha: 0.28),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: const Icon(Icons.mic, color: Colors.white, size: 20),
-    );
   }
 }
 
@@ -1434,35 +1213,60 @@ class _InfoCard extends StatelessWidget {
 
 class _PrimaryButton extends StatelessWidget {
   final String label;
+  final String subtext;
+  final IconData icon;
   final VoidCallback onTap;
 
-  const _PrimaryButton({required this.label, required this.onTap});
+  const _PrimaryButton({
+    required this.label,
+    required this.onTap,
+    required this.subtext,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 56,
+        constraints: const BoxConstraints(minHeight: 78),
         alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: BorderRadius.circular(18),
           gradient: const LinearGradient(
             colors: [Color(0xFF0F3A7D), Color(0xFF174A97)],
           ),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+            Icon(icon, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtext,
+                    style: const TextStyle(
+                      color: Color(0xFFE7F0FF),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
             const Icon(Icons.arrow_forward, color: Colors.white),
           ],
         ),

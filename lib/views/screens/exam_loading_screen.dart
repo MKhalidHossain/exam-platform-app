@@ -28,6 +28,7 @@ class ExamLoadingScreen extends StatefulWidget {
   final bool timedMode;
   final bool regenerate;
   final bool voiceModeEnabled;
+  final bool voicePracticeMode;
 
   const ExamLoadingScreen({
     super.key,
@@ -38,6 +39,7 @@ class ExamLoadingScreen extends StatefulWidget {
     this.timedMode = true,
     this.regenerate = false,
     this.voiceModeEnabled = false,
+    this.voicePracticeMode = false,
   });
 
   @override
@@ -118,14 +120,15 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
     super.initState();
     _tts = FlutterTts();
     _voiceModeEnabled =
-        widget.voiceModeEnabled || _voiceController.isEnabledValue;
+        widget.voicePracticeMode &&
+        (widget.voiceModeEnabled || _voiceController.isEnabledValue);
     _configureTts();
     unawaited(_primeSpeechAvailability());
     _startExam();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _activateVoiceScreen();
-        _bindVoiceSession(requestEntryAction: false);
+        _bindVoiceSession(requestEntryAction: widget.voicePracticeMode);
       }
     });
   }
@@ -726,6 +729,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
             'timedMode': effectiveTimedMode,
             'sessionId': sessionId,
             'voiceModeEnabled': widget.voiceModeEnabled,
+            'voicePracticeMode': widget.voicePracticeMode,
           },
         );
         return;
@@ -837,12 +841,13 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
                       ),
                     ),
                   ),
-                  _LoadingVoiceModeButton(
-                    isEnabled: _voiceModeEnabled,
-                    isListening: _isListening || _isPreparingToListen,
-                    speechAvailable: _speechAvailable,
-                    onTap: _toggleVoiceMode,
-                  ),
+                  if (widget.voicePracticeMode)
+                    _LoadingVoiceModeButton(
+                      isEnabled: _voiceModeEnabled,
+                      isListening: _isListening || _isPreparingToListen,
+                      speechAvailable: _speechAvailable,
+                      onTap: _toggleVoiceMode,
+                    ),
                 ],
               ),
               Expanded(
@@ -962,7 +967,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
           ),
         ),
       ),
-      bottomSheet: _voiceModeEnabled
+      bottomSheet: widget.voicePracticeMode && _voiceModeEnabled
           ? QuizVoiceOverlay(
               isListening: _isListening || _isPreparingToListen,
               isPreparingToListen: _isPreparingToListen,

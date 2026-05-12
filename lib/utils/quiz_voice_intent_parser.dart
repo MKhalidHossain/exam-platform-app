@@ -176,6 +176,7 @@ class QuizVoiceIntentParser {
       VoiceIntent.cancel => 'cancel',
       VoiceIntent.questionNumber => 'question number',
       VoiceIntent.pauseAssistant => 'pause',
+      VoiceIntent.resumeAssistant => 'resume',
       VoiceIntent.unanswered => 'unanswered',
     };
   }
@@ -607,6 +608,11 @@ class QuizVoiceIntentParser {
       'silence',
       'pause',
       'stop reading',
+    ]),
+    _AliasGroup(VoiceIntent.resumeAssistant, [
+      'resume',
+      'continue listening',
+      'continue practice',
     ]),
   ];
 

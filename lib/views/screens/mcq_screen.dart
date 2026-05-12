@@ -27,6 +27,7 @@ class McqScreen extends StatefulWidget {
   final int? durationMinutes;
   final bool timedMode;
   final bool voiceModeEnabled;
+  final bool voicePracticeMode;
 
   const McqScreen({
     super.key,
@@ -39,6 +40,7 @@ class McqScreen extends StatefulWidget {
     this.durationMinutes,
     this.timedMode = true,
     this.voiceModeEnabled = false,
+    this.voicePracticeMode = false,
   });
 
   @override
@@ -48,21 +50,32 @@ class McqScreen extends StatefulWidget {
 class _McqScreenState extends State<McqScreen>
     with QuizVoiceRouteAware<McqScreen> {
   static const int _defaultDurationMinutes = 130;
+  static const Duration _voiceAutoPlayDelay = Duration(seconds: 4);
 
   // ─── Exam state ────────────────────────────────────────────────────────────
   late final List<_Question> _questions;
   late final FlutterTts _tts;
   late final bool _isTimedSession;
   int _currentIndex = 0;
-  final Map<int, int> _selectedIndex = {};
+  final Map<int, Set<int>> _selectedIndexes = {};
   final Set<int> _lockedQuestions = {};
   final Set<int> _flaggedQuestions = {};
   bool _showExplanation = false;
   bool _isSpeaking = false;
   Timer? _timer;
+  Timer? _voiceAutoAdvanceTimer;
   Duration? _remaining;
   bool _hasAutoSubmitted = false;
   bool _isAutoSubmitting = false;
+  bool _voicePracticePaused = false;
+  late final DateTime _voiceSessionStartedAt;
+  int _voiceCorrectCount = 0;
+  int _voiceIncorrectCount = 0;
+  int _voiceSkippedCount = 0;
+  int _voiceMultiCorrectCount = 0;
+  int _voiceMultiAttemptCount = 0;
+  int _voiceTrueFalseCorrectCount = 0;
+  int _voiceTrueFalseAttemptCount = 0;
 
   // ─── Voice state ───────────────────────────────────────────────────────────
   final SpeechToText _speech = SpeechToText();
@@ -104,8 +117,10 @@ class _McqScreenState extends State<McqScreen>
     super.initState();
     _questions = _buildQuestions(widget.questions);
     _tts = FlutterTts();
+    _voiceSessionStartedAt = DateTime.now();
     _voiceModeEnabled =
-        widget.voiceModeEnabled || _voiceController.isEnabledValue;
+        widget.voicePracticeMode &&
+        (widget.voiceModeEnabled || _voiceController.isEnabledValue);
     _configureTts();
     unawaited(_primeSpeechAvailability());
     final UserController userController = Get.isRegistered<UserController>()
@@ -129,8 +144,10 @@ class _McqScreenState extends State<McqScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _voiceAutoAdvanceTimer?.cancel();
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
+    _voiceAutoAdvanceTimer?.cancel();
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     _voiceController.unbindScreen(
@@ -574,12 +591,51 @@ class _McqScreenState extends State<McqScreen>
           'Some unresolved pain or sadness',
           'Grateful for the lessons learned',
         ],
-        correctIndex: 2,
+        correctIndexes: const {2},
         codeReference: 'API 510, Section 3 (Definitions) - "Alteration"',
         explanation:
             'An alteration is a change that affects the pressure-retaining capability or design conditions of a pressure vessel.\n\nA change in design temperature directly affects allowable stress and MAWP, so it is classified as an alteration.\n\n• D (weld buildup to restore metal loss) is a repair, not an alteration, because it restores the vessel to its original design condition.',
+        type: _QuestionType.single,
       );
     });
+  }
+
+  int? _optionIndexFromLetter(String value) {
+    final trimmed = value.trim().toUpperCase();
+    if (trimmed.length != 1) return null;
+    final code = trimmed.codeUnitAt(0);
+    if (code < 65 || code > 90) return null;
+    return code - 65;
+  }
+
+  _QuestionType _resolveQuestionType(
+    Map<String, dynamic> data,
+    List<String> options,
+    Set<int> correctIndexes,
+  ) {
+    final rawType =
+        data['questionType'] ??
+        data['type'] ??
+        (data['metadata'] is Map ? data['metadata']['type'] : null);
+    final typeText = rawType?.toString().trim().toLowerCase() ?? '';
+    if (typeText.contains('multi') ||
+        typeText.contains('select all') ||
+        typeText.contains('multiple')) {
+      return _QuestionType.multiSelect;
+    }
+    if (typeText.contains('true') || typeText.contains('false')) {
+      return _QuestionType.trueFalse;
+    }
+    final normalizedOptions = options
+        .map((option) => option.trim().toLowerCase())
+        .toSet();
+    if (normalizedOptions.length == 2 &&
+        normalizedOptions.contains('true') &&
+        normalizedOptions.contains('false')) {
+      return _QuestionType.trueFalse;
+    }
+    if (correctIndexes.length > 1) return _QuestionType.multiSelect;
+    return _QuestionType.single;
   }
 
   List<_Question> _parseQuestions(List<dynamic>? rawQuestions) {
@@ -595,9 +651,10 @@ class _McqScreenState extends State<McqScreen>
               number: i + 1,
               text: raw,
               options: const ['Option A', 'Option B', 'Option C', 'Option D'],
-              correctIndex: null,
+              correctIndexes: const {},
               codeReference: '',
               explanation: '',
+              type: _QuestionType.single,
             ),
           );
         }
@@ -614,7 +671,7 @@ class _McqScreenState extends State<McqScreen>
       final dynamic rawOptions =
           data['options'] ?? data['choices'] ?? data['answers'];
       final List<String> options = [];
-      int? correctIndex;
+      final Set<int> correctIndexes = {};
 
       if (rawOptions is List) {
         for (int optIndex = 0; optIndex < rawOptions.length; optIndex++) {
@@ -631,33 +688,40 @@ class _McqScreenState extends State<McqScreen>
                 option['is_correct'] == true ||
                 option['isCorrect'] == true ||
                 option['correct'] == true;
-            if (isCorrect && correctIndex == null) correctIndex = optIndex;
+            if (isCorrect) correctIndexes.add(optIndex);
           } else {
             options.add(option.toString());
           }
         }
       }
 
-      if (correctIndex == null) {
+      if (correctIndexes.isEmpty) {
         final dynamic correctAnswer =
-            data['correctAnswer'] ?? data['answer'] ?? data['correct'];
-        if (correctAnswer is int && correctAnswer >= 0) {
-          correctIndex = correctAnswer < options.length ? correctAnswer : null;
-        } else if (correctAnswer is String) {
-          final idx = options.indexWhere(
-            (opt) =>
-                opt.toLowerCase().trim() == correctAnswer.toLowerCase().trim(),
-          );
-          if (idx >= 0) correctIndex = idx;
-        } else if (correctAnswer is List && correctAnswer.isNotEmpty) {
-          final first = correctAnswer.first;
-          if (first is int && first >= 0 && first < options.length) {
-            correctIndex = first;
-          } else if (first is String) {
-            final idx = options.indexWhere(
-              (opt) => opt.toLowerCase().trim() == first.toLowerCase().trim(),
-            );
-            if (idx >= 0) correctIndex = idx;
+            data['correctAnswer'] ??
+            data['answer'] ??
+            data['correct'] ??
+            data['correctAnswers'] ??
+            data['correct_options'];
+        final values = correctAnswer is List ? correctAnswer : [correctAnswer];
+        for (final value in values) {
+          if (value is int && value >= 0 && value < options.length) {
+            correctIndexes.add(value);
+          } else if (value is String) {
+            final splitValues = value.contains(',')
+                ? value.split(',').map((item) => item.trim())
+                : <String>[value.trim()];
+            for (final item in splitValues) {
+              final optionLetterIndex = _optionIndexFromLetter(item);
+              if (optionLetterIndex != null &&
+                  optionLetterIndex < options.length) {
+                correctIndexes.add(optionLetterIndex);
+                continue;
+              }
+              final idx = options.indexWhere(
+                (opt) => opt.toLowerCase().trim() == item.toLowerCase().trim(),
+              );
+              if (idx >= 0) correctIndexes.add(idx);
+            }
           }
         }
       }
@@ -677,14 +741,17 @@ class _McqScreenState extends State<McqScreen>
         options.addAll(const ['Option A', 'Option B', 'Option C', 'Option D']);
       }
 
+      final questionType = _resolveQuestionType(data, options, correctIndexes);
+
       parsed.add(
         _Question(
           number: i + 1,
           text: text,
           options: options,
-          correctIndex: correctIndex,
+          correctIndexes: correctIndexes,
           codeReference: codeReference,
           explanation: explanation,
+          type: questionType,
         ),
       );
     }
@@ -694,11 +761,48 @@ class _McqScreenState extends State<McqScreen>
 
   // ─── Exam actions ──────────────────────────────────────────────────────────
 
+  Set<int> _selectedFor(int questionIndex) {
+    return _selectedIndexes[questionIndex] ?? const <int>{};
+  }
+
+  bool _hasAnswer(int questionIndex) => _selectedFor(questionIndex).isNotEmpty;
+
+  bool _isAnswerCorrect(_Question question, Set<int> selected) {
+    return selected.isNotEmpty &&
+        question.correctIndexes.isNotEmpty &&
+        selected.length == question.correctIndexes.length &&
+        selected.every(question.correctIndexes.contains);
+  }
+
+  String _lettersFor(Set<int> indexes) {
+    final letters = indexes.toList()..sort();
+    if (letters.isEmpty) return '';
+    if (letters.length == 1) return String.fromCharCode(65 + letters.first);
+    return letters
+        .map((index) => String.fromCharCode(65 + index))
+        .join(' and ');
+  }
+
   void _onSelect(int index) {
     if (_lockedQuestions.contains(_currentIndex)) return;
+    final question = _questions[_currentIndex];
     setState(() {
-      _selectedIndex[_currentIndex] = index;
-      final correctIndex = _questions[_currentIndex].correctIndex;
+      if (question.isMultiSelect) {
+        final selected = Set<int>.from(_selectedFor(_currentIndex));
+        if (selected.contains(index)) {
+          selected.remove(index);
+        } else {
+          selected.add(index);
+        }
+        if (selected.isEmpty) {
+          _selectedIndexes.remove(_currentIndex);
+        } else {
+          _selectedIndexes[_currentIndex] = selected;
+        }
+        return;
+      }
+      _selectedIndexes[_currentIndex] = {index};
+      final correctIndex = question.correctIndex;
       if (correctIndex != null && index != correctIndex) {
         _lockedQuestions.add(_currentIndex);
       }
@@ -706,7 +810,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _onNext() async {
-    final bool hasAnswer = _selectedIndex[_currentIndex] != null;
+    final bool hasAnswer = _hasAnswer(_currentIndex);
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
     if (!hasAnswer && !isFlagged) return;
     if (_currentIndex < _questions.length - 1) {
@@ -732,7 +836,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _toggleExplanation() {
-    final bool canView = _selectedIndex[_currentIndex] != null;
+    final bool canView = _hasAnswer(_currentIndex);
     if (!canView) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -759,6 +863,7 @@ class _McqScreenState extends State<McqScreen>
   List<String> _buildQuestionSpeechSegments(_Question question) {
     final segments = <String>[
       'Question ${question.number}.',
+      if (question.isMultiSelect) 'Select all that apply.',
       _normalizeSpeechText(question.text),
     ];
 
@@ -770,9 +875,17 @@ class _McqScreenState extends State<McqScreen>
     }
 
     if (_voiceModeEnabled && question.options.isNotEmpty) {
-      segments.add(
-        'Say first, second, third, or fourth. You can also say next, review, or help.',
-      );
+      if (question.isTrueFalse) {
+        segments.add('Please say true or false.');
+      } else if (question.isMultiSelect) {
+        segments.add(
+          'You may select more than one answer. Say something like A and C.',
+        );
+      } else {
+        segments.add(
+          'Please say A, B, C, or D. You can also say next, review, or help.',
+        );
+      }
     }
 
     return segments.where((segment) => segment.isNotEmpty).toList();
@@ -1018,8 +1131,9 @@ class _McqScreenState extends State<McqScreen>
         'courseTitle': widget.courseTitle,
         'examId': widget.examId,
         'questions': _reviewQuestions(),
-        'selected': _selectedIndex,
+        'selected': _selectedIndexes,
         'flagged': _flaggedQuestions,
+        'voiceAnalytics': _buildVoiceAnalytics(),
         'voiceModeEnabled': preserveVoiceMode,
         'returnQuestionIndex': _currentIndex,
       },
@@ -1065,8 +1179,9 @@ class _McqScreenState extends State<McqScreen>
         'courseTitle': widget.courseTitle,
         'examId': widget.examId,
         'questions': _reviewQuestions(),
-        'selected': _selectedIndex,
+        'selected': _selectedIndexes,
         'flagged': _flaggedQuestions,
+        'voiceAnalytics': _buildVoiceAnalytics(),
         'autoSubmit': autoSubmit,
         'voiceModeEnabled': preserveVoiceMode,
         'returnQuestionIndex': _currentIndex,
@@ -1100,6 +1215,8 @@ class _McqScreenState extends State<McqScreen>
   // ─── Voice command dispatcher ──────────────────────────────────────────────
 
   Future<void> _handleVoiceCommand(String rawText) async {
+    if (_tryHandleQuestionAnswer(rawText)) return;
+
     final decision = await _voiceCommandProcessor.process(
       screen: QuizVoiceScreen.mcq,
       heardText: rawText,
@@ -1169,13 +1286,22 @@ class _McqScreenState extends State<McqScreen>
         unawaited(_disableVoiceModeWithFeedback('Voice mode turned off.'));
         return;
       case VoiceIntent.pauseAssistant:
+        _voiceAutoAdvanceTimer?.cancel();
+        _voicePracticePaused = true;
         unawaited(_speech.cancel());
         if (!mounted) return;
         setState(() {
           _isSpeaking = false;
           _isListening = false;
         });
-        Future.delayed(const Duration(milliseconds: 300), () {
+        unawaited(
+          _speakFeedback('Voice practice paused. Say resume to continue.'),
+        );
+        return;
+      case VoiceIntent.resumeAssistant:
+        _voicePracticePaused = false;
+        unawaited(_speakFeedback('Voice practice resumed.'));
+        Future.delayed(const Duration(milliseconds: 900), () {
           if (mounted && _voiceModeEnabled) unawaited(_startListening());
         });
         return;
@@ -1233,46 +1359,165 @@ class _McqScreenState extends State<McqScreen>
       );
       return;
     }
-    if (_selectedIndex[_currentIndex] == optionIndex) {
+    if (_selectedFor(_currentIndex).contains(optionIndex) &&
+        !question.isMultiSelect) {
       unawaited(_speakFeedback('You already selected that option.'));
       return;
     }
 
-    _onSelect(optionIndex);
+    _answerViaVoice({optionIndex});
+  }
 
-    final letter = String.fromCharCode(65 + optionIndex);
-    final correct = question.correctIndex;
+  bool _tryHandleQuestionAnswer(String rawText) {
+    final question = _questions[_currentIndex];
+    final parsed = _parseVoiceAnswerIndexes(rawText, question);
+    if (parsed.isEmpty) return false;
+    if (!question.isMultiSelect && parsed.length > 1) {
+      unawaited(_speakFeedback('Please give one answer for this question.'));
+      return true;
+    }
+    _answerViaVoice(parsed);
+    return true;
+  }
 
-    if (correct == null) {
-      unawaited(_speakFeedback('You selected option $letter.'));
-    } else if (optionIndex == correct) {
-      unawaited(
-        _speakFeedback(
-          'Correct! Option $letter is the right answer. Say next to continue.',
-        ),
+  Set<int> _parseVoiceAnswerIndexes(String rawText, _Question question) {
+    final normalized = rawText
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s,]'), ' ')
+        .replaceAll(
+          RegExp(
+            r'\b(answer|answers|option|options|select|choose|letter|and)\b',
+          ),
+          ' ',
+        )
+        .replaceAll(',', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalized.isEmpty) return const <int>{};
+
+    if (question.isTrueFalse) {
+      final wantsTrue = RegExp(r'\btrue\b').hasMatch(normalized);
+      final wantsFalse = RegExp(r'\bfalse\b').hasMatch(normalized);
+      if (wantsTrue == wantsFalse) return const <int>{};
+      final target = wantsTrue ? 'true' : 'false';
+      final index = question.options.indexWhere(
+        (option) => option.trim().toLowerCase() == target,
       );
+      if (index >= 0) return {index};
+    }
+
+    final indexes = <int>{};
+    final tokens = normalized.split(RegExp(r'\s+'));
+    const wordIndexes = <String, int>{
+      'a': 0,
+      'ay': 0,
+      'one': 0,
+      'first': 0,
+      'b': 1,
+      'bee': 1,
+      'be': 1,
+      'two': 1,
+      'second': 1,
+      'c': 2,
+      'see': 2,
+      'sea': 2,
+      'three': 2,
+      'third': 2,
+      'd': 3,
+      'dee': 3,
+      'four': 3,
+      'fourth': 3,
+    };
+    for (final token in tokens) {
+      final index = wordIndexes[token];
+      if (index != null && index < question.options.length) {
+        indexes.add(index);
+      }
+    }
+    if (!question.isMultiSelect && indexes.length > 1) return const <int>{};
+    return indexes;
+  }
+
+  void _answerViaVoice(Set<int> selectedIndexes) {
+    final question = _questions[_currentIndex];
+    if (selectedIndexes.isEmpty) return;
+    if (selectedIndexes.any((index) => index >= question.options.length)) {
+      unawaited(_speakFeedback("That option doesn't exist for this question."));
+      return;
+    }
+
+    final selected = Set<int>.from(selectedIndexes);
+    final correct = _isAnswerCorrect(question, selected);
+    setState(() {
+      _selectedIndexes[_currentIndex] = selected;
+      _lockedQuestions.add(_currentIndex);
+      _showExplanation = true;
+    });
+
+    _recordVoiceAnswer(question, correct);
+
+    final selectedLetters = _lettersFor(selected);
+    final correctLetters = _lettersFor(question.correctIndexes);
+    final explanation = question.explanation.isNotEmpty
+        ? _shortSpeechText(question.explanation)
+        : 'No explanation available for this question.';
+    final modePrompt = widget.voicePracticeMode
+        ? (_currentIndex < _questions.length - 1
+              ? ' I will continue in a few seconds. You can say next, repeat, explain again, pause, or stop voice mode.'
+              : ' Say submit when you are ready to finish.')
+        : ' Say next to continue.';
+    final correctness = question.correctIndexes.isEmpty
+        ? ''
+        : correct
+        ? ' That is correct.'
+        : ' That is incorrect. The correct answer is $correctLetters.';
+
+    unawaited(
+      _speakFeedback(
+        'You selected $selectedLetters.$correctness Explanation. $explanation$modePrompt',
+      ).then((_) {
+        if (widget.voicePracticeMode && correct && mounted) {
+          _scheduleVoiceAutoAdvance();
+        } else if (widget.voicePracticeMode && mounted) {
+          _scheduleVoiceAutoAdvance();
+        }
+      }),
+    );
+  }
+
+  void _recordVoiceAnswer(_Question question, bool correct) {
+    if (!widget.voicePracticeMode) return;
+    if (correct) {
+      _voiceCorrectCount += 1;
     } else {
-      final correctLetter = String.fromCharCode(65 + correct);
-      unawaited(
-        _speakFeedback(
-          'Incorrect. The correct answer is option $correctLetter. '
-          'Say next to move on.',
-        ),
-      );
+      _voiceIncorrectCount += 1;
+    }
+    if (question.isMultiSelect) {
+      _voiceMultiAttemptCount += 1;
+      if (correct) _voiceMultiCorrectCount += 1;
+    }
+    if (question.isTrueFalse) {
+      _voiceTrueFalseAttemptCount += 1;
+      if (correct) _voiceTrueFalseCorrectCount += 1;
     }
   }
 
   void _nextViaVoice() {
-    final hasAnswer = _selectedIndex[_currentIndex] != null;
+    _voiceAutoAdvanceTimer?.cancel();
+    final hasAnswer = _hasAnswer(_currentIndex);
     final isFlagged = _flaggedQuestions.contains(_currentIndex);
 
     if (!hasAnswer && !isFlagged) {
-      unawaited(
-        _speakFeedback(
-          'Please select an answer or flag this question before moving on.',
-        ),
-      );
-      return;
+      if (widget.voicePracticeMode) {
+        _voiceSkippedCount += 1;
+      } else {
+        unawaited(
+          _speakFeedback(
+            'Please select an answer or flag this question before moving on.',
+          ),
+        );
+        return;
+      }
     }
 
     if (_currentIndex < _questions.length - 1) {
@@ -1289,7 +1534,7 @@ class _McqScreenState extends State<McqScreen>
         if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
       });
     } else {
-      final covered = <int>{..._selectedIndex.keys, ..._flaggedQuestions};
+      final covered = <int>{..._selectedIndexes.keys, ..._flaggedQuestions};
       if (covered.length < _questions.length) {
         unawaited(
           _speakFeedback(
@@ -1307,6 +1552,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _previousViaVoice() {
+    _voiceAutoAdvanceTimer?.cancel();
     if (_currentIndex > 0) {
       unawaited(_stopTtsPlayback());
       unawaited(_speech.cancel());
@@ -1326,6 +1572,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _goToQuestionViaVoice(int index) {
+    _voiceAutoAdvanceTimer?.cancel();
     if (index < 0 || index >= _questions.length) {
       unawaited(
         _speakFeedback(
@@ -1358,7 +1605,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _explanationViaVoice() {
-    final hasAnswer = _selectedIndex[_currentIndex] != null;
+    final hasAnswer = _hasAnswer(_currentIndex);
     if (!hasAnswer) {
       unawaited(
         _speakFeedback(
@@ -1377,6 +1624,43 @@ class _McqScreenState extends State<McqScreen>
 
   void _submitViaVoice() {
     _reviewViaVoice();
+  }
+
+  void _scheduleVoiceAutoAdvance() {
+    _voiceAutoAdvanceTimer?.cancel();
+    if (!widget.voicePracticeMode ||
+        !_voiceModeEnabled ||
+        _voicePracticePaused) {
+      return;
+    }
+    if (_currentIndex >= _questions.length - 1) return;
+    _voiceAutoAdvanceTimer = Timer(_voiceAutoPlayDelay, () {
+      if (!mounted || !_voiceModeEnabled || _isSpeaking || _isListening) return;
+      _nextViaVoice();
+    });
+  }
+
+  Map<String, dynamic> _buildVoiceAnalytics() {
+    final durationSeconds = DateTime.now()
+        .difference(_voiceSessionStartedAt)
+        .inSeconds;
+    return {
+      'voicePracticeMode': widget.voicePracticeMode,
+      'voiceModeUsage': _voiceModeEnabled || widget.voiceModeEnabled,
+      'sessionDurationSec': durationSeconds,
+      'correctAnswers': _voiceCorrectCount,
+      'incorrectAnswers': _voiceIncorrectCount,
+      'skippedQuestions': _voiceSkippedCount,
+      'flaggedQuestions': _flaggedQuestions.length,
+      'multiSelectAccuracy': {
+        'correct': _voiceMultiCorrectCount,
+        'attempted': _voiceMultiAttemptCount,
+      },
+      'trueFalseAccuracy': {
+        'correct': _voiceTrueFalseCorrectCount,
+        'attempted': _voiceTrueFalseAttemptCount,
+      },
+    };
   }
 
   void _reviewViaVoice() {
@@ -1406,10 +1690,12 @@ class _McqScreenState extends State<McqScreen>
   @override
   Widget build(BuildContext context) {
     final _Question question = _questions[_currentIndex];
-    final int? selected = _selectedIndex[_currentIndex];
-    final bool canViewExplanation = selected != null;
+    final Set<int> selected = _selectedFor(_currentIndex);
+    final bool hasSelection = selected.isNotEmpty;
+    final bool canViewExplanation = hasSelection;
     final bool isFlagged = _flaggedQuestions.contains(_currentIndex);
-    final bool canGoNext = selected != null || isFlagged;
+    final bool canGoNext =
+        hasSelection || isFlagged || widget.voicePracticeMode;
     final String timerLabel = _remaining == null
         ? '--:--'
         : _formatDuration(_remaining!);
@@ -1462,29 +1748,29 @@ class _McqScreenState extends State<McqScreen>
                   children: [
                     _InfoPill(
                       label:
-                          '${_selectedIndex.length}/${_questions.length} Question Answered',
+                          '${_selectedIndexes.length}/${_questions.length} Question Answered',
                     ),
                     if (_isTimedSession) ...[
                       const SizedBox(width: 8),
                       _InfoPill(icon: Icons.timer, label: timerLabel),
                     ],
                     const Spacer(),
-                    // TTS play/stop button
-                    IconButton(
-                      onPressed: _toggleSpeak,
-                      icon: Icon(
-                        _isSpeaking ? Icons.volume_up : Icons.volume_off,
-                        color: const Color(0xFF274B8A),
+                    if (!widget.voicePracticeMode)
+                      IconButton(
+                        onPressed: _toggleSpeak,
+                        icon: Icon(
+                          _isSpeaking ? Icons.volume_up : Icons.volume_off,
+                          color: const Color(0xFF274B8A),
+                        ),
+                        tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
                       ),
-                      tooltip: _isSpeaking ? 'Stop reading' : 'Read question',
-                    ),
-                    // Voice mode toggle
-                    _VoiceModeButton(
-                      isEnabled: _voiceModeEnabled,
-                      isListening: _isListening || _isPreparingToListen,
-                      speechAvailable: _speechAvailable,
-                      onTap: _toggleVoiceMode,
-                    ),
+                    if (widget.voicePracticeMode)
+                      _VoiceModeButton(
+                        isEnabled: _voiceModeEnabled,
+                        isListening: _isListening || _isPreparingToListen,
+                        speechAvailable: _speechAvailable,
+                        onTap: _toggleVoiceMode,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1497,8 +1783,8 @@ class _McqScreenState extends State<McqScreen>
                     itemCount: _questions.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
-                      final int? sel = _selectedIndex[index];
-                      final bool isAnswered = sel != null;
+                      final Set<int> sel = _selectedFor(index);
+                      final bool isAnswered = sel.isNotEmpty;
                       final bool isFlag = _flaggedQuestions.contains(index);
                       final bool isCurrent = index == _currentIndex;
                       Color border = const Color(0xFF2D4F88);
@@ -1506,10 +1792,11 @@ class _McqScreenState extends State<McqScreen>
                       Color textColor = const Color(0xFF111827);
 
                       if (isAnswered) {
-                        final int? correctIndex =
-                            _questions[index].correctIndex;
-                        if (correctIndex != null) {
-                          final bool isCorrect = sel == correctIndex;
+                        if (_questions[index].correctIndexes.isNotEmpty) {
+                          final bool isCorrect = _isAnswerCorrect(
+                            _questions[index],
+                            sel,
+                          );
                           if (isCorrect) {
                             fill = const Color(0xFFD8F5D8);
                             border = const Color(0xFF2DBD67);
@@ -1543,7 +1830,7 @@ class _McqScreenState extends State<McqScreen>
                             _heardText = '';
                           });
                           // Auto-read the tapped question in voice mode.
-                          if (_voiceModeEnabled) {
+                          if (widget.voicePracticeMode && _voiceModeEnabled) {
                             Future.delayed(
                               const Duration(milliseconds: 300),
                               () {
@@ -1590,18 +1877,18 @@ class _McqScreenState extends State<McqScreen>
                 // Answer options
                 ...List.generate(question.options.length, (index) {
                   final String option = question.options[index];
-                  final bool isSelected = selected == index;
-                  final bool isCorrect =
-                      question.correctIndex != null &&
-                      index == question.correctIndex;
+                  final bool isSelected = selected.contains(index);
+                  final bool isCorrect = question.correctIndexes.contains(
+                    index,
+                  );
                   final bool locked = _lockedQuestions.contains(_currentIndex);
 
                   Color borderColor = const Color(0xFFE5E7EB);
                   Color fillColor = const Color(0xFFF3F4F6);
                   Color textColor = const Color(0xFF111827);
 
-                  if (selected != null) {
-                    if (question.correctIndex != null) {
+                  if (hasSelection) {
+                    if (question.correctIndexes.isNotEmpty) {
                       if (isCorrect) {
                         borderColor = const Color(0xFF2DBD67);
                         fillColor = const Color(0xFFD8F5D8);
@@ -1725,7 +2012,8 @@ class _McqScreenState extends State<McqScreen>
                 const ApiDisclaimerSection(),
 
                 // Extra bottom padding so the voice overlay never covers content.
-                if (_voiceModeEnabled) const SizedBox(height: 90),
+                if (widget.voicePracticeMode && _voiceModeEnabled)
+                  const SizedBox(height: 90),
               ],
             ),
 
@@ -1763,7 +2051,7 @@ class _McqScreenState extends State<McqScreen>
               ),
 
             // ── Voice mode overlay (bottom) ──────────────────────────────────
-            if (_voiceModeEnabled)
+            if (widget.voicePracticeMode && _voiceModeEnabled)
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -1801,22 +2089,32 @@ class _McqScreenState extends State<McqScreen>
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
+enum _QuestionType { single, multiSelect, trueFalse }
+
 class _Question {
   final int number;
   final String text;
   final List<String> options;
-  final int? correctIndex;
+  final Set<int> correctIndexes;
   final String codeReference;
   final String explanation;
+  final _QuestionType type;
 
   const _Question({
     required this.number,
     required this.text,
     required this.options,
-    required this.correctIndex,
+    required this.correctIndexes,
     required this.codeReference,
     required this.explanation,
+    required this.type,
   });
+
+  int? get correctIndex =>
+      correctIndexes.length == 1 ? correctIndexes.first : null;
+
+  bool get isMultiSelect => type == _QuestionType.multiSelect;
+  bool get isTrueFalse => type == _QuestionType.trueFalse;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

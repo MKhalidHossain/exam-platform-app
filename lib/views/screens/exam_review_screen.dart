@@ -25,10 +25,11 @@ import '../widgets/quiz_voice_overlay.dart';
 class ExamReviewScreen extends StatefulWidget {
   final String courseTitle;
   final List<dynamic> questions;
-  final Map<int, int> selected;
+  final Map<int, Set<int>> selected;
   final Set<int> flagged;
   final String? examId;
   final List<int>? timeSpentSec;
+  final Map<String, dynamic>? voiceAnalytics;
   final bool autoSubmit;
   final bool voiceModeEnabled;
   final int returnQuestionIndex;
@@ -41,6 +42,7 @@ class ExamReviewScreen extends StatefulWidget {
     required this.flagged,
     this.examId,
     this.timeSpentSec,
+    this.voiceAnalytics,
     this.autoSubmit = false,
     this.voiceModeEnabled = false,
     this.returnQuestionIndex = 0,
@@ -144,12 +146,12 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   List<int> get _answeredIndexes => List<int>.generate(
     widget.questions.length,
     (i) => i,
-  ).where((i) => widget.selected[i] != null).toList();
+  ).where((i) => (widget.selected[i] ?? const <int>{}).isNotEmpty).toList();
 
   List<int> get _unansweredIndexes => List<int>.generate(
     widget.questions.length,
     (i) => i,
-  ).where((i) => widget.selected[i] == null).toList();
+  ).where((i) => (widget.selected[i] ?? const <int>{}).isEmpty).toList();
 
   List<int> get _flaggedIndexes => List<int>.generate(
     widget.questions.length,
@@ -1037,14 +1039,21 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   List<dynamic> _buildAnswers() {
     final total = widget.questions.length;
     final answers = List<dynamic>.filled(total, null);
-    widget.selected.forEach((index, selectedIndex) {
+    widget.selected.forEach((index, selectedIndexes) {
       if (index < 0 || index >= total) return;
-      if (selectedIndex < 0) return;
+      if (selectedIndexes.isEmpty) return;
       final options = _extractOptions(widget.questions[index]);
-      if (selectedIndex < options.length) {
-        answers[index] = options[selectedIndex];
+      final values = selectedIndexes.toList()..sort();
+      final answerValues = values.map((selectedIndex) {
+        if (selectedIndex >= 0 && selectedIndex < options.length) {
+          return options[selectedIndex];
+        }
+        return selectedIndex.toString();
+      }).toList();
+      if (answerValues.length == 1) {
+        answers[index] = answerValues.first;
       } else {
-        answers[index] = selectedIndex.toString();
+        answers[index] = answerValues;
       }
     });
     return answers;
@@ -1095,6 +1104,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         answers: answers,
         flaggedQuestionIds: flaggedIds,
         timeSpentSec: widget.timeSpentSec,
+        reviewData: widget.voiceAnalytics,
       );
 
       if (!mounted) return;
