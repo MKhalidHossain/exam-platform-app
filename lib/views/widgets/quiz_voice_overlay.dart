@@ -39,6 +39,8 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _motion;
   DateTime? _listeningStartedAt;
+  int _unknownRetryCount = 0;
+  String _lastRetryMessage = '';
 
   @override
   void initState() {
@@ -68,6 +70,16 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
       _listeningStartedAt = DateTime.now();
     } else if (!isListeningNow) {
       _listeningStartedAt = null;
+    }
+
+    final retryMessage = _currentRetryMessage();
+    if (retryMessage != _lastRetryMessage) {
+      _lastRetryMessage = retryMessage;
+      if (_isUnknownRetry(retryMessage)) {
+        _unknownRetryCount += 1;
+      } else if (retryMessage.isEmpty) {
+        _unknownRetryCount = 0;
+      }
     }
   }
 
@@ -116,6 +128,8 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
           : speaking
           ? widget.speakingHint
           : widget.idleHint;
+      final bool showAudioQualityHint =
+          retryMessage.isNotEmpty && _unknownRetryCount >= 2;
       final List<String> instructionItems = widget.instructionItems
           .map((item) => item.trim())
           .where((item) => item.isNotEmpty)
@@ -253,6 +267,19 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
                                       : const Color(0xFF9A3412),
                                 ),
                               ),
+                              if (showAudioQualityHint) ...[
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Please move closer to the microphone or use a headset.',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF9A3412),
+                                  ),
+                                ),
+                              ],
                               if (debugEnabled &&
                                   recognizedCommand.isNotEmpty) ...[
                                 const SizedBox(height: 4),
@@ -352,6 +379,17 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
       'Processing' => const Color(0xFFF59E0B),
       _ => const Color(0xFF475569),
     };
+  }
+
+  String _currentRetryMessage() {
+    if (!Get.isRegistered<QuizVoiceController>()) return '';
+    return Get.find<QuizVoiceController>().retryMessage.value;
+  }
+
+  bool _isUnknownRetry(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('not recognised') ||
+        normalized.contains('did not understand');
   }
 }
 

@@ -76,6 +76,7 @@ class _McqScreenState extends State<McqScreen>
   int _voiceMultiAttemptCount = 0;
   int _voiceTrueFalseCorrectCount = 0;
   int _voiceTrueFalseAttemptCount = 0;
+  final List<Map<String, dynamic>> _voiceCommandEvents = [];
 
   // ─── Voice state ───────────────────────────────────────────────────────────
   final SpeechToText _speech = SpeechToText();
@@ -1222,6 +1223,7 @@ class _McqScreenState extends State<McqScreen>
       heardText: rawText,
       sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
     );
+    _recordVoiceCommandAnalytics(decision.analytics);
     final result = decision.parseResult;
     final questionNumber = decision.questionNumber;
     _voiceController.logEvent(
@@ -1660,7 +1662,21 @@ class _McqScreenState extends State<McqScreen>
         'correct': _voiceTrueFalseCorrectCount,
         'attempted': _voiceTrueFalseAttemptCount,
       },
+      'commandEvents': List<Map<String, dynamic>>.unmodifiable(
+        _voiceCommandEvents,
+      ),
     };
+  }
+
+  void _recordVoiceCommandAnalytics(Map<String, dynamic> analytics) {
+    if (analytics.isEmpty) return;
+    _voiceCommandEvents.add({
+      'timestamp': DateTime.now().toIso8601String(),
+      ...analytics,
+    });
+    if (_voiceCommandEvents.length > 100) {
+      _voiceCommandEvents.removeRange(0, _voiceCommandEvents.length - 100);
+    }
   }
 
   void _reviewViaVoice() {

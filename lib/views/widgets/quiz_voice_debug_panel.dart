@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 
 import '../../controllers/quiz_voice_controller.dart';
 import '../../services/voice_assistant_settings_service.dart';
+import '../../voice/learning/voice_learning_service.dart';
+import '../../voice/ui/voice_calibration_screen.dart';
 
 class QuizVoiceDebugPanel extends StatelessWidget {
   const QuizVoiceDebugPanel({super.key});
@@ -132,6 +134,10 @@ class _VoiceSettingsControls extends StatelessWidget {
     'bn-BD',
   ];
 
+  String _safeLocale(String locale) {
+    return _languageCodes.contains(locale) ? locale : 'en-US';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -173,11 +179,9 @@ class _VoiceSettingsControls extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _languageCodes.contains(settings.languageCode)
-                      ? settings.languageCode
-                      : 'en-US',
+                  initialValue: _safeLocale(settings.languageCode),
                   decoration: const InputDecoration(
-                    labelText: 'Language',
+                    labelText: 'TTS language',
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 10,
@@ -225,6 +229,22 @@ class _VoiceSettingsControls extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
+          DropdownButtonFormField<String>(
+            initialValue: _safeLocale(settings.speechLocaleCode),
+            decoration: const InputDecoration(
+              labelText: 'Speech locale',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            items: _languageCodes
+                .map((code) => DropdownMenuItem(value: code, child: Text(code)))
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value == null) return;
+              onChanged(settings.copyWith(speechLocaleCode: value));
+            },
+          ),
+          const SizedBox(height: 4),
           _CompactSwitch(
             label: 'Auto listen on open',
             value: settings.autoListenOnScreenOpen,
@@ -236,6 +256,56 @@ class _VoiceSettingsControls extends StatelessWidget {
             value: settings.showHeardText,
             onChanged: (value) =>
                 onChanged(settings.copyWith(showHeardText: value)),
+          ),
+          _CompactSwitch(
+            label: 'Show debug confidence',
+            value: settings.showDebugConfidence,
+            onChanged: (value) =>
+                onChanged(settings.copyWith(showDebugConfidence: value)),
+          ),
+          _CompactSwitch(
+            label: 'Enable cloud fallback',
+            value: settings.cloudFallbackEnabled,
+            onChanged: (value) =>
+                onChanged(settings.copyWith(cloudFallbackEnabled: value)),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 2,
+              children: [
+                TextButton.icon(
+                  onPressed: () => unawaited(
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const VoiceCalibrationScreen(),
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.tune_rounded, size: 15),
+                  label: const Text(
+                    'Run calibration',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      unawaited(VoiceLearningService().clearCorrections()),
+                  icon: const Icon(Icons.cleaning_services_outlined, size: 15),
+                  label: const Text(
+                    'Clear learned corrections',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

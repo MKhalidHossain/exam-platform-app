@@ -1,0 +1,133 @@
+class VoiceTextNormalizer {
+  static const Map<String, String> _phraseCorrections = {
+    'of shun': 'option',
+    'of sun': 'option',
+    'of son': 'option',
+    'op shun': 'option',
+    'op sun': 'option',
+    'opson': 'option',
+    'opshun': 'option',
+    'kweschen': 'question',
+    'kwestion': 'question',
+  };
+
+  static const Map<String, String> _wordCorrections = {
+    'nex': 'next',
+    'fals': 'false',
+    'falls': 'false',
+    'tree': 'three',
+    'free': 'three',
+    'won': 'one',
+    'too': 'two',
+    'for': 'four',
+    'fore': 'four',
+  };
+
+  static const Map<String, String> _optionLetterCorrections = {
+    'ay': 'a',
+    'hey': 'a',
+    'bee': 'b',
+    'be': 'b',
+    'sea': 'c',
+    'see': 'c',
+    'dee': 'd',
+  };
+
+  static const Map<String, String> _numberWords = {
+    'zero': '0',
+    'one': '1',
+    'two': '2',
+    'three': '3',
+    'four': '4',
+    'five': '5',
+    'six': '6',
+    'seven': '7',
+    'eight': '8',
+    'nine': '9',
+    'ten': '10',
+    'first': '1',
+    'second': '2',
+    'third': '3',
+    'fourth': '4',
+    'fifth': '5',
+    'sixth': '6',
+    'seventh': '7',
+    'eighth': '8',
+    'ninth': '9',
+    'tenth': '10',
+  };
+
+  static const Set<String> _optionPrefixes = {
+    'option',
+    'answer',
+    'select',
+    'choose',
+    'letter',
+  };
+
+  static const Set<String> _numberPrefixes = {
+    'question',
+    'questions',
+    'number',
+    'q',
+  };
+
+  const VoiceTextNormalizer._();
+
+  static String normalize(String text) {
+    var normalized = text.toLowerCase();
+    normalized = normalized.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
+    normalized = _normalizeSpaces(normalized);
+    if (normalized.isEmpty) return normalized;
+
+    normalized = _replacePhrases(normalized, _phraseCorrections);
+    normalized = _normalizeSpaces(normalized);
+
+    final tokens = normalized
+        .split(' ')
+        .map((token) => _wordCorrections[token] ?? token)
+        .toList(growable: false);
+
+    return _normalizeSpaces(_normalizeContextualTokens(tokens).join(' '));
+  }
+
+  static List<String> _normalizeContextualTokens(List<String> tokens) {
+    final normalized = <String>[];
+    for (var index = 0; index < tokens.length; index++) {
+      final token = tokens[index];
+      final previous = normalized.isEmpty ? null : normalized.last;
+
+      if (previous != null &&
+          _optionPrefixes.contains(previous) &&
+          _optionLetterCorrections.containsKey(token)) {
+        normalized.add(_optionLetterCorrections[token]!);
+        continue;
+      }
+
+      if (previous != null &&
+          _numberPrefixes.contains(previous) &&
+          _numberWords.containsKey(token)) {
+        normalized.add(_numberWords[token]!);
+        continue;
+      }
+
+      normalized.add(token);
+    }
+    return normalized;
+  }
+
+  static String _replacePhrases(String text, Map<String, String> phrases) {
+    var normalized = text;
+    phrases.forEach((from, to) {
+      normalized = normalized.replaceAllMapped(
+        RegExp('(^|\\s)${RegExp.escape(from)}(?=\\s|\$)'),
+        (match) => '${match.group(1) ?? ''}$to',
+      );
+    });
+    return normalized;
+  }
+
+  static String _normalizeSpaces(String text) {
+    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+}
