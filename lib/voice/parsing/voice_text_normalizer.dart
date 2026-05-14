@@ -22,6 +22,7 @@ class VoiceTextNormalizer {
     'finis': 'finish',
     'fenish': 'finish',
     'revue': 'review',
+    'veiw': 'view',
     'fals': 'false',
     'falls': 'false',
     'tree': 'three',
@@ -78,6 +79,13 @@ class VoiceTextNormalizer {
     'question',
     'questions',
     'number',
+    'count',
+    'total',
+    'max',
+    'maximum',
+    'min',
+    'minimum',
+    'to',
     'q',
   };
 

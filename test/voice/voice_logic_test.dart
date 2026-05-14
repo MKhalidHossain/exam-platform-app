@@ -120,7 +120,7 @@ void main() {
       expect(result.decision, isNot(core.VoiceCommandDecision.execute));
     });
 
-    test('submit aliases execute without confirmation', () {
+    test('quiz submit executes, review strong submit executes immediately', () {
       final quizSubmit = VoiceCommandParser.parse(
         rawText: 'sabmit',
         context: VoiceScreenContext.quiz,
@@ -139,9 +139,15 @@ void main() {
 
       expect(quizSubmit.intent?.type, VoiceIntentType.submit);
       expect(quizSubmit.decision, core.VoiceCommandDecision.execute);
-      expect(reviewFinish.intent?.type, VoiceIntentType.submit);
+      expect(
+        VoiceSafetyPolicy.submitLikeTypes,
+        contains(reviewFinish.intent?.type),
+      );
       expect(reviewFinish.decision, core.VoiceCommandDecision.execute);
-      expect(reviewFinalSubmit.intent?.type, VoiceIntentType.submit);
+      expect(
+        VoiceSafetyPolicy.submitLikeTypes,
+        contains(reviewFinalSubmit.intent?.type),
+      );
       expect(reviewFinalSubmit.decision, core.VoiceCommandDecision.execute);
     });
 
@@ -205,10 +211,46 @@ void main() {
         isNull,
       );
     });
+
+    test('processor applies safe learned corrections screen-aware', () async {
+      SharedPreferences.setMockInitialValues({});
+      const service = VoiceLearningService(userOrDeviceId: 'voice-test');
+      await service.saveCorrection(
+        rawHeardText: 'open notes',
+        intent: const VoiceIntent(
+          type: VoiceIntentType.explain,
+          confidence: 1,
+          isRisky: false,
+          rawText: 'explain',
+          normalizedText: 'explain',
+          source: 'test',
+        ),
+        screenContext: VoiceScreenContext.quiz,
+        userConfirmed: true,
+      );
+
+      final quizResult = await VoiceCommandProcessor(learningService: service)
+          .process(
+            screen: QuizVoiceScreen.mcq,
+            heardText: 'open notes',
+            sensitivity: CommandSensitivity.normal,
+          );
+      final reviewResult = await VoiceCommandProcessor(learningService: service)
+          .process(
+            screen: QuizVoiceScreen.examReview,
+            heardText: 'open notes',
+            sensitivity: CommandSensitivity.normal,
+          );
+
+      expect(quizResult.shouldExecute, isTrue);
+      expect(quizResult.intent, legacy.VoiceIntent.explain);
+      expect(quizResult.analytics['source'], 'correction');
+      expect(reviewResult.shouldExecute, isFalse);
+    });
   });
 
   group('cloud fallback guard', () {
-    test('processor executes review submit directly', () async {
+    test('processor executes review strong submit immediately', () async {
       final result = await VoiceCommandProcessor().process(
         screen: QuizVoiceScreen.examReview,
         heardText: 'final submit',
@@ -219,6 +261,18 @@ void main() {
       expect(result.intent, legacy.VoiceIntent.submit);
       expect(result.feedback, isNull);
       expect(result.analytics['confirmationShown'], isFalse);
+    });
+
+    test('processor asks yes/no for fuzzy review submit', () async {
+      final result = await VoiceCommandProcessor().process(
+        screen: QuizVoiceScreen.examReview,
+        heardText: 'finnal submmit',
+        sensitivity: CommandSensitivity.normal,
+      );
+
+      expect(result.shouldExecute, isFalse);
+      expect(result.feedback, isNotNull);
+      expect(result.analytics['confirmationShown'], isTrue);
     });
 
     test('cloud disabled means no upload', () async {
@@ -248,6 +302,41 @@ void main() {
         }
       }
     });
+
+    test('cloud risky transcript asks confirmation', () async {
+      final tempDir = await Directory.systemTemp.createTemp('voice_test_');
+      final audioFile = File('${tempDir.path}/sample.wav');
+      await audioFile.writeAsBytes(<int>[0, 1, 2, 3]);
+
+      try {
+        final result = await VoiceCommandProcessor().process(
+          screen: QuizVoiceScreen.examReview,
+          heardText: '',
+          sensitivity: CommandSensitivity.flexible,
+          cloudFallbackEnabled: true,
+          cloudSpeechService: _SubmitCloudSpeechTranscriber(),
+          fallbackAudioFile: audioFile,
+        );
+
+        expect(result.shouldExecute, isFalse);
+        expect(
+          result.intent,
+          isIn(<legacy.VoiceIntent>[
+            legacy.VoiceIntent.submit,
+            legacy.VoiceIntent.confirmSubmit,
+          ]),
+        );
+        expect(result.analytics['fallbackUsed'], isTrue);
+        expect(result.analytics['riskyCommandBlocked'], isTrue);
+      } finally {
+        if (await audioFile.exists()) {
+          await audioFile.delete();
+        }
+        if (await tempDir.exists()) {
+          await tempDir.delete();
+        }
+      }
+    });
   });
 }
 
@@ -264,6 +353,24 @@ class _CountingCloudSpeechTranscriber implements CloudSpeechTranscriber {
     calls++;
     return SpeechRecognitionResult.success(
       transcript: 'option a',
+      confidence: 1,
+      provider: 'test',
+      language: locale,
+      durationMs: 1,
+    );
+  }
+}
+
+class _SubmitCloudSpeechTranscriber implements CloudSpeechTranscriber {
+  @override
+  Future<SpeechRecognitionResult> transcribeCommand({
+    required File audioFile,
+    required String locale,
+    required VoiceScreenContext screenContext,
+    required List<String> availableCommands,
+  }) async {
+    return SpeechRecognitionResult.success(
+      transcript: 'final submit',
       confidence: 1,
       provider: 'test',
       language: locale,

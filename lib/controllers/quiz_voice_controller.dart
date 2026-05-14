@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../services/voice_assistant_settings_service.dart';
+import '../voice/recognition/cloud_speech_service.dart';
 
 enum QuizVoiceScreen {
   none,
@@ -40,7 +41,7 @@ enum VoiceState {
 typedef QuizVoiceAsyncCallback = Future<void> Function();
 
 class QuizVoiceController extends GetxController with WidgetsBindingObserver {
-  static const Duration _idleRecoveryThreshold = Duration(seconds: 1);
+  static const Duration _idleRecoveryThreshold = Duration(seconds: 3);
   static const Duration _processingRecoveryThreshold = Duration(seconds: 5);
   static const Duration _speakingRecoveryThreshold = Duration(seconds: 28);
   static const Duration _listeningRecoveryThreshold = Duration(seconds: 15);
@@ -50,7 +51,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   );
   static const Duration _speakingRetryDelay = Duration(milliseconds: 700);
   static const Duration _healthCheckInterval = Duration(seconds: 4);
-  static const Duration _healthRecoveryCooldown = Duration(seconds: 2);
+  static const Duration _healthRecoveryCooldown = Duration(seconds: 5);
 
   final RxBool isEnabled = false.obs;
   final RxBool isDebugPanelExpanded = false.obs;
@@ -67,6 +68,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
 
   final VoiceAssistantSettingsService _settingsService =
       VoiceAssistantSettingsService();
+  CloudSpeechTranscriber? cloudSpeechTranscriber;
 
   Timer? _watchdogTimer;
   Timer? _activationRecoveryTimer;
@@ -113,6 +115,13 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     required int questionCount,
   }) {
     return questionCount <= 0 || currentIndex >= questionCount - 1;
+  }
+
+  void setCloudSpeechTranscriber(CloudSpeechTranscriber? transcriber) {
+    cloudSpeechTranscriber = transcriber;
+    logEvent(
+      'cloud speech transcriber ${transcriber == null ? 'cleared' : 'set'}',
+    );
   }
 
   bool isCurrentScreen(QuizVoiceScreen screen, String token) {
@@ -492,23 +501,35 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     try {
       final systemLocale = await speech.systemLocale();
       final locales = await speech.locales();
-      final localeIds = locales.map((locale) => locale.localeId).toSet();
-      final configuredLocaleId = assistantSettings.value.languageCode;
-      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
+      final localeIdByLowercase = {
+        for (final locale in locales)
+          locale.localeId.toLowerCase(): locale.localeId,
+      };
+      final configuredSpeechLocaleId = assistantSettings.value.speechLocaleCode
+          .trim();
+      final configuredSpeechLocaleCandidates = <String>{
+        if (configuredSpeechLocaleId.isNotEmpty) configuredSpeechLocaleId,
+        if (configuredSpeechLocaleId.isNotEmpty)
+          configuredSpeechLocaleId.replaceAll('-', '_'),
+        if (configuredSpeechLocaleId.isNotEmpty)
+          configuredSpeechLocaleId.replaceAll('_', '-'),
+      };
 
-      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
-      if (localeIds.contains(configuredSpeechLocaleId)) {
-        return configuredSpeechLocaleId;
+      for (final candidate in configuredSpeechLocaleCandidates) {
+        final supportedLocaleId = localeIdByLowercase[candidate.toLowerCase()];
+        if (supportedLocaleId != null) return supportedLocaleId;
       }
 
       final systemLocaleId = systemLocale?.localeId;
-      if (systemLocaleId != null &&
-          systemLocaleId.toLowerCase().startsWith('en')) {
-        return systemLocaleId;
+      if (systemLocaleId != null) {
+        final supportedSystemLocaleId =
+            localeIdByLowercase[systemLocaleId.toLowerCase()];
+        if (supportedSystemLocaleId != null) return supportedSystemLocaleId;
       }
 
       for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
-        if (localeIds.contains(fallback)) return fallback;
+        final supportedLocaleId = localeIdByLowercase[fallback.toLowerCase()];
+        if (supportedLocaleId != null) return supportedLocaleId;
       }
 
       return systemLocaleId;
@@ -610,9 +631,10 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
         return;
       case VoiceState.idle:
       case VoiceState.disabled:
-      case VoiceState.paused:
       case VoiceState.error:
         _requestHealthRecovery('activation: $reason', screenToken: screenToken);
+        return;
+      case VoiceState.paused:
         return;
     }
   }
@@ -620,6 +642,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   void _requestHealthRecovery(String reason, {String? screenToken}) {
     if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
     if (!isEnabled.value || _activeScreenName == null) return;
+    if (voiceState.value == VoiceState.paused) return;
     if (_recoveryInFlight || _recoveryRunning) {
       logEvent('[Voice][RECOVERY skipped] $reason');
       return;
@@ -648,6 +671,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     if (!isEnabled.value || _recoveryInFlight) return;
     if (_recoveryCallback == null && !_entryActionPending) return;
     if (_activeScreenName == null) return;
+    if (voiceState.value == VoiceState.paused) return;
 
     final Duration inactiveFor = DateTime.now().difference(_lastPhaseChangeAt);
 

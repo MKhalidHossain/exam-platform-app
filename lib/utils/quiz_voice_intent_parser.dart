@@ -615,6 +615,7 @@ class QuizVoiceIntentParser {
     _AliasGroup(VoiceIntent.explain, [
       'explain',
       'why',
+      'explanation',
       'show explanation',
       'view explanation',
     ]),

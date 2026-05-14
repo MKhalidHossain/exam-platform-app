@@ -61,6 +61,32 @@ void main() {
       );
     });
 
+    test('maps quiz explanation phrases to explain intent', () async {
+      for (final phrase in [
+        'explain',
+        'view explanation',
+        'veiw explanation',
+        'explanation',
+      ]) {
+        final result = await QuizVoiceIntentParser.parse(
+          QuizVoiceScreen.mcq,
+          phrase,
+        );
+
+        expect(result.intent, VoiceIntent.explain, reason: phrase);
+        expect(QuizVoiceIntentParser.shouldExecute(result), isTrue);
+      }
+    });
+
+    test('keeps explanation phrases on MCQ screens', () async {
+      final result = await QuizVoiceIntentParser.parse(
+        QuizVoiceScreen.examReview,
+        'explain',
+      );
+
+      expect(result.intent, isNot(VoiceIntent.explain));
+    });
+
     test('maps quiz option selection phrases to option intents', () async {
       final cases = <String, VoiceIntent>{
         'select a': VoiceIntent.optionA,

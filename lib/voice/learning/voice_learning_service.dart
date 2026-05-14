@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/voice_command_context.dart';
 import '../core/voice_intent.dart';
 import '../core/voice_safety_policy.dart';
+import '../parsing/voice_command_parser.dart';
 import '../parsing/voice_text_normalizer.dart';
 import 'voice_correction_model.dart';
 
@@ -24,6 +25,35 @@ class VoiceLearningService {
     final corrections = await _readCorrections();
     return corrections
         .where((correction) => correction.screenContext == context)
+        .toList(growable: false);
+  }
+
+  Future<List<VoiceLearnedCorrection>> getParserCorrections(
+    VoiceScreenContext context,
+  ) async {
+    final corrections = await getCorrections(context);
+    return corrections
+        .where(
+          (correction) =>
+              !correction.isRisky &&
+              !VoiceSafetyPolicy.isRiskyIntentType(correction.intentType),
+        )
+        .map(
+          (correction) => VoiceLearnedCorrection(
+            context: correction.screenContext,
+            phrase: correction.rawHeardText,
+            intent: VoiceIntent(
+              type: correction.intentType,
+              value: correction.value,
+              number: correction.number,
+              confidence: 0.95,
+              isRisky: false,
+              rawText: correction.rawHeardText,
+              normalizedText: correction.normalizedText,
+              source: 'learned_correction',
+            ),
+          ),
+        )
         .toList(growable: false);
   }
 

@@ -63,6 +63,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   String? _speechLocaleId;
   String _heardText = '';
   final VoiceCommandProcessor _voiceCommandProcessor = VoiceCommandProcessor();
+  int _ttsSessionId = 0;
+  int _listenSessionId = 0;
+  bool _isTtsAwaitingCompletion = false;
   final String _voiceScreenToken =
       'quizSettings-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -125,7 +128,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   @override
   void dispose() {
     _listeningRestartTimer?.cancel();
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     _voiceController.unbindScreen(
       QuizVoiceScreen.quizSettings,
@@ -144,8 +147,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
   Future<void> _hardStopInactiveVoice() async {
     _listeningRestartTimer?.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     await _speech.cancel();
+    _listenSessionId++;
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -182,8 +186,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
   Future<void> _configureTts() async {
     await _applyVoiceAssistantSettings();
+    await _tts.awaitSpeakCompletion(true);
     _tts.setCompletionHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
@@ -192,11 +198,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     });
     _tts.setCancelHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
@@ -237,8 +245,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
-    await _tts.stop();
+    await _stopTtsPlayback();
     await _speech.cancel();
+    _listenSessionId++;
     if (!mounted ||
         !_isCurrentVoiceScreen ||
         !_voiceModeEnabled ||
@@ -349,8 +358,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
             screen: QuizVoiceScreen.quizSettings,
             screenToken: _voiceScreenToken,
           );
-          if (status == 'listening' &&
-              (!_isListening || _isPreparingToListen)) {
+          if (status == 'listening' && !_isSpeaking && _isPreparingToListen) {
             setState(() {
               _isListening = true;
               _isPreparingToListen = false;
@@ -435,21 +443,44 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _stopTtsPlayback() async {
+    _ttsSessionId++;
+    _isTtsAwaitingCompletion = false;
+    await _tts.stop();
+  }
+
   Future<void> _speakFeedback(String text) async {
     _voiceController.logEvent(
       'speak feedback requested',
       screen: QuizVoiceScreen.quizSettings,
     );
+    _listeningRestartTimer?.cancel();
     await _speech.cancel();
-    await _tts.stop();
+    _listenSessionId++;
+    await _stopTtsPlayback();
     await _applyVoiceAssistantSettings();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
-    await _tts.speak(text);
+    final sessionId = ++_ttsSessionId;
+    _isTtsAwaitingCompletion = true;
+    try {
+      await _tts.speak(text);
+    } finally {
+      final isActiveSession = mounted && sessionId == _ttsSessionId;
+      if (isActiveSession) {
+        _isTtsAwaitingCompletion = false;
+        setState(() => _isSpeaking = false);
+        _syncVoiceSessionState();
+        if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
+          _scheduleListeningRestart(const Duration(milliseconds: 450));
+        }
+      }
+    }
   }
 
   Future<void> _speakSettingsSummary({bool force = false}) async {
@@ -511,13 +542,14 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
-    if (_isListening || _isSpeaking) return;
+    if (_isListening || _isSpeaking || _isPreparingToListen) return;
+    final listenSessionId = ++_listenSessionId;
     setState(() {
       _isPreparingToListen = true;
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
@@ -537,6 +569,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       onResult: _onSpeechResult,
       localeId: _speechLocaleId,
     );
+    if (listenSessionId != _listenSessionId) return;
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!started) {
       setState(() {
@@ -564,6 +597,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted || !_isCurrentVoiceScreen) return;
+    if (_isSpeaking) return;
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -717,8 +751,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     }
 
     _cacheSelectedQuestionCount(_effectiveQuestionCount.toInt());
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    _listenSessionId++;
     if (mounted) {
       setState(() {
         _isSpeaking = false;
@@ -748,7 +783,8 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   Future<void> _startManualPractice() async {
     if (_voiceModeEnabled) {
       await _speech.cancel();
-      await _tts.stop();
+      _listenSessionId++;
+      await _stopTtsPlayback();
       if (!mounted) return;
       setState(() {
         _voiceModeEnabled = false;
@@ -796,8 +832,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     }
 
     _cacheSelectedQuestionCount(_effectiveQuestionCount.toInt());
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    _listenSessionId++;
     _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examLoading);
     context.push(
       '/exam-loading',
@@ -821,55 +858,214 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Voice Practice Safety'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Use Voice Practice only when it is safe to do so. Do not interact with the app if you are distracted or driving in unsafe conditions. Your safety comes first.',
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Voice Practice Mode is provided for educational purposes only. Users must use the feature safely and avoid using it in any situation that may cause distraction or risk.',
-                    style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    value: dontShowAgain,
-                    onChanged: (value) {
-                      setDialogState(() => dontShowAgain = value ?? false);
-                    },
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text("Don't show again"),
-                  ),
-                ],
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 24,
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+              backgroundColor: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x330F172A),
+                        blurRadius: 28,
+                        offset: Offset(0, 16),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(26),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFEAF2FF), Color(0xFFF8FBFF)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF174A97),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(
+                                  Icons.health_and_safety_rounded,
+                                  color: Colors.white,
+                                  size: 26,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Voice Practice Safety',
+                                      style: TextStyle(
+                                        color: Color(0xFF0F172A),
+                                        fontSize: 23,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.15,
+                                      ),
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'Start only when you can stay aware and focused.',
+                                      style: TextStyle(
+                                        color: Color(0xFF475569),
+                                        fontSize: 13.5,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const _SafetyPoint(
+                                icon: Icons.visibility_rounded,
+                                title: 'Stay attentive',
+                                message:
+                                    'Use Voice Practice only when it is safe to do so.',
+                              ),
+                              const SizedBox(height: 12),
+                              const _SafetyPoint(
+                                icon: Icons.no_crash_rounded,
+                                title: 'Avoid unsafe situations',
+                                message:
+                                    'Do not interact with the app if you are distracted or driving.',
+                              ),
+                              const SizedBox(height: 12),
+                              const _SafetyPoint(
+                                icon: Icons.school_rounded,
+                                title: 'Educational use only',
+                                message:
+                                    'Your safety comes first in any situation that may cause distraction or risk.',
+                              ),
+                              const SizedBox(height: 18),
+                              InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () => setDialogState(
+                                  () => dontShowAgain = !dontShowAgain,
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Checkbox(
+                                        value: dontShowAgain,
+                                        onChanged: (value) {
+                                          setDialogState(
+                                            () =>
+                                                dontShowAgain = value ?? false,
+                                          );
+                                        },
+                                        activeColor: const Color(0xFF174A97),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Expanded(
+                                        child: Text(
+                                          "Don't show again",
+                                          style: TextStyle(
+                                            color: Color(0xFF1F2937),
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  if (dontShowAgain) {
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    await prefs.setBool(
+                                      AppConstants
+                                          .voicePracticeDisclaimerAcceptedKey,
+                                      true,
+                                    );
+                                  }
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop(true);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF174A97),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  minimumSize: const Size.fromHeight(52),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.play_arrow_rounded),
+                                label: const Text(
+                                  'I Understand, Start Voice Practice',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(false),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF174A97),
+                                  minimumSize: const Size.fromHeight(44),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    if (dontShowAgain) {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool(
-                        AppConstants.voicePracticeDisclaimerAcceptedKey,
-                        true,
-                      );
-                    }
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop(true);
-                    }
-                  },
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('I Understand, Start Voice Practice'),
-                ),
-              ],
+              ),
             );
           },
         );
@@ -878,8 +1074,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   }
 
   void _goBackHome() {
-    unawaited(_tts.stop());
+    unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    _listenSessionId++;
     if (mounted) {
       setState(() {
         _isSpeaking = false;
@@ -896,7 +1093,8 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   Future<void> _speakAndDisableVoiceMode(String message) async {
     _listeningRestartTimer?.cancel();
     await _speech.cancel();
-    await _tts.stop();
+    _listenSessionId++;
+    await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _voiceModeEnabled = false;
@@ -1176,6 +1374,62 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         bottomSheet: null,
       );
     });
+  }
+}
+
+class _SafetyPoint extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+
+  const _SafetyPoint({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEAF2FF),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: const Color(0xFF174A97), size: 19),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xFF111827),
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 12.8,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 

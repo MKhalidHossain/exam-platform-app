@@ -50,8 +50,10 @@ class VoiceCommandParser {
     if (learnedIntent != null) {
       return _decide(
         learnedIntent,
+        context: context,
         sensitivity: sensitivity,
         isFuzzyMatch: false,
+        isLearnedCorrection: true,
       );
     }
 
@@ -63,6 +65,7 @@ class VoiceCommandParser {
     if (exactAliasIntent != null) {
       return _decide(
         exactAliasIntent,
+        context: context,
         sensitivity: sensitivity,
         isFuzzyMatch: false,
       );
@@ -76,6 +79,7 @@ class VoiceCommandParser {
     if (patternIntent != null) {
       return _decide(
         patternIntent,
+        context: context,
         sensitivity: sensitivity,
         isFuzzyMatch: false,
       );
@@ -95,7 +99,13 @@ class VoiceCommandParser {
       );
     }
 
-    return _decide(fuzzyIntent, sensitivity: sensitivity, isFuzzyMatch: true);
+    return _decide(
+      fuzzyIntent,
+      context: context,
+      sensitivity: sensitivity,
+      isFuzzyMatch: true,
+      isAmbiguousFuzzyMatch: fuzzyResult?.isAmbiguous ?? false,
+    );
   }
 
   static VoiceIntent? _matchLearnedCorrection({
@@ -114,6 +124,7 @@ class VoiceCommandParser {
         correction.phrase,
       );
       if (normalizedCorrection != normalizedText) continue;
+      if (VoiceSafetyPolicy.isRiskyIntent(correction.intent)) continue;
 
       return correction.intent.copyWith(
         confidence: _learnedCorrectionConfidence,
@@ -172,8 +183,11 @@ class VoiceCommandParser {
 
   static VoiceCommandResult _decide(
     VoiceIntent intent, {
+    required VoiceScreenContext context,
     required VoiceCommandSensitivity sensitivity,
     required bool isFuzzyMatch,
+    bool isAmbiguousFuzzyMatch = false,
+    bool isLearnedCorrection = false,
   }) {
     final thresholds = _thresholdsFor(sensitivity);
     final isRisky = VoiceSafetyPolicy.isRiskyIntent(intent);
@@ -184,15 +198,15 @@ class VoiceCommandParser {
         return VoiceCommandResult(
           decision: VoiceCommandDecision.askConfirmation,
           intent: effectiveIntent,
-          message: 'Please confirm ${effectiveIntent.normalizedText}.',
+          message: _riskyConfirmMessage(effectiveIntent, context),
         );
       }
 
-      if (isFuzzyMatch) {
+      if (isFuzzyMatch || isLearnedCorrection) {
         return VoiceCommandResult(
           decision: VoiceCommandDecision.askConfirmation,
           intent: effectiveIntent,
-          message: 'Please confirm ${effectiveIntent.normalizedText}.',
+          message: _riskyConfirmMessage(effectiveIntent, context),
         );
       }
 
@@ -200,13 +214,21 @@ class VoiceCommandParser {
         return VoiceCommandResult(
           decision: VoiceCommandDecision.askConfirmation,
           intent: effectiveIntent,
-          message: 'Please confirm ${effectiveIntent.normalizedText}.',
+          message: _riskyConfirmMessage(effectiveIntent, context),
         );
       }
 
       return VoiceCommandResult(
         decision: VoiceCommandDecision.execute,
         intent: effectiveIntent,
+      );
+    }
+
+    if (isAmbiguousFuzzyMatch) {
+      return VoiceCommandResult(
+        decision: VoiceCommandDecision.askConfirmation,
+        intent: effectiveIntent,
+        message: 'Did you mean ${effectiveIntent.normalizedText}?',
       );
     }
 
@@ -236,10 +258,18 @@ class VoiceCommandParser {
     VoiceIntent intent,
     _VoiceParserThresholds thresholds,
   ) {
-    if (intent.type == VoiceIntentType.confirmSubmit) {
-      return intent.confidence >= thresholds.execute;
+    return intent.confidence >= thresholds.risky;
+  }
+
+  static String _riskyConfirmMessage(
+    VoiceIntent intent,
+    VoiceScreenContext context,
+  ) {
+    if (context == VoiceScreenContext.review &&
+        VoiceSafetyPolicy.submitLikeTypes.contains(intent.type)) {
+      return 'Do you want to submit your quiz?';
     }
-    return intent.confidence >= thresholds.confirm;
+    return 'Please confirm ${intent.normalizedText}.';
   }
 
   static bool _requiresExplicitConfirmation(VoiceIntentType type) {
@@ -257,14 +287,17 @@ class VoiceCommandParser {
       VoiceCommandSensitivity.strict => const _VoiceParserThresholds(
         execute: 0.90,
         confirm: 0.75,
+        risky: 0.94,
       ),
       VoiceCommandSensitivity.normal => const _VoiceParserThresholds(
         execute: 0.85,
         confirm: 0.65,
+        risky: 0.90,
       ),
       VoiceCommandSensitivity.flexible => const _VoiceParserThresholds(
         execute: 0.78,
         confirm: 0.58,
+        risky: 0.86,
       ),
     };
   }
@@ -273,6 +306,11 @@ class VoiceCommandParser {
 class _VoiceParserThresholds {
   final double execute;
   final double confirm;
+  final double risky;
 
-  const _VoiceParserThresholds({required this.execute, required this.confirm});
+  const _VoiceParserThresholds({
+    required this.execute,
+    required this.confirm,
+    required this.risky,
+  });
 }

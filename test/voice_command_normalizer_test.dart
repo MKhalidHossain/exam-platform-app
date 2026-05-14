@@ -22,6 +22,10 @@ void main() {
         VoiceCommandNormalizer.normalize('return to queston'),
         'return to question',
       );
+      expect(
+        VoiceCommandNormalizer.normalize('veiw explanation'),
+        'view explanation',
+      );
     });
 
     test('fixes submit speech mistakes', () {

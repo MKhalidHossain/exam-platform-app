@@ -15,6 +15,7 @@ class VoiceCommandNormalizer {
     'finis': 'finish',
     'fenish': 'finish',
     'revue': 'review',
+    'veiw': 'view',
     'explan': 'explain',
   };
 

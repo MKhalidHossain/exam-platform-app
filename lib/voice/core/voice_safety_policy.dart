@@ -14,6 +14,7 @@ class VoiceSafetyPolicy {
   };
 
   static const Set<String> riskyPhrases = {
+    'submit',
     'submit quiz',
     'confirm submit',
     'final submit',
@@ -21,8 +22,16 @@ class VoiceSafetyPolicy {
     'reset answers',
     'clear answer',
     'finish exam',
+    'finish',
     'delete',
     'restart test',
+  };
+
+  static const Set<VoiceIntentType> submitLikeTypes = {
+    VoiceIntentType.submit,
+    VoiceIntentType.confirmSubmit,
+    VoiceIntentType.finalSubmit,
+    VoiceIntentType.finishExam,
   };
 
   const VoiceSafetyPolicy._();

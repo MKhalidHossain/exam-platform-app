@@ -381,7 +381,19 @@ class VoiceCommandAliases {
       VoiceIntentType.readQuestion,
     ),
     _alias(VoiceScreenContext.quiz, 'repeat question', VoiceIntentType.repeat),
+    _alias(VoiceScreenContext.quiz, 'explain', VoiceIntentType.explain),
     _alias(VoiceScreenContext.quiz, 'explain answer', VoiceIntentType.explain),
+    _alias(VoiceScreenContext.quiz, 'explanation', VoiceIntentType.explain),
+    _alias(
+      VoiceScreenContext.quiz,
+      'view explanation',
+      VoiceIntentType.explain,
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'show explanation',
+      VoiceIntentType.explain,
+    ),
     _alias(VoiceScreenContext.quiz, 'flag question', VoiceIntentType.flag),
     _alias(
       VoiceScreenContext.quiz,

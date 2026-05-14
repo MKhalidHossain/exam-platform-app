@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
+import '../../voice/recognition/voice_audio_recorder.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
 import '../widgets/quiz_voice_overlay.dart';
@@ -51,6 +53,9 @@ class _McqScreenState extends State<McqScreen>
     with QuizVoiceRouteAware<McqScreen> {
   static const int _defaultDurationMinutes = 130;
   static const Duration _voiceAutoPlayDelay = Duration(seconds: 4);
+  static const Duration _maxListeningRestartDelay = Duration(seconds: 8);
+  static const int _maxListeningRestartBackoffStep = 4;
+  static const int _unknownCommandHelpThreshold = 2;
 
   // ─── Exam state ────────────────────────────────────────────────────────────
   late final List<_Question> _questions;
@@ -90,8 +95,17 @@ class _McqScreenState extends State<McqScreen>
   String? _speechLocaleId;
   String _heardText = '';
   final VoiceCommandProcessor _voiceCommandProcessor = VoiceCommandProcessor();
+  final VoiceAudioRecorder _voiceAudioRecorder = VoiceAudioRecorder();
+  File? _fallbackAudioFile;
+  double? _lastVoiceAmplitudeDb;
   bool _isQuestionNarrationActive = false;
+  bool _isInitialQuestionReading = false;
+  bool _hasInitialQuestionBeenRead = false;
   int _ttsSessionId = 0;
+  int _listenSessionId = 0;
+  int _listeningRestartAttempts = 0;
+  int _consecutiveUnknownCommands = 0;
+  bool _isTtsAwaitingCompletion = false;
   final String _voiceScreenToken =
       'mcq-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -110,6 +124,19 @@ class _McqScreenState extends State<McqScreen>
       _voiceController.assistantSettings.value.autoListenOnScreenOpen;
   bool get _isCurrentVoiceScreen =>
       _voiceController.isCurrentScreenToken(_voiceScreenToken);
+  bool get _canAutoRestartListening =>
+      mounted &&
+      _isCurrentVoiceScreen &&
+      _voiceModeEnabled &&
+      _autoListenEnabled &&
+      !_voicePracticePaused &&
+      _speechAvailable &&
+      !_isListening &&
+      !_isSpeaking &&
+      !_isAutoSubmitting &&
+      !_isPreparingToListen &&
+      _hasInitialQuestionBeenRead &&
+      !_isInitialQuestionReading;
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -135,10 +162,10 @@ class _McqScreenState extends State<McqScreen>
       _remaining = null;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _activateVoiceScreen();
-        _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
-      }
+      if (!mounted) return;
+      _activateVoiceScreen();
+      _bindVoiceSession(requestEntryAction: false);
+      if (_voiceModeEnabled) unawaited(_runInitialQuestionRead());
     });
   }
 
@@ -151,6 +178,7 @@ class _McqScreenState extends State<McqScreen>
     _voiceAutoAdvanceTimer?.cancel();
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    unawaited(_voiceAudioRecorder.dispose());
     _voiceController.unbindScreen(
       QuizVoiceScreen.mcq,
       screenToken: _voiceScreenToken,
@@ -171,6 +199,8 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
+    await _cancelFallbackAudioCapture();
+    _listenSessionId++;
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -186,22 +216,25 @@ class _McqScreenState extends State<McqScreen>
     await _tts.awaitSpeakCompletion(true);
     _tts.setCompletionHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       // In voice mode, auto-start listening after every TTS completion.
       if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-        _scheduleListeningRestart(const Duration(milliseconds: 500));
+        _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
       }
     });
     _tts.setCancelHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
     });
     _tts.setErrorHandler((_) {
       if (!mounted || !_isCurrentVoiceScreen) return;
+      if (_isTtsAwaitingCompletion) return;
       if (_isQuestionNarrationActive) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
@@ -246,6 +279,8 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
+    await _cancelFallbackAudioCapture();
+    _listenSessionId++;
     if (!mounted ||
         !_isCurrentVoiceScreen ||
         !_voiceModeEnabled ||
@@ -271,6 +306,7 @@ class _McqScreenState extends State<McqScreen>
         _isSpeaking) {
       return;
     }
+    if (!_hasInitialQuestionBeenRead || _isInitialQuestionReading) return;
     await _startListening();
   }
 
@@ -294,6 +330,13 @@ class _McqScreenState extends State<McqScreen>
     );
     _voiceController.markHeardText(_heardText);
     if (!_voiceModeEnabled) return;
+    if (_voicePracticePaused && !_isSpeaking) {
+      _voiceController.setVoiceState(
+        VoiceState.paused,
+        screen: QuizVoiceScreen.mcq,
+      );
+      return;
+    }
     final phase = _isAutoSubmitting
         ? QuizVoicePhase.submitting
         : _isSpeaking
@@ -347,7 +390,7 @@ class _McqScreenState extends State<McqScreen>
             _isPreparingToListen = false;
           });
           _syncVoiceSessionState();
-          _scheduleListeningRestart();
+          _scheduleListeningRestart(countAsRetry: true);
         },
         onStatus: (status) {
           if (!mounted || !_isCurrentVoiceScreen) return;
@@ -360,8 +403,7 @@ class _McqScreenState extends State<McqScreen>
             screen: QuizVoiceScreen.mcq,
             screenToken: _voiceScreenToken,
           );
-          if (status == 'listening' &&
-              (!_isListening || _isPreparingToListen)) {
+          if (status == 'listening' && !_isSpeaking && _isPreparingToListen) {
             setState(() {
               _isListening = true;
               _isPreparingToListen = false;
@@ -369,6 +411,7 @@ class _McqScreenState extends State<McqScreen>
             _syncVoiceSessionState();
           }
           if (status == 'done' || status == 'notListening') {
+            final hadHeardText = _heardText.trim().isNotEmpty;
             if (_isListening || _isPreparingToListen) {
               setState(() {
                 _isListening = false;
@@ -376,7 +419,9 @@ class _McqScreenState extends State<McqScreen>
               });
               _syncVoiceSessionState();
             }
-            _scheduleListeningRestart();
+            if (!hadHeardText) {
+              _scheduleListeningRestart(countAsRetry: true);
+            }
           }
         },
         options: [SpeechToText.androidNoBluetooth],
@@ -392,11 +437,7 @@ class _McqScreenState extends State<McqScreen>
         });
       }
       if (_voiceModeEnabled && available) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _voiceModeEnabled && !_isSpeaking) {
-            unawaited(_speakCurrentQuestion());
-          }
-        });
+        unawaited(_runInitialQuestionRead());
       }
       return available;
     } catch (error, stackTrace) {
@@ -427,30 +468,104 @@ class _McqScreenState extends State<McqScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _scheduleListeningRestart([
+  bool get _cloudFallbackReady {
+    final settings = _voiceController.assistantSettings.value;
+    return settings.cloudFallbackEnabled &&
+        _voiceController.cloudSpeechTranscriber != null;
+  }
+
+  Future<void> _startFallbackAudioCapture() async {
+    _lastVoiceAmplitudeDb = null;
+    if (!_cloudFallbackReady) {
+      await _cancelFallbackAudioCapture();
+      return;
+    }
+
+    final result = await _voiceAudioRecorder.start();
+    if (result.status == VoiceAudioRecorderStatus.recording) {
+      _fallbackAudioFile = result.file;
+      unawaited(_voiceAudioRecorder.stopAfterTimeout());
+      return;
+    }
+
+    _fallbackAudioFile = null;
+    if (result.status == VoiceAudioRecorderStatus.permissionDenied) {
+      _voiceController.logEvent(
+        'fallback recorder permission denied',
+        screen: QuizVoiceScreen.mcq,
+      );
+    }
+  }
+
+  Future<File?> _stopFallbackAudioCapture() async {
+    if (!_voiceAudioRecorder.isRecording) return _fallbackAudioFile;
+    _lastVoiceAmplitudeDb = await _voiceAudioRecorder.getAmplitudeDb();
+    final result = await _voiceAudioRecorder.stop();
+    _fallbackAudioFile = result.file;
+    return _fallbackAudioFile;
+  }
+
+  Future<void> _cancelFallbackAudioCapture() async {
+    _fallbackAudioFile = null;
+    _lastVoiceAmplitudeDb = null;
+    await _voiceAudioRecorder.cancel();
+  }
+
+  void _scheduleListeningRestart({
     Duration delay = const Duration(milliseconds: 700),
-  ]) {
+    bool countAsRetry = false,
+  }) {
     _listeningRestartTimer?.cancel();
     if (!_voiceModeEnabled || !_autoListenEnabled) return;
-    final retryDelay = enforceMinimumVoiceListenRetryDelay(delay);
-    if (mounted &&
-        !_isListening &&
-        !_isSpeaking &&
-        !_isAutoSubmitting &&
-        !_isPreparingToListen) {
-      setState(() => _isPreparingToListen = true);
-    }
-    _listeningRestartTimer = Timer(retryDelay, () {
-      if (!mounted ||
-          !_isCurrentVoiceScreen ||
-          !_voiceModeEnabled ||
-          _isListening ||
-          _isSpeaking ||
-          _isAutoSubmitting) {
-        return;
+    if (!_hasInitialQuestionBeenRead || _isInitialQuestionReading) return;
+    if (_voicePracticePaused || !_speechAvailable) {
+      if (mounted && _isPreparingToListen) {
+        setState(() => _isPreparingToListen = false);
       }
+      return;
+    }
+    final retryDelay = _listeningRestartDelay(delay, countAsRetry);
+    _listeningRestartTimer = Timer(retryDelay, () {
+      if (!_canAutoRestartListening) return;
       unawaited(_startListening());
     });
+  }
+
+  Duration _listeningRestartDelay(Duration delay, bool countAsRetry) {
+    final baseDelay = enforceMinimumVoiceListenRetryDelay(delay);
+    if (!countAsRetry) return baseDelay;
+
+    final backoffStep = _listeningRestartAttempts
+        .clamp(0, _maxListeningRestartBackoffStep)
+        .toInt();
+    _listeningRestartAttempts = math.min(
+      _listeningRestartAttempts + 1,
+      _maxListeningRestartBackoffStep,
+    );
+    final multiplier = 1 << backoffStep;
+    return Duration(
+      milliseconds: math.min(
+        baseDelay.inMilliseconds * multiplier,
+        _maxListeningRestartDelay.inMilliseconds,
+      ),
+    );
+  }
+
+  void _resetVoiceRetryState() {
+    _listeningRestartAttempts = 0;
+    _consecutiveUnknownCommands = 0;
+  }
+
+  String _feedbackForUnknownCommand(String feedback) {
+    _consecutiveUnknownCommands++;
+    final audioHint =
+        _lastVoiceAmplitudeDb != null && _lastVoiceAmplitudeDb! < -45
+        ? ' I may be hearing you too quietly. Move closer to the microphone or use a headset.'
+        : '';
+    if (_consecutiveUnknownCommands < _unknownCommandHelpThreshold) {
+      return '$feedback$audioHint';
+    }
+    return '$feedback$audioHint Try saying help, repeat question, next, review, or an option like A. Move closer to the microphone or use a headset if it keeps missing you.';
   }
 
   void _scheduleVoiceLoopRecovery({
@@ -467,6 +582,7 @@ class _McqScreenState extends State<McqScreen>
           _isListening) {
         return;
       }
+      if (!_hasInitialQuestionBeenRead || _isInitialQuestionReading) return;
       if (_isSpeaking) {
         _scheduleVoiceLoopRecovery(
           delay: minimumVoiceListenRetryDelay,
@@ -483,32 +599,7 @@ class _McqScreenState extends State<McqScreen>
   }
 
   Future<String?> _resolvePreferredSpeechLocaleId() async {
-    try {
-      final systemLocale = await _speech.systemLocale();
-      final locales = await _speech.locales();
-      final localeIds = locales.map((locale) => locale.localeId).toSet();
-      final configuredLocaleId =
-          _voiceController.assistantSettings.value.languageCode;
-      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
-      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
-      if (localeIds.contains(configuredSpeechLocaleId)) {
-        return configuredSpeechLocaleId;
-      }
-
-      final String? systemLocaleId = systemLocale?.localeId;
-      if (systemLocaleId != null &&
-          systemLocaleId.toLowerCase().startsWith('en')) {
-        return systemLocaleId;
-      }
-
-      for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
-        if (localeIds.contains(fallback)) return fallback;
-      }
-
-      return systemLocaleId;
-    } catch (_) {
-      return null;
-    }
+    return _voiceController.resolvePreferredSpeechLocaleId(_speech);
   }
 
   // ─── Timer ─────────────────────────────────────────────────────────────────
@@ -567,6 +658,7 @@ class _McqScreenState extends State<McqScreen>
     _hasAutoSubmitted = true;
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    unawaited(_cancelFallbackAudioCapture());
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -895,6 +987,7 @@ class _McqScreenState extends State<McqScreen>
   Future<void> _stopTtsPlayback() async {
     _ttsSessionId++;
     _isQuestionNarrationActive = false;
+    _isTtsAwaitingCompletion = false;
     await _tts.stop();
   }
 
@@ -918,17 +1011,23 @@ class _McqScreenState extends State<McqScreen>
       _scheduleListeningRestart();
       return;
     }
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
     await _speech.cancel();
+    _listenSessionId++;
+    await _cancelFallbackAudioCapture();
     await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
     await _applyVoiceAssistantSettings();
     final sessionId = ++_ttsSessionId;
     _isQuestionNarrationActive = true;
+    _isTtsAwaitingCompletion = true;
 
     try {
       for (final segment in segments) {
@@ -938,13 +1037,36 @@ class _McqScreenState extends State<McqScreen>
     } catch (_) {
       // Let the voice recovery flow reopen listening if TTS fails mid-read.
     } finally {
-      _isQuestionNarrationActive = false;
       final isActiveSession = mounted && sessionId == _ttsSessionId;
       if (isActiveSession) {
+        _isQuestionNarrationActive = false;
+        _isTtsAwaitingCompletion = false;
         setState(() => _isSpeaking = false);
         _syncVoiceSessionState();
         if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-          _scheduleListeningRestart(const Duration(milliseconds: 500));
+          _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
+        }
+      }
+    }
+  }
+
+  /// Reads the current question for the first time, blocking all auto-listen
+  /// paths until TTS fully completes.
+  Future<void> _runInitialQuestionRead() async {
+    if (!mounted || !_voiceModeEnabled || _isInitialQuestionReading) return;
+    _isInitialQuestionReading = true;
+    try {
+      await _speakCurrentQuestion(force: true);
+    } finally {
+      if (mounted) {
+        _hasInitialQuestionBeenRead = true;
+        _isInitialQuestionReading = false;
+        // Fallback: start listening if TTS was skipped for any reason.
+        if (_voiceModeEnabled &&
+            _autoListenEnabled &&
+            !_isListening &&
+            !_isSpeaking) {
+          _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
         }
       }
     }
@@ -961,21 +1083,46 @@ class _McqScreenState extends State<McqScreen>
   }
 
   /// Speaks [text] and, in voice mode, auto-starts listening when done.
-  Future<void> _speakFeedback(String text) async {
+  Future<void> _speakFeedback(
+    String text, {
+    bool countRestartAsRetry = false,
+  }) async {
     _voiceController.logEvent(
       'speak feedback requested',
       screen: QuizVoiceScreen.mcq,
     );
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
     await _speech.cancel();
+    _listenSessionId++;
+    await _cancelFallbackAudioCapture();
     await _stopTtsPlayback();
     await _applyVoiceAssistantSettings();
     if (!mounted) return;
     setState(() {
       _isSpeaking = true;
       _isListening = false;
+      _isPreparingToListen = false;
     });
     _syncVoiceSessionState();
-    await _tts.speak(text);
+    final sessionId = ++_ttsSessionId;
+    _isTtsAwaitingCompletion = true;
+    try {
+      await _tts.speak(text);
+    } finally {
+      final isActiveSession = mounted && sessionId == _ttsSessionId;
+      if (isActiveSession) {
+        _isTtsAwaitingCompletion = false;
+        setState(() => _isSpeaking = false);
+        _syncVoiceSessionState();
+        if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
+          _scheduleListeningRestart(
+            delay: const Duration(milliseconds: 500),
+            countAsRetry: countRestartAsRetry,
+          );
+        }
+      }
+    }
   }
 
   // ─── Voice mode toggle ─────────────────────────────────────────────────────
@@ -986,6 +1133,7 @@ class _McqScreenState extends State<McqScreen>
       _voiceLoopRecoveryTimer?.cancel();
       await _stopTtsPlayback();
       await _speech.cancel();
+      await _cancelFallbackAudioCapture();
       if (!mounted) return;
       setState(() {
         _voiceModeEnabled = false;
@@ -1016,7 +1164,7 @@ class _McqScreenState extends State<McqScreen>
         screen: QuizVoiceScreen.mcq,
         requestEntryAction: true,
       );
-      await _speakCurrentQuestion();
+      await _runInitialQuestionRead();
     }
   }
 
@@ -1031,13 +1179,14 @@ class _McqScreenState extends State<McqScreen>
     );
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
-    if (_isListening || _isSpeaking) return;
+    if (_isListening || _isSpeaking || _isPreparingToListen) return;
+    final listenSessionId = ++_listenSessionId;
     setState(() {
       _isPreparingToListen = true;
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
-    await _tts.stop();
+    await _stopTtsPlayback();
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
       final speechReady = await _initSpeech();
@@ -1050,6 +1199,7 @@ class _McqScreenState extends State<McqScreen>
       'speech listen call starting',
       screen: QuizVoiceScreen.mcq,
     );
+    await _startFallbackAudioCapture();
     final started = await startSpeechListeningSafely(
       speech: _speech,
       controller: _voiceController,
@@ -1057,6 +1207,7 @@ class _McqScreenState extends State<McqScreen>
       onResult: _onSpeechResult,
       localeId: _speechLocaleId,
     );
+    if (listenSessionId != _listenSessionId) return;
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!started) {
       setState(() {
@@ -1068,7 +1219,8 @@ class _McqScreenState extends State<McqScreen>
         'speech listen did not start, retry scheduled',
         screen: QuizVoiceScreen.mcq,
       );
-      _scheduleListeningRestart();
+      unawaited(_cancelFallbackAudioCapture());
+      _scheduleListeningRestart(countAsRetry: true);
       return;
     }
     setState(() {
@@ -1084,6 +1236,9 @@ class _McqScreenState extends State<McqScreen>
 
   /// Tap-while-reading: stop TTS first, then open the mic.
   Future<void> _interruptAndListen() async {
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    await _cancelFallbackAudioCapture();
     await _stopTtsPlayback();
     if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
@@ -1097,7 +1252,9 @@ class _McqScreenState extends State<McqScreen>
   }
 
   Future<void> _stopListening() async {
+    _listenSessionId++;
     await _speech.stop();
+    await _cancelFallbackAudioCapture();
     if (!mounted || !_isCurrentVoiceScreen) return;
     setState(() {
       _isListening = false;
@@ -1117,6 +1274,7 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
+    await _cancelFallbackAudioCapture();
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -1192,6 +1350,7 @@ class _McqScreenState extends State<McqScreen>
 
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted || !_isCurrentVoiceScreen) return;
+    if (_isSpeaking) return;
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -1209,23 +1368,57 @@ class _McqScreenState extends State<McqScreen>
         screen: QuizVoiceScreen.mcq,
       );
       final text = result.recognizedWords.trim();
-      if (text.isNotEmpty) unawaited(_handleVoiceCommand(text));
+      if (text.isNotEmpty) {
+        unawaited(_handleVoiceCommand(text));
+      } else {
+        unawaited(_cancelFallbackAudioCapture());
+      }
     }
   }
 
   // ─── Voice command dispatcher ──────────────────────────────────────────────
 
   Future<void> _handleVoiceCommand(String rawText) async {
-    if (_tryHandleQuestionAnswer(rawText)) return;
+    final fallbackAudioFile = await _stopFallbackAudioCapture();
+    if (_tryHandleQuestionAnswer(rawText)) {
+      _resetVoiceRetryState();
+      unawaited(_cancelFallbackAudioCapture());
+      return;
+    }
 
+    final settings = _voiceController.assistantSettings.value;
     final decision = await _voiceCommandProcessor.process(
       screen: QuizVoiceScreen.mcq,
       heardText: rawText,
-      sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
+      sensitivity: settings.commandSensitivity,
+      cloudFallbackEnabled: settings.cloudFallbackEnabled,
+      cloudSpeechService: _voiceController.cloudSpeechTranscriber,
+      fallbackAudioFile: fallbackAudioFile,
+      locale: _speechLocaleId ?? settings.speechLocaleCode,
+      availableCommands: const <String>[
+        'a',
+        'b',
+        'c',
+        'd',
+        'next',
+        'back',
+        'repeat question',
+        'explain',
+        'review',
+        'submit',
+        'help',
+      ],
     );
+    unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
     final result = decision.parseResult;
     final questionNumber = decision.questionNumber;
+    final String? retryFeedback =
+        !decision.shouldExecute && decision.feedback != null
+        ? result.intent == null
+              ? _feedbackForUnknownCommand(decision.feedback!)
+              : decision.feedback
+        : decision.feedback;
     _voiceController.logEvent(
       'parsed intent: ${result.intent?.name ?? 'none'}'
       '${questionNumber != null ? ' ($questionNumber)' : ''}'
@@ -1237,12 +1430,19 @@ class _McqScreenState extends State<McqScreen>
           ? null
           : QuizVoiceIntentParser.commandLabelFor(result.intent!),
       confidence: result.confidence,
-      retry: decision.feedback,
+      retry: retryFeedback,
     );
-    if (!decision.shouldExecute && decision.feedback != null) {
-      unawaited(_speakFeedback(decision.feedback!));
+    if (!decision.shouldExecute && retryFeedback != null) {
+      if (result.intent != null) _resetVoiceRetryState();
+      unawaited(
+        _speakFeedback(
+          retryFeedback,
+          countRestartAsRetry: result.intent == null,
+        ),
+      );
       return;
     }
+    _resetVoiceRetryState();
 
     switch (decision.intent) {
       case VoiceIntent.optionA:
@@ -1522,6 +1722,7 @@ class _McqScreenState extends State<McqScreen>
 
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
+    unawaited(_cancelFallbackAudioCapture());
     setState(() {
       _currentIndex += 1;
       _showExplanation = false;
@@ -1539,6 +1740,7 @@ class _McqScreenState extends State<McqScreen>
     if (_currentIndex > 0) {
       unawaited(_stopTtsPlayback());
       unawaited(_speech.cancel());
+      unawaited(_cancelFallbackAudioCapture());
       setState(() {
         _currentIndex -= 1;
         _showExplanation = false;
@@ -1668,6 +1870,7 @@ class _McqScreenState extends State<McqScreen>
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
     await _speech.cancel();
+    await _cancelFallbackAudioCapture();
     await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {

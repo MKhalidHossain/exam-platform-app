@@ -15,6 +15,7 @@ class FuzzyMatchResult {
   final String normalizedQuery;
   final String normalizedMatchedPhrase;
   final double score;
+  final double? secondBestScore;
   final VoiceIntent? intent;
 
   const FuzzyMatchResult({
@@ -22,11 +23,14 @@ class FuzzyMatchResult {
     required this.normalizedQuery,
     required this.normalizedMatchedPhrase,
     required this.score,
+    this.secondBestScore,
     this.intent,
   });
 
   bool get hasIntent => intent != null;
   bool get isRisky => intent?.isRisky ?? false;
+  bool get isAmbiguous =>
+      secondBestScore != null && score - secondBestScore! < 0.08;
 }
 
 class FuzzyMatcher {
@@ -40,9 +44,13 @@ class FuzzyMatcher {
     if (normalizedQuery.isEmpty) return null;
 
     FuzzyMatchResult? bestResult;
+    FuzzyMatchResult? secondBestResult;
     for (final candidate in candidates) {
       final normalizedPhrase = VoiceTextNormalizer.normalize(candidate.phrase);
       if (normalizedPhrase.isEmpty) continue;
+      if (normalizedQuery.length == 1 && normalizedPhrase != normalizedQuery) {
+        continue;
+      }
 
       final score = similarity(normalizedQuery, normalizedPhrase);
       final result = FuzzyMatchResult(
@@ -54,11 +62,23 @@ class FuzzyMatcher {
       );
 
       if (_isBetterMatch(result, bestResult)) {
+        secondBestResult = bestResult;
         bestResult = result;
+      } else if (_isBetterMatch(result, secondBestResult)) {
+        secondBestResult = result;
       }
     }
 
-    return bestResult;
+    final best = bestResult;
+    if (best == null) return null;
+    return FuzzyMatchResult(
+      matchedPhrase: best.matchedPhrase,
+      normalizedQuery: best.normalizedQuery,
+      normalizedMatchedPhrase: best.normalizedMatchedPhrase,
+      score: best.score,
+      secondBestScore: secondBestResult?.score,
+      intent: best.intent,
+    );
   }
 
   static FuzzyMatchResult? matchAliases(

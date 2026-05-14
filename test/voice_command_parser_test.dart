@@ -82,6 +82,34 @@ void main() {
       expect(result.intent?.type, isNot(VoiceIntentType.back));
     });
 
+    test('maps quiz explanation phrases to explain intent', () {
+      for (final phrase in [
+        'explain',
+        'view explanation',
+        'veiw explanation',
+        'explanation',
+      ]) {
+        final result = VoiceCommandParser.parse(
+          rawText: phrase,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+        );
+
+        expect(result.decision, VoiceCommandDecision.execute, reason: phrase);
+        expect(result.intent?.type, VoiceIntentType.explain, reason: phrase);
+      }
+    });
+
+    test('keeps explanation phrases quiz-screen only', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'explain',
+        context: VoiceScreenContext.review,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(result.intent?.type, isNot(VoiceIntentType.explain));
+    });
+
     test('uses learned corrections only for matching screen context', () {
       final learnedIntent = VoiceCommandAliases.intentFor(
         type: VoiceIntentType.next,

@@ -29,6 +29,7 @@ void main() {
       expect(VoiceTextNormalizer.normalize('queston'), 'question');
       expect(VoiceTextNormalizer.normalize('nex'), 'next');
       expect(VoiceTextNormalizer.normalize('neckst'), 'next');
+      expect(VoiceTextNormalizer.normalize('veiw'), 'view');
     });
 
     test('normalizes submit finish and review command variants', () {

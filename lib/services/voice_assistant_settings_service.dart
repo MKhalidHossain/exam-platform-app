@@ -90,9 +90,7 @@ class VoiceAssistantSettingsService {
           .toDouble(),
       languageCode: prefs.getString(_languageCodeKey) ?? defaults.languageCode,
       speechLocaleCode:
-          prefs.getString(_speechLocaleCodeKey) ??
-          prefs.getString(_languageCodeKey) ??
-          defaults.speechLocaleCode,
+          prefs.getString(_speechLocaleCodeKey) ?? defaults.speechLocaleCode,
       autoListenOnScreenOpen:
           prefs.getBool(_autoListenKey) ?? defaults.autoListenOnScreenOpen,
       commandSensitivity: _sensitivityFromName(

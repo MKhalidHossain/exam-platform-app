@@ -5,6 +5,7 @@ import '../services/voice_assistant_settings_service.dart';
 import '../voice/core/voice_command_context.dart' as core_context;
 import '../voice/core/voice_command_result.dart' as core_result;
 import '../voice/core/voice_intent.dart' as core_intent;
+import '../voice/learning/voice_learning_service.dart';
 import '../voice/parsing/voice_command_parser.dart' as core_parser;
 import '../voice/parsing/voice_text_normalizer.dart';
 import '../voice/recognition/cloud_speech_service.dart';
@@ -32,6 +33,10 @@ class VoiceCommandDecision {
 
 class VoiceCommandProcessor {
   _PendingVoiceConfirmation? _pendingConfirmation;
+  final VoiceLearningService _learningService;
+
+  VoiceCommandProcessor({VoiceLearningService? learningService})
+    : _learningService = learningService ?? const VoiceLearningService();
 
   Future<VoiceCommandDecision> process({
     required QuizVoiceScreen screen,
@@ -56,6 +61,15 @@ class VoiceCommandProcessor {
             pendingConfirmation.parseResult.heardText,
             pendingConfirmation.parseResult.intent!,
           );
+          final learnedIntent = pendingConfirmation.coreResult.intent;
+          if (learnedIntent != null) {
+            await _learningService.saveCorrection(
+              rawHeardText: pendingConfirmation.parseResult.heardText,
+              intent: learnedIntent,
+              screenContext: _coreContextFor(pendingConfirmation.screen),
+              userConfirmed: true,
+            );
+          }
         }
         return _decisionFromParseResult(
           pendingConfirmation.parseResult,
@@ -130,6 +144,12 @@ class VoiceCommandProcessor {
       );
       if (cloudOutcome != null) {
         outcome = cloudOutcome;
+        if (outcome.coreResult.intent?.isRisky == true) {
+          outcome = _confirmationOutcome(
+            outcome,
+            message: 'Please repeat this command without cloud fallback.',
+          );
+        }
         fallbackUsed = true;
       } else {
         errorType = 'cloudFallbackFailed';
@@ -166,18 +186,31 @@ class VoiceCommandProcessor {
 
     if (feedback != null &&
         outcome.coreResult.decision ==
-            core_result.VoiceCommandDecision.askConfirmation &&
-        outcome.coreResult.intent?.isRisky != true &&
-        QuizVoiceIntentParser.canLearnCorrection(result.intent) &&
-        feedback.startsWith('Did you mean')) {
-      _pendingConfirmation = _PendingVoiceConfirmation(
-        parseResult: result,
-        coreResult: outcome.coreResult,
-        screen: screen,
-        isRisky: false,
-        fallbackUsed: fallbackUsed,
-        source: source,
-      );
+            core_result.VoiceCommandDecision.askConfirmation) {
+      if (outcome.coreResult.intent?.isRisky != true &&
+          QuizVoiceIntentParser.canLearnCorrection(result.intent) &&
+          feedback.startsWith('Did you mean')) {
+        _pendingConfirmation = _PendingVoiceConfirmation(
+          parseResult: result,
+          coreResult: outcome.coreResult,
+          screen: screen,
+          isRisky: false,
+          fallbackUsed: fallbackUsed,
+          source: source,
+        );
+      } else if (screen == QuizVoiceScreen.examReview &&
+          (result.intent == VoiceIntent.submit ||
+              result.intent == VoiceIntent.confirmSubmit) &&
+          outcome.coreResult.intent?.isRisky == true) {
+        _pendingConfirmation = _PendingVoiceConfirmation(
+          parseResult: result,
+          coreResult: outcome.coreResult,
+          screen: screen,
+          isRisky: true,
+          fallbackUsed: fallbackUsed,
+          source: source,
+        );
+      }
     }
 
     return _decisionFromParseResult(
@@ -192,17 +225,14 @@ class VoiceCommandProcessor {
     required String? feedback,
     Map<String, dynamic> analytics = const <String, dynamic>{},
   }) {
+    final normalizedText = result.normalizedText;
     return VoiceCommandDecision(
       parseResult: result,
       intent: result.intent,
       feedback: feedback,
       shouldExecute: feedback == null,
-      questionNumber: QuizVoiceIntentParser.questionNumberFrom(
-        result.normalizedText,
-      ),
-      requestedQuestionCount: QuizVoiceIntentParser.requestedQuestionCountFrom(
-        result.normalizedText,
-      ),
+      questionNumber: _questionNumberFrom(normalizedText),
+      requestedQuestionCount: _requestedQuestionCountFrom(normalizedText),
       analytics: analytics,
     );
   }
@@ -211,8 +241,10 @@ class VoiceCommandProcessor {
     _pendingConfirmation = null;
   }
 
-  bool _isYesText(String text) =>
-      QuizVoiceIntentParser.isConfirmationText(text);
+  bool _isYesText(String text) {
+    final normalizedText = VoiceTextNormalizer.normalize(text);
+    return QuizVoiceIntentParser.isConfirmationText(normalizedText);
+  }
 
   bool _isNoText(String text) {
     final normalizedText = VoiceTextNormalizer.normalize(text);
@@ -228,6 +260,33 @@ class VoiceCommandProcessor {
       'dont',
       'don t',
     }.contains(normalizedText);
+  }
+
+  int? _questionNumberFrom(String normalizedText) {
+    for (final pattern in const [
+      r'\b(?:question|q)\s+(\d+)\b',
+      r'\b(?:question\s+number|number)\s+(\d+)\b',
+      r'\b(?:go|jump|move|return|back)\s+(?:to\s+)?(?:question\s+)?(\d+)\b',
+    ]) {
+      final match = RegExp(pattern).firstMatch(normalizedText);
+      final number = int.tryParse(match?.group(1) ?? '');
+      if (number != null) return number;
+    }
+    return null;
+  }
+
+  int? _requestedQuestionCountFrom(String normalizedText) {
+    for (final pattern in const [
+      r'\b(?:max|min|maximum|minimum)\s+(?:question|questions)\s+(\d+)\b',
+      r'\b(?:set|select|choose|make|use)\s+(?:question|questions|count|total)\s+(?:to\s+)?(\d+)\b',
+      r'\b(?:question|questions|count|total)\s+(?:count\s+)?(?:to\s+)?(\d+)\b',
+      r'\b(\d+)\s+(?:question|questions)\b',
+    ]) {
+      final match = RegExp(pattern).firstMatch(normalizedText);
+      final count = int.tryParse(match?.group(1) ?? '');
+      if (count != null) return count;
+    }
+    return null;
   }
 
   bool _shouldTryCloudFallback(
@@ -253,21 +312,31 @@ class VoiceCommandProcessor {
     required String locale,
     required List<String> availableCommands,
   }) async {
-    final cloudResult = await cloudSpeechService.transcribeCommand(
-      audioFile: fallbackAudioFile,
-      locale: locale,
-      screenContext: _coreContextFor(screen),
-      availableCommands: availableCommands,
-    );
-    if (!cloudResult.isSuccess || cloudResult.transcript.trim().isEmpty) {
-      return null;
-    }
+    try {
+      final cloudResult = await cloudSpeechService.transcribeCommand(
+        audioFile: fallbackAudioFile,
+        locale: locale,
+        screenContext: _coreContextFor(screen),
+        availableCommands: availableCommands,
+      );
+      if (!cloudResult.isSuccess || cloudResult.transcript.trim().isEmpty) {
+        return null;
+      }
 
-    return _parseWithCoreParser(
-      screen: screen,
-      heardText: cloudResult.transcript,
-      sensitivity: sensitivity,
-    );
+      return _parseWithCoreParser(
+        screen: screen,
+        heardText: cloudResult.transcript,
+        sensitivity: sensitivity,
+      );
+    } finally {
+      try {
+        if (await fallbackAudioFile.exists()) {
+          await fallbackAudioFile.delete();
+        }
+      } catch (_) {
+        // Best-effort cleanup for temporary fallback audio.
+      }
+    }
   }
 
   Future<_CoreVoiceParseOutcome> _parseWithCoreParser({
@@ -276,10 +345,15 @@ class VoiceCommandProcessor {
     required CommandSensitivity sensitivity,
   }) async {
     final normalizedText = VoiceTextNormalizer.normalize(heardText);
+    final context = _coreContextFor(screen);
+    final learnedCorrections = await _learningService.getParserCorrections(
+      context,
+    );
     final decision = core_parser.VoiceCommandParser.parse(
       rawText: heardText,
-      context: _coreContextFor(screen),
+      context: context,
       sensitivity: _coreSensitivityFor(sensitivity),
+      learnedCorrections: learnedCorrections,
     );
     final coreIntent = decision.intent;
     final legacyIntent = coreIntent == null
@@ -294,6 +368,22 @@ class VoiceCommandProcessor {
         normalizedText: coreIntent?.normalizedText ?? normalizedText,
         heardText: heardText,
       ),
+    );
+  }
+
+  _CoreVoiceParseOutcome _confirmationOutcome(
+    _CoreVoiceParseOutcome outcome, {
+    required String message,
+  }) {
+    final intent = outcome.coreResult.intent;
+    final updatedCoreResult = core_result.VoiceCommandResult(
+      decision: core_result.VoiceCommandDecision.askConfirmation,
+      intent: intent,
+      message: message,
+    );
+    return _CoreVoiceParseOutcome(
+      coreResult: updatedCoreResult,
+      parseResult: outcome.parseResult,
     );
   }
 
@@ -432,13 +522,13 @@ class VoiceCommandProcessor {
       core_intent.VoiceIntentType.pauseAssistant => VoiceIntent.pauseAssistant,
       core_intent.VoiceIntentType.resumeAssistant =>
         VoiceIntent.resumeAssistant,
+      core_intent.VoiceIntentType.finalSubmit ||
+      core_intent.VoiceIntentType.finishExam => VoiceIntent.submit,
       core_intent.VoiceIntentType.trueAnswer ||
       core_intent.VoiceIntentType.falseAnswer ||
-      core_intent.VoiceIntentType.finalSubmit ||
       core_intent.VoiceIntentType.exitQuiz ||
       core_intent.VoiceIntentType.resetAnswers ||
       core_intent.VoiceIntentType.clearAnswer ||
-      core_intent.VoiceIntentType.finishExam ||
       core_intent.VoiceIntentType.delete ||
       core_intent.VoiceIntentType.restartTest => null,
     };
