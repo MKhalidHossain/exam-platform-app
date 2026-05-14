@@ -172,6 +172,24 @@ class VoiceCommandAliases {
     ),
     _alias(
       VoiceScreenContext.quiz,
+      'select option a',
+      VoiceIntentType.optionA,
+      value: 'a',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose a',
+      VoiceIntentType.optionA,
+      value: 'a',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose option a',
+      VoiceIntentType.optionA,
+      value: 'a',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
       'first option',
       VoiceIntentType.optionA,
       value: 'a',
@@ -199,6 +217,24 @@ class VoiceCommandAliases {
     _alias(
       VoiceScreenContext.quiz,
       'select b',
+      VoiceIntentType.optionB,
+      value: 'b',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'select option b',
+      VoiceIntentType.optionB,
+      value: 'b',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose b',
+      VoiceIntentType.optionB,
+      value: 'b',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose option b',
       VoiceIntentType.optionB,
       value: 'b',
     ),
@@ -236,6 +272,24 @@ class VoiceCommandAliases {
     ),
     _alias(
       VoiceScreenContext.quiz,
+      'select option c',
+      VoiceIntentType.optionC,
+      value: 'c',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose c',
+      VoiceIntentType.optionC,
+      value: 'c',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose option c',
+      VoiceIntentType.optionC,
+      value: 'c',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
       'third option',
       VoiceIntentType.optionC,
       value: 'c',
@@ -263,6 +317,24 @@ class VoiceCommandAliases {
     _alias(
       VoiceScreenContext.quiz,
       'select d',
+      VoiceIntentType.optionD,
+      value: 'd',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'select option d',
+      VoiceIntentType.optionD,
+      value: 'd',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose d',
+      VoiceIntentType.optionD,
+      value: 'd',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'choose option d',
       VoiceIntentType.optionD,
       value: 'd',
     ),
@@ -317,7 +389,15 @@ class VoiceCommandAliases {
       VoiceIntentType.bookmark,
     ),
     _alias(VoiceScreenContext.quiz, 'open review', VoiceIntentType.review),
+    _alias(VoiceScreenContext.quiz, 'review', VoiceIntentType.review),
+    _alias(VoiceScreenContext.quiz, 'go to review', VoiceIntentType.review),
+    _alias(VoiceScreenContext.quiz, 'show review', VoiceIntentType.review),
+    _alias(VoiceScreenContext.quiz, 'submit', VoiceIntentType.submit),
     _alias(VoiceScreenContext.quiz, 'submit quiz', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.quiz, 'finish', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.quiz, 'finish quiz', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.quiz, 'done', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.quiz, 'complete', VoiceIntentType.submit),
   ];
 
   static final List<VoiceCommandAlias> _reviewAliases = [
@@ -329,7 +409,22 @@ class VoiceCommandAliases {
       VoiceIntentType.readSummary,
     ),
     _alias(VoiceScreenContext.review, 'summary', VoiceIntentType.readSummary),
+    _alias(VoiceScreenContext.review, 'submit', VoiceIntentType.submit),
     _alias(VoiceScreenContext.review, 'submit quiz', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'finish', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'finish quiz', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'final submit', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'done', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'complete', VoiceIntentType.submit),
+    _alias(VoiceScreenContext.review, 'back', VoiceIntentType.back),
+    _alias(VoiceScreenContext.review, 'previous', VoiceIntentType.back),
+    _alias(VoiceScreenContext.review, 'return', VoiceIntentType.back),
+    _alias(VoiceScreenContext.review, 'return question', VoiceIntentType.back),
+    _alias(
+      VoiceScreenContext.review,
+      'return to question',
+      VoiceIntentType.back,
+    ),
     _alias(
       VoiceScreenContext.review,
       'confirm submit',

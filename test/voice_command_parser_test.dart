@@ -19,6 +19,69 @@ void main() {
       expect(result.intent?.normalizedText, 'option b');
     });
 
+    test('maps quiz option selection phrases to option intents', () {
+      final cases = <String, VoiceIntentType>{
+        'select a': VoiceIntentType.optionA,
+        'select b': VoiceIntentType.optionB,
+        'select option b': VoiceIntentType.optionB,
+        'choose b': VoiceIntentType.optionB,
+        'answer b': VoiceIntentType.optionB,
+        'select bee': VoiceIntentType.optionB,
+        'select c': VoiceIntentType.optionC,
+        'select sea': VoiceIntentType.optionC,
+        'select d': VoiceIntentType.optionD,
+        'select dee': VoiceIntentType.optionD,
+      };
+
+      for (final entry in cases.entries) {
+        final result = VoiceCommandParser.parse(
+          rawText: entry.key,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+        );
+
+        expect(
+          result.decision,
+          VoiceCommandDecision.execute,
+          reason: entry.key,
+        );
+        expect(result.intent?.type, entry.value, reason: entry.key);
+      }
+    });
+
+    test('keeps option selection aliases quiz-screen only', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'select b',
+        context: VoiceScreenContext.review,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(result.intent?.type, isNot(VoiceIntentType.optionB));
+    });
+
+    test('maps review return phrases to back intent', () {
+      for (final phrase in ['return', 'return question', 'return to queston']) {
+        final result = VoiceCommandParser.parse(
+          rawText: phrase,
+          context: VoiceScreenContext.review,
+          sensitivity: VoiceCommandSensitivity.normal,
+        );
+
+        expect(result.decision, VoiceCommandDecision.execute, reason: phrase);
+        expect(result.intent?.type, VoiceIntentType.back, reason: phrase);
+      }
+    });
+
+    test('keeps review return phrases screen-aware', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'return to question',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(result.intent?.type, isNot(VoiceIntentType.back));
+    });
+
     test('uses learned corrections only for matching screen context', () {
       final learnedIntent = VoiceCommandAliases.intentFor(
         type: VoiceIntentType.next,
@@ -96,16 +159,48 @@ void main() {
       expect(result.decision, VoiceCommandDecision.fallbackToCloud);
     });
 
-    test('submit quiz asks confirmation even on exact match', () {
+    test('submit and finish execute directly on quiz and review screens', () {
       final result = VoiceCommandParser.parse(
         rawText: 'submit quiz',
         context: VoiceScreenContext.quiz,
         sensitivity: VoiceCommandSensitivity.normal,
       );
+      final finish = VoiceCommandParser.parse(
+        rawText: 'fenish',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+      final finalSubmit = VoiceCommandParser.parse(
+        rawText: 'final submit',
+        context: VoiceScreenContext.review,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
 
-      expect(result.decision, VoiceCommandDecision.askConfirmation);
+      expect(result.decision, VoiceCommandDecision.execute);
       expect(result.intent?.type, VoiceIntentType.submit);
       expect(result.intent?.isRisky, isTrue);
+      expect(finish.decision, VoiceCommandDecision.execute);
+      expect(finish.intent?.type, VoiceIntentType.submit);
+      expect(finalSubmit.decision, VoiceCommandDecision.execute);
+      expect(finalSubmit.intent?.type, VoiceIntentType.submit);
+    });
+
+    test('new speech aliases map to navigation commands', () {
+      final next = VoiceCommandParser.parse(
+        rawText: 'neckst',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+      final review = VoiceCommandParser.parse(
+        rawText: 'ree view',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(next.decision, VoiceCommandDecision.execute);
+      expect(next.intent?.type, VoiceIntentType.next);
+      expect(review.decision, VoiceCommandDecision.execute);
+      expect(review.intent?.type, VoiceIntentType.review);
     });
 
     test('confirm submit requires strong confidence', () {

@@ -243,10 +243,7 @@ class VoiceCommandParser {
   }
 
   static bool _requiresExplicitConfirmation(VoiceIntentType type) {
-    return type == VoiceIntentType.submit ||
-        type == VoiceIntentType.finalSubmit ||
-        type == VoiceIntentType.finishExam ||
-        type == VoiceIntentType.exitQuiz ||
+    return type == VoiceIntentType.exitQuiz ||
         type == VoiceIntentType.resetAnswers ||
         type == VoiceIntentType.clearAnswer ||
         type == VoiceIntentType.delete ||

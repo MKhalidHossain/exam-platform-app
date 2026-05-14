@@ -9,10 +9,19 @@ class VoiceTextNormalizer {
     'opshun': 'option',
     'kweschen': 'question',
     'kwestion': 'question',
+    'queston': 'question',
+    'sub mit': 'submit',
+    'ree view': 'review',
   };
 
   static const Map<String, String> _wordCorrections = {
     'nex': 'next',
+    'neckst': 'next',
+    'sabmit': 'submit',
+    'sabit': 'submit',
+    'finis': 'finish',
+    'fenish': 'finish',
+    'revue': 'review',
     'fals': 'false',
     'falls': 'false',
     'tree': 'three',

@@ -108,6 +108,13 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
 
   bool isCurrentScreenToken(String token) => _activeScreenToken == token;
 
+  bool shouldOpenReviewForVoiceNext({
+    required int currentIndex,
+    required int questionCount,
+  }) {
+    return questionCount <= 0 || currentIndex >= questionCount - 1;
+  }
+
   bool isCurrentScreen(QuizVoiceScreen screen, String token) {
     final isCurrent = _activeScreen == screen && _activeScreenToken == token;
     if (!isCurrent) {

@@ -1320,7 +1320,7 @@ class _McqScreenState extends State<McqScreen>
             'Say read to hear the question again. '
             'Say explain to hear the explanation. '
             'Say review to open the exam review screen. '
-            'Say submit to open review and confirm the exam. '
+            'Say submit to open review. '
             'Say stop voice mode to turn off hands free mode.',
           ),
         );
@@ -1506,51 +1506,32 @@ class _McqScreenState extends State<McqScreen>
 
   void _nextViaVoice() {
     _voiceAutoAdvanceTimer?.cancel();
+    if (_voiceController.shouldOpenReviewForVoiceNext(
+      currentIndex: _currentIndex,
+      questionCount: _questions.length,
+    )) {
+      _reviewViaVoice();
+      return;
+    }
+
     final hasAnswer = _hasAnswer(_currentIndex);
     final isFlagged = _flaggedQuestions.contains(_currentIndex);
-
-    if (!hasAnswer && !isFlagged) {
-      if (widget.voicePracticeMode) {
-        _voiceSkippedCount += 1;
-      } else {
-        unawaited(
-          _speakFeedback(
-            'Please select an answer or flag this question before moving on.',
-          ),
-        );
-        return;
-      }
+    if (!hasAnswer && !isFlagged && widget.voicePracticeMode) {
+      _voiceSkippedCount += 1;
     }
 
-    if (_currentIndex < _questions.length - 1) {
-      unawaited(_stopTtsPlayback());
-      unawaited(_speech.cancel());
-      setState(() {
-        _currentIndex += 1;
-        _showExplanation = false;
-        _isSpeaking = false;
-        _isListening = false;
-        _heardText = '';
-      });
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
-      });
-    } else {
-      final covered = <int>{..._selectedIndexes.keys, ..._flaggedQuestions};
-      if (covered.length < _questions.length) {
-        unawaited(
-          _speakFeedback(
-            'You still have unanswered questions. Say submit when you are ready.',
-          ),
-        );
-      } else {
-        unawaited(
-          _speakFeedback(
-            'You have reached the last question. Say submit to finish, or say back to review.',
-          ),
-        );
-      }
-    }
+    unawaited(_stopTtsPlayback());
+    unawaited(_speech.cancel());
+    setState(() {
+      _currentIndex += 1;
+      _showExplanation = false;
+      _isSpeaking = false;
+      _isListening = false;
+      _heardText = '';
+    });
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && _voiceModeEnabled) unawaited(_speakCurrentQuestion());
+    });
   }
 
   void _previousViaVoice() {

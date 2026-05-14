@@ -26,7 +26,19 @@ void main() {
       expect(VoiceTextNormalizer.normalize('fals'), 'false');
       expect(VoiceTextNormalizer.normalize('falls'), 'false');
       expect(VoiceTextNormalizer.normalize('kweschen'), 'question');
+      expect(VoiceTextNormalizer.normalize('queston'), 'question');
       expect(VoiceTextNormalizer.normalize('nex'), 'next');
+      expect(VoiceTextNormalizer.normalize('neckst'), 'next');
+    });
+
+    test('normalizes submit finish and review command variants', () {
+      expect(VoiceTextNormalizer.normalize('sabmit'), 'submit');
+      expect(VoiceTextNormalizer.normalize('sabit'), 'submit');
+      expect(VoiceTextNormalizer.normalize('sub mit'), 'submit');
+      expect(VoiceTextNormalizer.normalize('finis'), 'finish');
+      expect(VoiceTextNormalizer.normalize('fenish'), 'finish');
+      expect(VoiceTextNormalizer.normalize('revue'), 'review');
+      expect(VoiceTextNormalizer.normalize('ree view'), 'review');
     });
 
     test('normalizes useful number words in question references', () {
@@ -35,8 +47,7 @@ void main() {
       expect(VoiceTextNormalizer.normalize('number ten'), 'number 10');
     });
 
-    test('does not over-normalize risky command misspellings', () {
-      expect(VoiceTextNormalizer.normalize('sub meet'), 'sub meet');
+    test('does not over-normalize unrelated submit-like text', () {
       expect(VoiceTextNormalizer.normalize('confarm submit'), 'confarm submit');
       expect(VoiceTextNormalizer.normalize('summit quiz'), 'summit quiz');
     });

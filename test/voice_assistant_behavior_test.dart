@@ -146,6 +146,32 @@ void main() {
     expect(guard.confirmSubmit(), isFalse);
   });
 
+  test('voice next opens review only at the last question', () {
+    final controller = QuizVoiceController();
+
+    expect(
+      controller.shouldOpenReviewForVoiceNext(
+        currentIndex: 0,
+        questionCount: 2,
+      ),
+      isFalse,
+    );
+    expect(
+      controller.shouldOpenReviewForVoiceNext(
+        currentIndex: 1,
+        questionCount: 2,
+      ),
+      isTrue,
+    );
+    expect(
+      controller.shouldOpenReviewForVoiceNext(
+        currentIndex: 0,
+        questionCount: 0,
+      ),
+      isTrue,
+    );
+  });
+
   test('speakOnce skips duplicate automatic reads', () {
     final controller = QuizVoiceController();
 

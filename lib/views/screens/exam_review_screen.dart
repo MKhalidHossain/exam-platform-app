@@ -485,12 +485,12 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       );
       buffer.write(
         'Say question ${_unansweredIndexes.first + 1} to return to an unanswered question, '
-        'or say submit to begin final confirmation. ',
+        'or say submit to finish the exam. ',
       );
     } else {
       buffer.write('All questions are covered. ');
       buffer.write(
-        'Say submit to begin final confirmation, or say question number to go back. ',
+        'Say submit to finish the exam, or say question number to go back. ',
       );
     }
     buffer.write('Say help to hear all review commands.');
@@ -742,7 +742,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         unawaited(
           _speakFeedback(
             'Review commands. '
-            'Say submit, then say confirm submit, to finish the exam. '
+            'Say submit, finish, or final submit to finish the exam. '
             'Say question 5 to return to that question. '
             'Say unanswered to jump to the first unanswered question. '
             'Say flagged to jump to the first flagged question. '
@@ -759,7 +759,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
     unawaited(
       _speakFeedback(
-        '${heard}Not recognised. Try submit, confirm submit, back, unanswered, flagged, or question number.',
+        '${heard}Not recognised. Try submit, finish, back, unanswered, flagged, or question number.',
       ),
     );
   }
@@ -804,7 +804,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     if (summary.isEmpty) {
       summary.write('Ready to submit. ');
     }
-    summary.write('Say confirm submit.');
+    summary.write('Tap Confirm Submit to finish.');
     return summary.toString();
   }
 
@@ -825,20 +825,18 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       unawaited(_speakFeedback('Submission is already in progress.'));
       return;
     }
-    _armSubmitConfirmation();
-    unawaited(_speakFeedback(_buildSubmitConfirmationMessage()));
+    _submitConfirmationTimer?.cancel();
+    _submitConfirmationGuard.clear();
+    if (_awaitingSubmitConfirmation && mounted) {
+      setState(() => _awaitingSubmitConfirmation = false);
+    } else {
+      _awaitingSubmitConfirmation = false;
+    }
+    unawaited(_submitFinalAnswers());
   }
 
   void _confirmSubmitViaVoice() {
-    if (!_submitConfirmationGuard.confirmSubmit()) {
-      unawaited(
-        _speakFeedback('Please say submit first, then say confirm submit.'),
-      );
-      return;
-    }
-    _awaitingSubmitConfirmation = false;
-    _submitConfirmationTimer?.cancel();
-    unawaited(_submitFinalAnswers());
+    _submitViaVoice();
   }
 
   void _submitFromButton() {
@@ -1414,14 +1412,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
               onMicTap: _isSpeaking
                   ? _interruptAndListen
                   : (_isListening ? _stopListening : _startListening),
-              listeningHint: 'Say submit, confirm submit, or back.',
+              listeningHint: 'Say submit, finish, or back.',
               speakingHint: 'Assistant is speaking.',
               idleHint: 'Tap the mic or say a review command.',
-              instructionItems: const <String>[
-                'submit',
-                'confirm submit',
-                'back',
-              ],
+              instructionItems: const <String>['submit', 'finish', 'back'],
               bottomPadding: 42,
             )
           : null,

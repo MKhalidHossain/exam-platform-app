@@ -61,6 +61,94 @@ void main() {
       );
     });
 
+    test('maps quiz option selection phrases to option intents', () async {
+      final cases = <String, VoiceIntent>{
+        'select a': VoiceIntent.optionA,
+        'select b': VoiceIntent.optionB,
+        'select option b': VoiceIntent.optionB,
+        'choose b': VoiceIntent.optionB,
+        'answer b': VoiceIntent.optionB,
+        'select bee': VoiceIntent.optionB,
+        'select c': VoiceIntent.optionC,
+        'select sea': VoiceIntent.optionC,
+        'select d': VoiceIntent.optionD,
+        'select dee': VoiceIntent.optionD,
+      };
+
+      for (final entry in cases.entries) {
+        final result = await QuizVoiceIntentParser.parse(
+          QuizVoiceScreen.mcq,
+          entry.key,
+        );
+
+        expect(result.intent, entry.value, reason: entry.key);
+        expect(QuizVoiceIntentParser.shouldExecute(result), isTrue);
+      }
+    });
+
+    test('keeps option selection aliases on MCQ screens', () async {
+      final result = await QuizVoiceIntentParser.parse(
+        QuizVoiceScreen.examReview,
+        'select b',
+      );
+
+      expect(result.intent, isNot(VoiceIntent.optionB));
+    });
+
+    test('maps review return phrases to back intent', () async {
+      for (final phrase in ['return', 'return question', 'return to queston']) {
+        final result = await QuizVoiceIntentParser.parse(
+          QuizVoiceScreen.examReview,
+          phrase,
+        );
+
+        expect(result.intent, VoiceIntent.back, reason: phrase);
+        expect(QuizVoiceIntentParser.shouldExecute(result), isTrue);
+      }
+    });
+
+    test('keeps review return phrases screen-aware', () async {
+      final result = await QuizVoiceIntentParser.parse(
+        QuizVoiceScreen.mcq,
+        'return to question',
+      );
+
+      expect(result.intent, isNot(VoiceIntent.back));
+    });
+
+    test('maps submit finish next and review speech aliases', () async {
+      final cases = <String, VoiceIntent>{
+        'sabmit': VoiceIntent.submit,
+        'sabit': VoiceIntent.submit,
+        'sub mit': VoiceIntent.submit,
+        'finis': VoiceIntent.submit,
+        'fenish': VoiceIntent.submit,
+        'nex': VoiceIntent.next,
+        'neckst': VoiceIntent.next,
+        'revue': VoiceIntent.review,
+        'ree view': VoiceIntent.review,
+      };
+
+      for (final entry in cases.entries) {
+        expect(
+          (await QuizVoiceIntentParser.parse(
+            QuizVoiceScreen.mcq,
+            entry.key,
+          )).intent,
+          entry.value,
+          reason: entry.key,
+        );
+      }
+
+      expect(
+        (await QuizVoiceIntentParser.parse(
+          QuizVoiceScreen.examReview,
+          'final submit',
+        )).intent,
+        VoiceIntent.submit,
+      );
+    });
+
     test('returns normalized and heard text without UI side effects', () async {
       final result = await QuizVoiceIntentParser.parse(
         QuizVoiceScreen.mcq,

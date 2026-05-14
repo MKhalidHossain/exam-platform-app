@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:ej_flutter/controllers/quiz_voice_controller.dart';
 import 'package:ej_flutter/services/voice_assistant_settings_service.dart';
+import 'package:ej_flutter/utils/quiz_voice_intent_parser.dart' as legacy;
 import 'package:ej_flutter/utils/voice_command_processor.dart';
 import 'package:ej_flutter/voice/core/voice_command_context.dart';
 import 'package:ej_flutter/voice/core/voice_command_result.dart' as core;
@@ -119,6 +120,31 @@ void main() {
       expect(result.decision, isNot(core.VoiceCommandDecision.execute));
     });
 
+    test('submit aliases execute without confirmation', () {
+      final quizSubmit = VoiceCommandParser.parse(
+        rawText: 'sabmit',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+      final reviewFinish = VoiceCommandParser.parse(
+        rawText: 'finish',
+        context: VoiceScreenContext.review,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+      final reviewFinalSubmit = VoiceCommandParser.parse(
+        rawText: 'final submit',
+        context: VoiceScreenContext.review,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(quizSubmit.intent?.type, VoiceIntentType.submit);
+      expect(quizSubmit.decision, core.VoiceCommandDecision.execute);
+      expect(reviewFinish.intent?.type, VoiceIntentType.submit);
+      expect(reviewFinish.decision, core.VoiceCommandDecision.execute);
+      expect(reviewFinalSubmit.intent?.type, VoiceIntentType.submit);
+      expect(reviewFinalSubmit.decision, core.VoiceCommandDecision.execute);
+    });
+
     test('confirm submit requires strong confidence before execution', () {
       final weakResult = VoiceCommandParser.parse(
         rawText: 'confarm submit',
@@ -182,6 +208,19 @@ void main() {
   });
 
   group('cloud fallback guard', () {
+    test('processor executes review submit directly', () async {
+      final result = await VoiceCommandProcessor().process(
+        screen: QuizVoiceScreen.examReview,
+        heardText: 'final submit',
+        sensitivity: CommandSensitivity.normal,
+      );
+
+      expect(result.shouldExecute, isTrue);
+      expect(result.intent, legacy.VoiceIntent.submit);
+      expect(result.feedback, isNull);
+      expect(result.analytics['confirmationShown'], isFalse);
+    });
+
     test('cloud disabled means no upload', () async {
       final tempDir = await Directory.systemTemp.createTemp('voice_test_');
       final audioFile = File('${tempDir.path}/sample.wav');
