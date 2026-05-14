@@ -2256,27 +2256,33 @@ class _McqScreenState extends State<McqScreen>
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: QuizVoiceOverlay(
-                  isListening: _isListening || _isPreparingToListen,
-                  isPreparingToListen: _isPreparingToListen,
-                  isSpeaking: _isSpeaking,
-                  heardText: _heardText,
-                  onMicTap: _isSpeaking
-                      ? _interruptAndListen // tap while TTS reads → stop TTS then open mic
-                      : (_isListening ? _stopListening : _startListening),
-                  listeningHint:
-                      'Say first, second, next, review, submit, or help.',
-                  speakingHint: 'Assistant is reading the question.',
-                  idleHint: 'Tap the mic or say an answer or command.',
-                  instructionItems: const <String>[
-                    'first',
-                    'second',
-                    'third',
-                    'fourth',
-                    'next',
-                    'review',
-                    'submit',
-                    'help',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const _McqVoiceCommandHints(),
+                    QuizVoiceOverlay(
+                      isListening: _isListening || _isPreparingToListen,
+                      isPreparingToListen: _isPreparingToListen,
+                      isSpeaking: _isSpeaking,
+                      heardText: _heardText,
+                      onMicTap: _isSpeaking
+                          ? _interruptAndListen // tap while TTS reads → stop TTS then open mic
+                          : (_isListening ? _stopListening : _startListening),
+                      listeningHint:
+                          'Say first, second, next, review, submit, or help.',
+                      speakingHint: 'Assistant is reading the question.',
+                      idleHint: 'Tap the mic or say an answer or command.',
+                      instructionItems: const <String>[
+                        'first',
+                        'second',
+                        'third',
+                        'fourth',
+                        'next',
+                        'review',
+                        'submit',
+                        'help',
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -2315,6 +2321,31 @@ class _Question {
 
   bool get isMultiSelect => type == _QuestionType.multiSelect;
   bool get isTrueFalse => type == _QuestionType.trueFalse;
+}
+
+class _McqVoiceCommandHints extends StatelessWidget {
+  const _McqVoiceCommandHints();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xF2F8FAFC),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: const Text(
+        'Try saying: Option A • Select A • Choose A • Next question'
+        ' • Read question • Explain • Flag • Submit quiz',
+        style: TextStyle(
+          fontSize: 11.5,
+          color: Color(0xFF64748B),
+          fontWeight: FontWeight.w500,
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
