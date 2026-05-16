@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_recognition_result.dart' as native;
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -28,8 +29,10 @@ class NativeSpeechService implements VoiceRecognitionService {
   @override
   Future<SpeechRecognitionResult> initialize() async {
     try {
+      debugPrint('[Voice][native] initialize requested');
       final available = await _speech.initialize(
         onError: (error) {
+          debugPrint('[Voice][native] speech error: $error');
           _completeListen(
             SpeechRecognitionResult.failure(
               status: SpeechRecognitionStatus.speechUnavailable,
@@ -38,6 +41,7 @@ class NativeSpeechService implements VoiceRecognitionService {
           );
         },
         onStatus: (status) {
+          debugPrint('[Voice][native] speech status=$status');
           if (status == 'done' || status == 'notListening') {
             _completeListen(_resultFromLastNativeResult());
           }
@@ -46,6 +50,7 @@ class NativeSpeechService implements VoiceRecognitionService {
 
       _initialized = true;
       _available = available;
+      debugPrint('[Voice][native] initialized available=$available');
 
       if (!available) {
         final hasPermission = await _speech.hasPermission;
@@ -68,6 +73,7 @@ class NativeSpeechService implements VoiceRecognitionService {
         durationMs: 0,
       );
     } catch (error) {
+      debugPrint('[Voice][native] initialize failed: $error');
       _initialized = false;
       _available = false;
       return SpeechRecognitionResult.failure(
@@ -110,6 +116,9 @@ class NativeSpeechService implements VoiceRecognitionService {
     }
 
     final hasPermission = await _speech.hasPermission;
+    debugPrint(
+      '[Voice][native] listen permission=$hasPermission locale=${config.localeId ?? 'system'}',
+    );
     if (!hasPermission) {
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.permissionDenied,
@@ -154,7 +163,9 @@ class NativeSpeechService implements VoiceRecognitionService {
           _completeListen(partial);
         },
       );
+      debugPrint('[Voice][native] listen call accepted');
     } catch (error) {
+      debugPrint('[Voice][native] listen failed: $error');
       _completeListen(
         SpeechRecognitionResult.failure(
           status: SpeechRecognitionStatus.speechUnavailable,
@@ -170,6 +181,7 @@ class NativeSpeechService implements VoiceRecognitionService {
   Future<SpeechRecognitionResult> stop() async {
     try {
       await _speech.stop();
+      debugPrint('[Voice][native] stop requested');
       final result = _resultFromLastNativeResult();
       _completeListen(result);
       return result;
@@ -187,6 +199,7 @@ class NativeSpeechService implements VoiceRecognitionService {
   Future<SpeechRecognitionResult> cancel() async {
     try {
       await _speech.cancel();
+      debugPrint('[Voice][native] cancel requested');
       final result = SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.canceled,
         message: 'Native speech recognition canceled.',

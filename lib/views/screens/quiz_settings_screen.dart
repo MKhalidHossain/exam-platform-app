@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -115,7 +116,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     }
     _cacheSelectedQuestionCount(initialCount);
     _configureTts();
-    unawaited(_primeSpeechAvailability());
+    unawaited(_primeSpeechAvailability(requestPermission: _voiceModeEnabled));
     _loadStarterExamUsage();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -192,9 +193,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       if (_isTtsAwaitingCompletion) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
-      if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-        _scheduleListeningRestart(const Duration(milliseconds: 450));
-      }
+      // Restart after awaited TTS is owned by the speak method's finally block.
     });
     _tts.setCancelHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
@@ -304,8 +303,23 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     _voiceController.setPhase(phase, screen: QuizVoiceScreen.quizSettings);
   }
 
-  Future<void> _primeSpeechAvailability() async {
+  Future<void> _primeSpeechAvailability({
+    bool requestPermission = false,
+  }) async {
+    debugPrint(
+      '[Voice][settings] prime speech platform=${Platform.operatingSystem} requestPermission=$requestPermission',
+    );
+    if (requestPermission) {
+      final speechReady = await _initSpeech(requestPermission: true);
+      if (!speechReady && mounted && _voiceModeEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showSpeechUnavailableMessage());
+        });
+      }
+      return;
+    }
     final hasPermission = await _speech.hasPermission;
+    debugPrint('[Voice][settings] prime permission=$hasPermission');
     if (!hasPermission) {
       if (!mounted) return;
       setState(() {
@@ -321,6 +335,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     if (_speechInitializing) return _speechAvailable;
     if (!requestPermission && !_speechAvailable) {
       final hasPermission = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][settings] init skipped permission=$hasPermission requestPermission=$requestPermission',
+      );
       if (!hasPermission) {
         if (!mounted) return false;
         setState(() {
@@ -333,8 +350,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
     _speechInitializing = true;
     try {
+      final permissionBefore = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][settings] speech initialize start platform=${Platform.operatingSystem} permissionBefore=$permissionBefore requestPermission=$requestPermission',
+      );
       final available = await _speech.initialize(
         onError: (error) {
+          debugPrint('[Voice][settings] speech error: $error');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech error: $error',
@@ -348,6 +370,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
           _scheduleListeningRestart();
         },
         onStatus: (status) {
+          debugPrint('[Voice][settings] speech status=$status');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech status: $status',
@@ -382,6 +405,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       if (available) {
         preferredLocaleId = await _resolvePreferredSpeechLocaleId();
       }
+      final permissionAfter = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][settings] speech initialized available=$available permissionAfter=$permissionAfter locale=${preferredLocaleId ?? 'system'}',
+      );
       if (mounted) {
         setState(() {
           _speechAvailable = available;
@@ -390,6 +417,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       }
       return available;
     } catch (error, stackTrace) {
+      debugPrint('[Voice][settings] speech initialize failed: $error');
       _voiceController.logEvent(
         'speech initialize failed: $error\n$stackTrace',
         screen: QuizVoiceScreen.quizSettings,
@@ -407,29 +435,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   }
 
   Future<String?> _resolvePreferredSpeechLocaleId() async {
-    try {
-      final systemLocale = await _speech.systemLocale();
-      final locales = await _speech.locales();
-      final localeIds = locales.map((locale) => locale.localeId).toSet();
-      final configuredLocaleId =
-          _voiceController.assistantSettings.value.languageCode;
-      final configuredSpeechLocaleId = configuredLocaleId.replaceAll('-', '_');
-      if (localeIds.contains(configuredLocaleId)) return configuredLocaleId;
-      if (localeIds.contains(configuredSpeechLocaleId)) {
-        return configuredSpeechLocaleId;
-      }
-      final systemLocaleId = systemLocale?.localeId;
-      if (systemLocaleId != null &&
-          systemLocaleId.toLowerCase().startsWith('en')) {
-        return systemLocaleId;
-      }
-      for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
-        if (localeIds.contains(fallback)) return fallback;
-      }
-      return systemLocaleId;
-    } catch (_) {
-      return null;
-    }
+    return _voiceController.resolvePreferredSpeechLocaleId(_speech);
   }
 
   Future<void> _showSpeechUnavailableMessage() async {
@@ -542,19 +548,24 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
-    if (_isListening || _isSpeaking || _isPreparingToListen) return;
+    if (_isListening || _isSpeaking || _isPreparingToListen) {
+      debugPrint(
+        '[Voice][settings] listen blocked reason=busy listening=$_isListening speaking=$_isSpeaking preparing=$_isPreparingToListen',
+      );
+      return;
+    }
     final listenSessionId = ++_listenSessionId;
     setState(() {
       _isPreparingToListen = true;
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
-    await _stopTtsPlayback();
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
-      final speechReady = await _initSpeech();
+      final speechReady = await _initSpeech(requestPermission: true);
       if (!speechReady) {
         if (mounted) setState(() => _isPreparingToListen = false);
+        await _showSpeechUnavailableMessage();
         return;
       }
     }
@@ -598,6 +609,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (_isSpeaking) return;
+    debugPrint(
+      '[Voice][settings] recognized="${result.recognizedWords}" final=${result.finalResult} confidence=${result.confidence}',
+    );
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -628,6 +642,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
     );
     final result = decision.parseResult;
+    debugPrint(
+      '[Voice][settings] normalized="${result.normalizedText}" decision=${decision.analytics['decision']} intent=${decision.intent?.name} fallbackUsed=${decision.analytics['fallbackUsed']}',
+    );
     final requestedQuestionCount = decision.requestedQuestionCount;
     _voiceController.logEvent(
       'parsed intent: ${result.intent?.name ?? 'none'}'

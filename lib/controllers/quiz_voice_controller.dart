@@ -68,6 +68,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
 
   final VoiceAssistantSettingsService _settingsService =
       VoiceAssistantSettingsService();
+  // TODO: Set from app/backend configuration when optional cloud fallback ships.
   CloudSpeechTranscriber? cloudSpeechTranscriber;
 
   Timer? _watchdogTimer;
@@ -517,23 +518,42 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
 
       for (final candidate in configuredSpeechLocaleCandidates) {
         final supportedLocaleId = localeIdByLowercase[candidate.toLowerCase()];
-        if (supportedLocaleId != null) return supportedLocaleId;
+        if (supportedLocaleId != null) {
+          debugPrint(
+            '[Voice][locale] selected STT locale=$supportedLocaleId configured=$configuredSpeechLocaleId',
+          );
+          return supportedLocaleId;
+        }
       }
 
       final systemLocaleId = systemLocale?.localeId;
       if (systemLocaleId != null) {
         final supportedSystemLocaleId =
             localeIdByLowercase[systemLocaleId.toLowerCase()];
-        if (supportedSystemLocaleId != null) return supportedSystemLocaleId;
+        if (supportedSystemLocaleId != null) {
+          debugPrint(
+            '[Voice][locale] fallback STT locale=$supportedSystemLocaleId configured=$configuredSpeechLocaleId reason=system',
+          );
+          return supportedSystemLocaleId;
+        }
       }
 
       for (final fallback in ['en_IN', 'en_GB', 'en_US']) {
         final supportedLocaleId = localeIdByLowercase[fallback.toLowerCase()];
-        if (supportedLocaleId != null) return supportedLocaleId;
+        if (supportedLocaleId != null) {
+          debugPrint(
+            '[Voice][locale] fallback STT locale=$supportedLocaleId configured=$configuredSpeechLocaleId reason=default',
+          );
+          return supportedLocaleId;
+        }
       }
 
-      return systemLocaleId;
-    } catch (_) {
+      debugPrint(
+        '[Voice][locale] no supported STT locale for configured=$configuredSpeechLocaleId',
+      );
+      return null;
+    } catch (error) {
+      debugPrint('[Voice][locale] resolve failed: $error');
       return null;
     }
   }

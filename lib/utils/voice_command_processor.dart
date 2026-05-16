@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../controllers/quiz_voice_controller.dart';
 import '../services/voice_assistant_settings_service.dart';
 import '../voice/core/voice_command_context.dart' as core_context;
@@ -147,7 +149,7 @@ class VoiceCommandProcessor {
         if (outcome.coreResult.intent?.isRisky == true) {
           outcome = _confirmationOutcome(
             outcome,
-            message: 'Please repeat this command without cloud fallback.',
+            message: _cloudRiskyConfirmationMessage(screen, outcome),
           );
         }
         fallbackUsed = true;
@@ -182,6 +184,9 @@ class VoiceCommandProcessor {
           outcome.coreResult.decision !=
               core_result.VoiceCommandDecision.execute,
       errorType: errorType ?? _errorTypeFor(outcome.coreResult.decision),
+    );
+    debugPrint(
+      '[Voice][${screen.name}] normalized="${result.normalizedText}" parserDecision=${outcome.coreResult.decision.name} source=$source intent=${result.intent?.name} confidence=${result.confidence.toStringAsFixed(2)} fallbackUsed=$fallbackUsed',
     );
 
     if (feedback != null &&
@@ -320,8 +325,14 @@ class VoiceCommandProcessor {
         availableCommands: availableCommands,
       );
       if (!cloudResult.isSuccess || cloudResult.transcript.trim().isEmpty) {
+        debugPrint(
+          '[Voice][${screen.name}] cloud fallback failed status=${cloudResult.status.name}',
+        );
         return null;
       }
+      debugPrint(
+        '[Voice][${screen.name}] cloud fallback transcript received locale=$locale',
+      );
 
       return _parseWithCoreParser(
         screen: screen,
@@ -354,6 +365,9 @@ class VoiceCommandProcessor {
       context: context,
       sensitivity: _coreSensitivityFor(sensitivity),
       learnedCorrections: learnedCorrections,
+    );
+    debugPrint(
+      '[Voice][${screen.name}] parser normalized="$normalizedText" decision=${decision.decision.name} intent=${decision.intent?.type.name} source=${decision.intent?.source} corrections=${learnedCorrections.length}',
     );
     final coreIntent = decision.intent;
     final legacyIntent = coreIntent == null
@@ -403,6 +417,21 @@ class VoiceCommandProcessor {
         'I did not understand. Say help to hear commands.',
       core_result.VoiceCommandDecision.ignored => null,
     };
+  }
+
+  String _cloudRiskyConfirmationMessage(
+    QuizVoiceScreen screen,
+    _CoreVoiceParseOutcome outcome,
+  ) {
+    if (screen == QuizVoiceScreen.examReview &&
+        (outcome.parseResult.intent == VoiceIntent.submit ||
+            outcome.parseResult.intent == VoiceIntent.confirmSubmit)) {
+      return 'Do you want to submit your quiz?';
+    }
+    final label = outcome.parseResult.intent == null
+        ? 'that command'
+        : QuizVoiceIntentParser.commandLabelFor(outcome.parseResult.intent!);
+    return 'Please confirm $label.';
   }
 
   Map<String, dynamic> _voiceAnalytics({

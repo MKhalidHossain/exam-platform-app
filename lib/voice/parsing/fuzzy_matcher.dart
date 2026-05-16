@@ -30,7 +30,7 @@ class FuzzyMatchResult {
   bool get hasIntent => intent != null;
   bool get isRisky => intent?.isRisky ?? false;
   bool get isAmbiguous =>
-      secondBestScore != null && score - secondBestScore! < 0.08;
+      secondBestScore != null && score - secondBestScore! < 0.12;
 }
 
 class FuzzyMatcher {
@@ -86,6 +86,10 @@ class FuzzyMatcher {
     VoiceScreenContext context, {
     bool includeGlobal = true,
   }) {
+    final normalizedQuery = VoiceTextNormalizer.normalize(query);
+    if (normalizedQuery.length == 1 && context != VoiceScreenContext.quiz) {
+      return null;
+    }
     final candidates =
         VoiceCommandAliases.forContext(
           context,

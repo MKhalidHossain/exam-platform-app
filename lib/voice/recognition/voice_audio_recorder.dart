@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -47,6 +48,7 @@ class VoiceAudioRecorder {
   Future<VoiceAudioRecorderResult> start() async {
     try {
       final hasPermission = await hasMicrophonePermission(request: true);
+      debugPrint('[Voice][recorder] permission=$hasPermission');
       if (!hasPermission) {
         return const VoiceAudioRecorderResult(
           status: VoiceAudioRecorderStatus.permissionDenied,
@@ -71,12 +73,14 @@ class VoiceAudioRecorder {
 
       _currentFile = file;
       _isRecording = true;
+      debugPrint('[Voice][recorder] recording started');
       return VoiceAudioRecorderResult(
         status: VoiceAudioRecorderStatus.recording,
         file: file,
       );
     } catch (error) {
       _isRecording = false;
+      debugPrint('[Voice][recorder] start failed: $error');
       return VoiceAudioRecorderResult(
         status: VoiceAudioRecorderStatus.error,
         errorMessage: 'Unable to start voice recording: $error',
@@ -95,6 +99,7 @@ class VoiceAudioRecorder {
     try {
       final path = await _recorder.stop();
       _isRecording = false;
+      debugPrint('[Voice][recorder] recording stopped');
       final file = path == null ? _currentFile : File(path);
       _currentFile = file;
 
@@ -104,6 +109,7 @@ class VoiceAudioRecorder {
       );
     } catch (error) {
       _isRecording = false;
+      debugPrint('[Voice][recorder] stop failed: $error');
       return VoiceAudioRecorderResult(
         status: VoiceAudioRecorderStatus.error,
         errorMessage: 'Unable to stop voice recording: $error',
@@ -116,6 +122,7 @@ class VoiceAudioRecorder {
       await _recorder.cancel();
       _isRecording = false;
       await deleteTempFile();
+      debugPrint('[Voice][recorder] recording canceled');
       return const VoiceAudioRecorderResult(
         status: VoiceAudioRecorderStatus.idle,
       );

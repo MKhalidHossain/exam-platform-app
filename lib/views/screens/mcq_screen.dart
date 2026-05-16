@@ -14,6 +14,7 @@ import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
+import '../../voice/parsing/voice_text_normalizer.dart';
 import '../../voice/recognition/voice_audio_recorder.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
@@ -54,9 +55,6 @@ class _McqScreenState extends State<McqScreen>
   static const int _defaultDurationMinutes = 130;
   static const Duration _voiceAutoPlayDelay = Duration(seconds: 4);
   static const Duration _maxListeningRestartDelay = Duration(seconds: 8);
-  static const Duration _partialCommandDebounceDelay = Duration(
-    milliseconds: 900,
-  );
   static const int _maxListeningRestartBackoffStep = 4;
   static const int _unknownCommandHelpThreshold = 2;
 
@@ -162,7 +160,7 @@ class _McqScreenState extends State<McqScreen>
         widget.voicePracticeMode &&
         (widget.voiceModeEnabled || _voiceController.isEnabledValue);
     _configureTts();
-    unawaited(_primeSpeechAvailability());
+    unawaited(_primeSpeechAvailability(requestPermission: _voiceModeEnabled));
     final UserController userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
         : Get.put(UserController());
@@ -237,13 +235,7 @@ class _McqScreenState extends State<McqScreen>
         _isTtsSpeaking = false;
       });
       _syncVoiceSessionState();
-      // In voice mode, auto-start listening after every TTS completion.
-      if (_voiceModeEnabled &&
-          _autoListenEnabled &&
-          !_isListening &&
-          !_manualMicInterrupt) {
-        _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
-      }
+      // Restart after awaited TTS is owned by the speak methods' finally blocks.
     });
     _tts.setCancelHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
@@ -379,8 +371,23 @@ class _McqScreenState extends State<McqScreen>
 
   // ─── STT initialisation ────────────────────────────────────────────────────
 
-  Future<void> _primeSpeechAvailability() async {
+  Future<void> _primeSpeechAvailability({
+    bool requestPermission = false,
+  }) async {
+    debugPrint(
+      '[Voice][mcq] prime speech platform=${Platform.operatingSystem} requestPermission=$requestPermission',
+    );
+    if (requestPermission) {
+      final speechReady = await _initSpeech(requestPermission: true);
+      if (!speechReady && mounted && _voiceModeEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showSpeechUnavailableMessage());
+        });
+      }
+      return;
+    }
     final hasPermission = await _speech.hasPermission;
+    debugPrint('[Voice][mcq] prime permission=$hasPermission');
     if (!hasPermission) {
       if (!mounted) return;
       setState(() {
@@ -396,6 +403,9 @@ class _McqScreenState extends State<McqScreen>
     if (_speechInitializing) return _speechAvailable;
     if (!requestPermission && !_speechAvailable) {
       final hasPermission = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][mcq] init skipped permission=$hasPermission requestPermission=$requestPermission',
+      );
       if (!hasPermission) {
         if (!mounted) return false;
         setState(() {
@@ -408,8 +418,13 @@ class _McqScreenState extends State<McqScreen>
 
     _speechInitializing = true;
     try {
+      final permissionBefore = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][mcq] speech initialize start platform=${Platform.operatingSystem} permissionBefore=$permissionBefore requestPermission=$requestPermission',
+      );
       final available = await _speech.initialize(
         onError: (error) {
+          debugPrint('[Voice][mcq] speech error: $error');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech error: $error',
@@ -423,6 +438,7 @@ class _McqScreenState extends State<McqScreen>
           _scheduleListeningRestart(countAsRetry: true);
         },
         onStatus: (status) {
+          debugPrint('[Voice][mcq] speech status=$status');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech status: $status',
@@ -475,6 +491,10 @@ class _McqScreenState extends State<McqScreen>
       if (available) {
         preferredLocaleId = await _resolvePreferredSpeechLocaleId();
       }
+      final permissionAfter = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][mcq] speech initialized available=$available permissionAfter=$permissionAfter locale=${preferredLocaleId ?? 'system'}',
+      );
       if (mounted) {
         setState(() {
           _speechAvailable = available;
@@ -486,6 +506,7 @@ class _McqScreenState extends State<McqScreen>
       }
       return available;
     } catch (error, stackTrace) {
+      debugPrint('[Voice][mcq] speech initialize failed: $error');
       _voiceController.logEvent(
         'speech initialize failed: $error\n$stackTrace',
         screen: QuizVoiceScreen.mcq,
@@ -1114,7 +1135,12 @@ class _McqScreenState extends State<McqScreen>
   /// Reads the current question for the first time, blocking all auto-listen
   /// paths until TTS fully completes.
   Future<void> _runInitialQuestionRead() async {
-    if (!mounted || !_voiceModeEnabled || _isInitialQuestionReading) return;
+    if (!mounted ||
+        !_voiceModeEnabled ||
+        _isInitialQuestionReading ||
+        _hasInitialQuestionBeenRead) {
+      return;
+    }
     _isInitialQuestionReading = true;
     try {
       await _speakCurrentQuestion(force: true);
@@ -1234,7 +1260,7 @@ class _McqScreenState extends State<McqScreen>
       _voiceController.setVoiceEnabled(
         true,
         screen: QuizVoiceScreen.mcq,
-        requestEntryAction: true,
+        requestEntryAction: false,
       );
       await _runInitialQuestionRead();
     }
@@ -1252,8 +1278,16 @@ class _McqScreenState extends State<McqScreen>
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
     _partialCommandDebounceTimer?.cancel();
-    if (_isReadingQuestion || _isTtsSpeaking) return;
-    if (_isListening || _isSpeaking || _isPreparingToListen) return;
+    if (_isReadingQuestion || _isTtsSpeaking) {
+      debugPrint('[Voice][mcq] listen blocked reason=tts_active');
+      return;
+    }
+    if (_isListening || _isSpeaking || _isPreparingToListen) {
+      debugPrint(
+        '[Voice][mcq] listen blocked reason=busy listening=$_isListening speaking=$_isSpeaking preparing=$_isPreparingToListen',
+      );
+      return;
+    }
     final listenSessionId = ++_listenSessionId;
     setState(() {
       _isPreparingToListen = true;
@@ -1266,9 +1300,10 @@ class _McqScreenState extends State<McqScreen>
       return;
     }
     if (!_speechAvailable) {
-      final speechReady = await _initSpeech();
+      final speechReady = await _initSpeech(requestPermission: true);
       if (!speechReady) {
         if (mounted) setState(() => _isPreparingToListen = false);
+        await _showSpeechUnavailableMessage();
         return;
       }
     }
@@ -1357,6 +1392,7 @@ class _McqScreenState extends State<McqScreen>
 
   Future<void> _stopListening() async {
     _listenSessionId++;
+    debugPrint('[Voice][mcq] listen stop requested');
     await _speech.stop();
     await _cancelFallbackAudioCapture();
     if (!mounted || !_isCurrentVoiceScreen) return;
@@ -1411,14 +1447,14 @@ class _McqScreenState extends State<McqScreen>
         _isListening = false;
         _heardText = '';
       });
-      _bindVoiceSession(requestEntryAction: preserveVoiceMode);
+      _bindVoiceSession(requestEntryAction: false);
     } else if (preserveVoiceMode) {
       setState(() {
         _isSpeaking = false;
         _isListening = false;
         _heardText = '';
       });
-      _bindVoiceSession(requestEntryAction: true);
+      _bindVoiceSession(requestEntryAction: false);
     }
 
     if (preserveVoiceMode && _voiceModeEnabled) {
@@ -1455,6 +1491,9 @@ class _McqScreenState extends State<McqScreen>
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (_isSpeaking || _isReadingQuestion || _isTtsSpeaking) return;
+    debugPrint(
+      '[Voice][mcq] recognized="${result.recognizedWords}" final=${result.finalResult} confidence=${result.confidence}',
+    );
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -1464,17 +1503,7 @@ class _McqScreenState extends State<McqScreen>
     );
     if (result.finalResult) {
       unawaited(_processRecognizedVoiceText(result.recognizedWords));
-      return;
     }
-
-    _partialCommandDebounceTimer?.cancel();
-    final partialText = result.recognizedWords.trim();
-    if (partialText.isEmpty) return;
-    _partialCommandDebounceTimer = Timer(_partialCommandDebounceDelay, () {
-      if (!mounted || !_isCurrentVoiceScreen) return;
-      if (_isSpeaking || _isReadingQuestion || _isTtsSpeaking) return;
-      unawaited(_processRecognizedVoiceText(partialText));
-    });
   }
 
   Future<void> _processRecognizedVoiceText(String rawText) async {
@@ -1496,6 +1525,7 @@ class _McqScreenState extends State<McqScreen>
     _lastProcessedVoiceText = text;
     _lastProcessedVoiceAt = now;
     _listenSessionId++;
+    debugPrint('[Voice][mcq] listen stop for final command');
     await _speech.stop();
     if (!mounted || !_isCurrentVoiceScreen) {
       _isProcessingVoiceCommand = false;
@@ -1555,6 +1585,9 @@ class _McqScreenState extends State<McqScreen>
     unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
     final result = decision.parseResult;
+    debugPrint(
+      '[Voice][mcq] normalized="${result.normalizedText}" decision=${decision.analytics['decision']} intent=${decision.intent?.name} fallbackUsed=${decision.analytics['fallbackUsed']}',
+    );
     final questionNumber = decision.questionNumber;
     final String? retryFeedback =
         !decision.shouldExecute && decision.feedback != null
@@ -1726,16 +1759,13 @@ class _McqScreenState extends State<McqScreen>
   }
 
   Set<int> _parseVoiceAnswerIndexes(String rawText, _Question question) {
-    final normalized = rawText
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s,]'), ' ')
+    final normalized = VoiceTextNormalizer.normalize(rawText)
         .replaceAll(
           RegExp(
             r'\b(answer|answers|option|options|select|choose|letter|and)\b',
           ),
           ' ',
         )
-        .replaceAll(',', ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     if (normalized.isEmpty) return const <int>{};

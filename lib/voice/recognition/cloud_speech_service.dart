@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/voice_command_context.dart';
@@ -71,30 +72,39 @@ class CloudSpeechService implements CloudSpeechTranscriber {
     );
 
     try {
+      debugPrint(
+        '[Voice][cloud] fallback request locale=$locale screen=${screenContext.name}',
+      );
       final streamedResponse = await _client.send(request).timeout(timeout);
       final response = await http.Response.fromStream(streamedResponse);
+      debugPrint('[Voice][cloud] fallback response=${response.statusCode}');
       return _parseResponse(response);
     } on TimeoutException {
+      debugPrint('[Voice][cloud] fallback timeout');
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.timeout,
         message: 'Cloud speech request timed out.',
       );
     } on SocketException {
+      debugPrint('[Voice][cloud] fallback no internet');
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.noInternet,
         message: 'No internet connection for cloud speech fallback.',
       );
     } on http.ClientException {
+      debugPrint('[Voice][cloud] fallback client error');
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.noInternet,
         message: 'Unable to reach cloud speech backend.',
       );
     } on FormatException {
+      debugPrint('[Voice][cloud] fallback invalid response');
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.invalidResponse,
         message: 'Cloud speech backend returned invalid data.',
       );
     } catch (_) {
+      debugPrint('[Voice][cloud] fallback request failed');
       return SpeechRecognitionResult.failure(
         status: SpeechRecognitionStatus.serverError,
         message: 'Cloud speech request failed.',

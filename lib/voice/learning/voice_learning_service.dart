@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/voice_command_context.dart';
@@ -81,6 +82,9 @@ class VoiceLearningService {
         ...corrections.where((entry) => !_isSameCorrection(entry, correction)),
       ];
       await _writeCorrections(prefs, updatedCorrections);
+      debugPrint(
+        '[VoiceLearning] learned correction applied phrase="$rawText" normalized="$normalizedText" intent=${updated.intentType.name}',
+      );
       return updated;
     }
 
@@ -99,6 +103,16 @@ class VoiceLearningService {
 
     final normalizedText = VoiceTextNormalizer.normalize(rawHeardText);
     if (normalizedText.isEmpty) return false;
+    if (_hasConflictingDirectOption(
+      rawHeardText: rawHeardText,
+      normalizedText: normalizedText,
+      intentType: intent.type,
+    )) {
+      debugPrint(
+        '[VoiceLearning] learned correction ignored phrase="$rawHeardText" normalized="$normalizedText" reason=directOptionConflict intent=${intent.type.name}',
+      );
+      return false;
+    }
 
     final isRisky =
         intent.isRisky ||
@@ -153,16 +167,27 @@ class VoiceLearningService {
   ) async {
     final stored = prefs.getStringList(storageKey) ?? const <String>[];
     final corrections = <VoiceCorrectionModel>[];
+    var deletedConflictingCorrection = false;
     for (final rawEntry in stored) {
       try {
         final decoded = jsonDecode(rawEntry);
         if (decoded is! Map<String, dynamic>) continue;
         final correction = VoiceCorrectionModel.fromJson(decoded);
         if (correction == null || correction.isRisky) continue;
+        if (_isConflictingDirectOptionCorrection(correction)) {
+          debugPrint(
+            '[VoiceLearning] learned correction deleted phrase="${correction.rawHeardText}" normalized="${correction.normalizedText}" reason=directOptionConflict intent=${correction.intentType.name}',
+          );
+          deletedConflictingCorrection = true;
+          continue;
+        }
         corrections.add(correction);
       } catch (_) {
         continue;
       }
+    }
+    if (deletedConflictingCorrection) {
+      await _writeCorrections(prefs, corrections);
     }
     return corrections;
   }
@@ -184,5 +209,28 @@ class VoiceLearningService {
   ) {
     return first.screenContext == second.screenContext &&
         first.normalizedText == second.normalizedText;
+  }
+
+  bool _isConflictingDirectOptionCorrection(VoiceCorrectionModel correction) {
+    return _hasConflictingDirectOption(
+      rawHeardText: correction.rawHeardText,
+      normalizedText: correction.normalizedText,
+      intentType: correction.intentType,
+    );
+  }
+
+  bool _hasConflictingDirectOption({
+    required String rawHeardText,
+    required String normalizedText,
+    required VoiceIntentType intentType,
+  }) {
+    return VoiceCommandParser.isConflictingDirectOptionCorrection(
+          phrase: rawHeardText,
+          intentType: intentType,
+        ) ||
+        VoiceCommandParser.isConflictingDirectOptionCorrection(
+          phrase: normalizedText,
+          intentType: intentType,
+        );
   }
 }

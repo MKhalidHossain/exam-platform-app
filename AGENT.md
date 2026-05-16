@@ -1,145 +1,331 @@
-নিচের prompt টা Codex-এ দিন। এটা আপনার existing `AGENT.md` update করবে, Codex issue report-এর C1–C5 / M1–M6 findings যোগ করবে, এবং future implementation prompts যেন কম context use করে সেই rule add করবে। Codex report অনুযায়ী main issues হলো cloud fallback wired না, corrections parser-এ apply না, STT locale ভুল, TTS/listening overlap, risky submit inconsistency ইত্যাদি। 
+# AGENT.md — Market-Ready Voice Assistant Stabilization
 
-```text id="x4rsls"
-Task: Update AGENT.md only.
+## Role
 
-Use minimum context.
-Do not scan unrelated files.
-Do not modify app source code.
-Do not implement fixes.
-Touch only:
-AGENT.md
+You are a senior Flutter engineer improving an existing quiz/exam app voice assistant.
 
-Goal:
-Update AGENT.md with the latest voice assistant issue findings and optimized implementation rules.
+The current workflow is already correct and must be preserved:
 
-Add a new section near the top:
+```text
+Enter MCQ screen
+→ assistant reads the question first
+→ after TTS finishes, assistant listens
+→ user says answer/command
+→ assistant follows command
+```
 
-## Current Voice Assistant Issues Found By Audit
+Do not redesign this workflow. Your job is to fix platform issues, improve recognition reliability, and make the assistant production-ready for different English accents.
 
-Critical issues:
-1. Cloud fallback is configured but not actually usable from screens.
-   Required fix:
-   - wire cloudFallbackEnabled, CloudSpeechService, fallback audio file, locale, and available commands into voice processing
-   - start/stop recorder around native listening
-   - clean temporary audio files
-   - never upload audio when cloud fallback is disabled
-   - never execute cloud transcript directly; always parse through normalizer/parser/safety policy
+---
 
-2. Voice calibration/user corrections are saved but not applied to command parsing.
-   Required fix:
-   - load learned corrections per screen/context
-   - pass corrections into VoiceCommandParser.parse
-   - apply correction before fuzzy matching
-   - do not auto-learn risky commands
+## Main Goal
 
-3. Speech locale setting is ignored.
-   Required fix:
-   - use speechLocaleCode for speech_to_text/STT
-   - use languageCode only for flutter_tts/TTS
-   - centralize locale resolution
-   - safely fallback if selected STT locale is unsupported
+Make the voice assistant reliable on iOS and Android, and more tolerant of global English accents.
 
-4. TTS and listening can overlap or restart at the wrong time.
-   Required fix:
-   - prevent listening while TTS is speaking
-   - resume listening only after TTS completion
-   - allow intentional mic-tap interruption
-   - guard against multiple active speech/listening sessions
+The app currently uses:
 
-5. Risky submit/final-submit handling is inconsistent.
-   Required fix:
-   - define one screen-aware submit safety policy
-   - weak fuzzy submit must never execute
-   - cloud-only uncertain submit must never execute
-   - final submit from review screen must require explicit confirm submit
-   - learned correction must not trigger final submit automatically
+- `speech_to_text`
+- `flutter_tts`
+- existing voice parser / voice command processor
+- existing quiz and review voice flows
 
-Medium issues:
-1. Listening restart loop is too aggressive.
-2. No real audio quality feedback for quiet/noisy environments.
-3. Fuzzy matching is Levenshtein-only with weak ambiguity handling.
-4. Duplicate command normalizers can drift.
-5. Voice analytics are incomplete outside MCQ.
-6. NativeSpeechService exists but screens bypass it and duplicate STT logic.
+Keep existing features working.
 
-Low priority improvements:
-1. Calibration should be real voice calibration, not only manual text entry.
-2. Overlay hints should be driven by current screen command availability.
-3. Offline/cloud-unavailable behavior should be clearly surfaced.
-4. Mic permission recovery should include clear app-settings guidance where supported.
+---
 
-Add another section:
+## Known Client Feedback
 
-## Low Context Codex Rules
+Client reported:
 
-Rules for future Codex tasks:
-- Do not re-audit the repo unless explicitly asked.
-- Do not scan unrelated files.
-- Work only on files listed in the prompt.
-- Make the smallest safe change.
+```text
+iPhone: voice assistant works about 60% of the time; user must repeat commands.
+Android: voice assistant does not recognize voice input at all.
+```
+
+Treat this as the main production bug to fix.
+
+---
+
+## Known Audit Findings
+
+### Critical Issues
+
+1. Android first-run permission/init flow is broken.
+   - Manifest has RECORD_AUDIO, but auto voice flow may check permission and return before requesting it.
+   - Voice mode may call speech init without requesting permission.
+
+2. Android listen start can be treated as failed too early.
+   - Do not rely on immediate `speech.isListening` after `speech.listen()`.
+   - Android listening status can update asynchronously.
+
+3. iOS partial results are processed too early.
+   - Partial transcripts can be unstable.
+   - Do not execute commands from weak partial text like only `option` before final `option A`.
+
+4. STT locale and TTS language must be separated.
+   - STT must use `speechLocaleCode`.
+   - TTS must use `languageCode`.
+
+5. TTS/listening lifecycle must be locked.
+   - Listening must not start while TTS is reading.
+   - Auto-listen starts only after TTS completion.
+   - User mic tap can interrupt TTS intentionally.
+
+6. MCQ answer parsing should use the canonical normalizer/parser.
+   - Avoid duplicate parsing and duplicate normalizers.
+
+7. Cloud fallback may exist but must be optional and safe.
+   - No API keys in Flutter.
+   - Never upload audio if disabled.
+   - Never execute cloud transcript directly.
+
+---
+
+## Non-Negotiable Rules
+
 - Do not rewrite the whole voice assistant.
-- Do not refactor unrelated screens.
-- Do not add API keys/secrets in Flutter.
-- Stop after the requested step.
-- Run formatter and targeted tests only when possible.
-- If a setting or dependency is missing, add a small TODO instead of broad refactor.
-- Preserve all existing voice features unless they are clearly broken.
+- Do not change the working MCQ startup flow.
+- Do not redesign UI unless required for a bug fix.
+- Do not change unrelated quiz/business logic.
+- Do not add provider API keys or secrets to Flutter.
+- Do not store raw audio permanently.
+- Keep app working offline with native STT.
+- Cloud fallback must be optional.
+- Final submit must remain safe.
+- All transcripts must pass through the same parser/safety layer before command execution.
+- Prefer small, localized fixes.
+- Run `flutter analyze` after changes.
 
-Add another section:
+---
+
+## Correct Voice Pipeline
+
+All recognized text should follow this pipeline:
+
+```text
+raw STT transcript
+→ canonical normalizer
+→ screen-aware parser
+→ fuzzy/alias matching
+→ confidence decision
+→ safety policy
+→ execute / ask retry / ask yes-no / fallback
+```
+
+Cloud transcript and learned corrections must also pass through this same pipeline.
+
+---
+
+## Platform Requirements
+
+### Android
+
+Fix and verify:
+
+- `RECORD_AUDIO` permission exists.
+- Permission is requested when user enables voice or auto voice starts.
+- Do not silently return false when permission is missing.
+- `speech_to_text.initialize()` is called safely before listen.
+- Do not treat immediate `speech.isListening == false` as listen failure.
+- Use status callbacks/logs to track real listen state.
+- If Android speech service is unavailable, show helpful message.
+- Add debug logs for permission, init, listen start, status, errors.
+
+### iOS
+
+Fix and verify:
+
+- `NSMicrophoneUsageDescription` exists.
+- `NSSpeechRecognitionUsageDescription` exists.
+- Speech and mic permission handling is correct.
+- Do not execute weak partial transcripts.
+- Use final result for command execution unless a partial phrase is stable and complete.
+- Do not stop STT before full command is received.
+- TTS must finish before auto-listen starts.
+
+---
+
+## Accent Recognition Requirements
+
+Support common transcript variations:
+
+```text
+option bee -> option b
+option be -> option b
+opson bee -> option b
+of shun b -> option b
+answer sea / answer see -> answer c
+option dee -> option d
+fals / falls -> false
+nex question -> next question
+kweschen -> question
+question five -> question 5
+```
+
+Use:
+
+- canonical normalizer
+- command aliases
+- fuzzy matcher
+- ambiguity detection
+- learned corrections where safe
+
+Do not over-normalize risky commands.
+
+---
+
+## Command Safety
+
+### Quiz / MCQ Screen
+
+- `submit` or `submit quiz` opens review only.
+- It must not final-submit from quiz screen.
+
+### Review Screen
+
+- Strong direct `submit` or `submit quiz` may final-submit if current product behavior requires that.
+- Weak, fuzzy, ambiguous, learned-only, or uncertain cloud submit must not final-submit directly.
+- If confirmation is needed, use simple yes/no:
+  - “Do you want to submit your quiz?”
+  - User says “yes” or “no”
+- Do not require the phrase “confirm submit” unless product requirements change.
+
+### Other Screens
+
+- Submit must not final-submit.
+
+---
+
+## TTS and Listening Lifecycle
+
+Required behavior:
+
+```text
+TTS reading question -> listening blocked
+TTS completed -> listening allowed if auto-listen enabled
+manual mic tap -> may stop TTS and start listening
+auto-listen -> must never stop active TTS
+```
+
+Guard all listen entry points:
+
+```text
+if TTS is speaking or question is reading:
+    do not start listening
+```
+
+Check and guard:
+
+- initState
+- post-frame callbacks
+- Future.delayed listen
+- auto-listen
+- resume-listen
+- TTS completion handlers
+- mic tap handler
+- retry listen
+
+Only one owner should schedule listening after TTS.
+
+---
+
+## Debug Logging Requirements
+
+Use existing logging style or `debugPrint`.
+
+Log:
+
+- platform
+- permission requested/result
+- speech initialized
+- speech available
+- selected STT locale
+- fallback STT locale
+- listen start/stop
+- speech status
+- speech error
+- recognized words
+- finalResult
+- confidence
+- normalized transcript
+- parser decision
+- fallback used
+- blocked listen reason
+
+Do not log raw audio.
+
+---
+
+## Cloud Fallback Rules
+
+Cloud fallback is optional and should be used only when:
+
+- native STT fails
+- parser cannot understand
+- confidence is too low
+- cloud fallback setting is enabled
+- internet is available
+- temporary audio exists
+
+Rules:
+
+- No cloud API keys in Flutter.
+- Flutter calls backend only.
+- Do not upload audio when fallback is disabled.
+- Delete temporary audio after use.
+- Cloud transcript must pass through the same parser/safety policy.
+- Never execute cloud transcript directly.
+
+---
 
 ## Recommended Fix Order
 
-Use this order:
-1. Fix STT locale resolution.
-2. Consolidate duplicate normalizers.
-3. Fix TTS/listening lifecycle.
-4. Add safe listening restart/backoff.
-5. Apply learned corrections to parser.
-6. Fix risky submit/final-submit safety.
-7. Improve fuzzy ambiguity handling.
-8. Route native STT through NativeSpeechService where practical.
-9. Wire optional cloud fallback and audio buffer.
-10. Add audio quality and mic permission feedback.
-11. Fill analytics gaps.
-12. Final verification.
+1. Android permission/init flow.
+2. Android async listen-start handling.
+3. iOS partial result handling.
+4. STT locale vs TTS language separation.
+5. TTS/listening lifecycle hardening.
+6. Canonical normalizer/parser usage.
+7. Fuzzy ambiguity improvements.
+8. User correction learning integration.
+9. Optional cloud fallback wiring.
+10. Debug logs and analytics.
+11. Real device QA.
 
-Add another section:
+---
 
-## Critical Safety Rules
+## Low Context Coding Rules
 
-- Never execute final submit from fuzzy match alone.
-- Never execute final submit from cloud transcript alone.
-- Never execute final submit from learned correction alone.
-- Final submit must require explicit confirm submit on review screen.
-- Cloud fallback must be optional and disabled by default if setting is missing.
-- If cloud fallback is disabled, no audio upload is allowed.
-- STT transcript, cloud transcript, and learned corrections must all pass through the same parser and safety policy.
+For Codex/Claude Code tasks:
 
-Add another section:
+- Do not re-audit unless explicitly asked.
+- Do not scan unrelated files.
+- Work only on files listed in the prompt.
+- Make the smallest safe change.
+- Stop after the requested task.
+- Do not rewrite screens.
+- Do not refactor unrelated logic.
+- If a broad fix is risky, add a TODO and explain.
+- Run targeted tests when possible.
+- Always report files changed and analyze/test result.
 
-## Definition Of Done For Voice Upgrade
+---
 
-The voice assistant upgrade is complete only when:
-- STT uses speechLocaleCode, not TTS languageCode.
-- TTS uses languageCode and keeps existing pitch/speed settings.
-- One canonical normalizer is used.
-- Learned corrections are applied in parser.
-- Parser is screen-aware.
-- Fuzzy ambiguity asks confirmation instead of guessing.
-- TTS and listening do not overlap.
-- Listening restart loop is guarded.
-- Risky submit/final submit is protected.
-- Cloud fallback is wired but optional.
-- No API keys exist in Flutter.
-- Temp audio files are cleaned.
-- App works offline with native STT and parser.
-- Analytics explain command failures.
-- flutter analyze passes.
-- voice-related tests pass.
+## Acceptance Criteria
 
-Keep the existing AGENT.md content.
-Only append or merge these sections cleanly.
-Do not duplicate existing sections if similar sections already exist.
-Return a short summary of what was updated.
-```
+The voice assistant is market-ready for this phase when:
+
+- Android recognizes voice on real device after permission is granted.
+- iPhone does not execute incomplete partial transcripts.
+- MCQ screen reads question first, then listens.
+- Listening never interrupts TTS unless user taps mic.
+- STT uses `speechLocaleCode`.
+- TTS uses `languageCode`, pitch, and speed.
+- Parser uses canonical normalizer.
+- Common accent variants are handled.
+- Unknown commands give helpful retry feedback.
+- Cloud fallback is optional and safe.
+- No API keys/secrets exist in Flutter.
+- Final submit remains safe.
+- `flutter analyze` passes.
+- Voice tests pass where available.

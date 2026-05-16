@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../core/voice_command_context.dart';
 import '../core/voice_command_result.dart';
 import '../core/voice_intent.dart';
@@ -38,6 +40,26 @@ class VoiceCommandParser {
       return const VoiceCommandResult(
         decision: VoiceCommandDecision.notUnderstood,
         message: 'No speech was recognized.',
+      );
+    }
+
+    final directOptionIntent = _matchDirectOption(
+      rawText: rawText,
+      normalizedText: normalizedText,
+      context: context,
+    );
+    if (directOptionIntent != null) {
+      _logIgnoredLearnedCorrectionsForDirectOption(
+        normalizedText: normalizedText,
+        context: context,
+        learnedCorrections: learnedCorrections,
+        directOptionIntent: directOptionIntent,
+      );
+      return _decide(
+        directOptionIntent,
+        context: context,
+        sensitivity: sensitivity,
+        isFuzzyMatch: false,
       );
     }
 
@@ -108,6 +130,82 @@ class VoiceCommandParser {
     );
   }
 
+  static VoiceIntentType? directOptionTypeForText(String text) {
+    final normalizedText = VoiceTextNormalizer.normalize(text);
+    if (normalizedText.isEmpty) return null;
+    return directOptionTypeForNormalized(normalizedText);
+  }
+
+  static VoiceIntentType? directOptionTypeForNormalized(String normalizedText) {
+    for (final alias in VoiceCommandAliases.forContext(
+      VoiceScreenContext.quiz,
+      includeGlobal: false,
+    )) {
+      if (!_isOptionIntentType(alias.intent.type)) continue;
+      if (VoiceTextNormalizer.normalize(alias.phrase) != normalizedText) {
+        continue;
+      }
+      return alias.intent.type;
+    }
+    return null;
+  }
+
+  static bool isConflictingDirectOptionCorrection({
+    required String phrase,
+    required VoiceIntentType intentType,
+  }) {
+    final directOptionType = directOptionTypeForText(phrase);
+    return directOptionType != null && directOptionType != intentType;
+  }
+
+  static VoiceIntent? _matchDirectOption({
+    required String rawText,
+    required String normalizedText,
+    required VoiceScreenContext context,
+  }) {
+    if (context != VoiceScreenContext.quiz) return null;
+
+    for (final alias in VoiceCommandAliases.forContext(
+      context,
+      includeGlobal: false,
+    )) {
+      if (!_isOptionIntentType(alias.intent.type)) continue;
+      final normalizedAlias = VoiceTextNormalizer.normalize(alias.phrase);
+      if (normalizedAlias != normalizedText) continue;
+
+      return alias.intent.copyWith(
+        confidence: alias.baseConfidence,
+        rawText: rawText,
+        normalizedText: normalizedText,
+        source: 'direct_option',
+      );
+    }
+    return null;
+  }
+
+  static void _logIgnoredLearnedCorrectionsForDirectOption({
+    required String normalizedText,
+    required VoiceScreenContext context,
+    required List<VoiceLearnedCorrection> learnedCorrections,
+    required VoiceIntent directOptionIntent,
+  }) {
+    for (final correction in learnedCorrections) {
+      if (correction.context != context &&
+          correction.context != VoiceScreenContext.global) {
+        continue;
+      }
+
+      final normalizedCorrection = VoiceTextNormalizer.normalize(
+        correction.phrase,
+      );
+      if (normalizedCorrection != normalizedText) continue;
+
+      debugPrint(
+        '[Voice][${context.name}] learned correction ignored phrase="${correction.phrase}" normalized="$normalizedCorrection" reason=directOptionOverride intent=${correction.intent.type.name} directIntent=${directOptionIntent.type.name}',
+      );
+    }
+  }
+
   static VoiceIntent? _matchLearnedCorrection({
     required String rawText,
     required String normalizedText,
@@ -124,8 +222,25 @@ class VoiceCommandParser {
         correction.phrase,
       );
       if (normalizedCorrection != normalizedText) continue;
-      if (VoiceSafetyPolicy.isRiskyIntent(correction.intent)) continue;
+      if (VoiceSafetyPolicy.isRiskyIntent(correction.intent)) {
+        debugPrint(
+          '[Voice][${context.name}] learned correction ignored phrase="${correction.phrase}" normalized="$normalizedCorrection" reason=risky intent=${correction.intent.type.name}',
+        );
+        continue;
+      }
+      if (isConflictingDirectOptionCorrection(
+        phrase: correction.phrase,
+        intentType: correction.intent.type,
+      )) {
+        debugPrint(
+          '[Voice][${context.name}] learned correction ignored phrase="${correction.phrase}" normalized="$normalizedCorrection" reason=directOptionConflict intent=${correction.intent.type.name}',
+        );
+        continue;
+      }
 
+      debugPrint(
+        '[Voice][${context.name}] learned correction applied phrase="${correction.phrase}" normalized="$normalizedCorrection" intent=${correction.intent.type.name}',
+      );
       return correction.intent.copyWith(
         confidence: _learnedCorrectionConfidence,
         rawText: rawText,
@@ -224,7 +339,8 @@ class VoiceCommandParser {
       );
     }
 
-    if (isAmbiguousFuzzyMatch) {
+    if (isAmbiguousFuzzyMatch &&
+        effectiveIntent.confidence >= thresholds.confirm) {
       return VoiceCommandResult(
         decision: VoiceCommandDecision.askConfirmation,
         intent: effectiveIntent,
@@ -300,6 +416,13 @@ class VoiceCommandParser {
         risky: 0.86,
       ),
     };
+  }
+
+  static bool _isOptionIntentType(VoiceIntentType type) {
+    return type == VoiceIntentType.optionA ||
+        type == VoiceIntentType.optionB ||
+        type == VoiceIntentType.optionC ||
+        type == VoiceIntentType.optionD;
   }
 }
 

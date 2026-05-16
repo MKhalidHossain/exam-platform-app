@@ -118,7 +118,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     _voiceModeEnabled =
         widget.voiceModeEnabled || _voiceController.isEnabledValue;
     _configureTts();
-    unawaited(_primeSpeechAvailability());
+    unawaited(_primeSpeechAvailability(requestPermission: _voiceModeEnabled));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !widget.autoSubmit) {
         _activateVoiceScreen();
@@ -195,12 +195,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       if (_isTtsAwaitingCompletion) return;
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
-      if (_voiceModeEnabled &&
-          _autoListenEnabled &&
-          !_isSubmitting &&
-          !_isListening) {
-        _scheduleListeningRestart(delay: const Duration(milliseconds: 400));
-      }
+      // Restart after awaited TTS is owned by the speak method's finally block.
     });
     _tts.setCancelHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
@@ -325,8 +320,23 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     _voiceController.setPhase(phase, screen: QuizVoiceScreen.examReview);
   }
 
-  Future<void> _primeSpeechAvailability() async {
+  Future<void> _primeSpeechAvailability({
+    bool requestPermission = false,
+  }) async {
+    debugPrint(
+      '[Voice][review] prime speech platform=${Platform.operatingSystem} requestPermission=$requestPermission',
+    );
+    if (requestPermission) {
+      final speechReady = await _initSpeech(requestPermission: true);
+      if (!speechReady && mounted && _voiceModeEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showSpeechUnavailableMessage());
+        });
+      }
+      return;
+    }
     final hasPermission = await _speech.hasPermission;
+    debugPrint('[Voice][review] prime permission=$hasPermission');
     if (!hasPermission) {
       if (!mounted) return;
       setState(() {
@@ -342,6 +352,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     if (_speechInitializing) return _speechAvailable;
     if (!requestPermission && !_speechAvailable) {
       final hasPermission = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][review] init skipped permission=$hasPermission requestPermission=$requestPermission',
+      );
       if (!hasPermission) {
         if (!mounted) return false;
         setState(() {
@@ -354,8 +367,13 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
     _speechInitializing = true;
     try {
+      final permissionBefore = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][review] speech initialize start platform=${Platform.operatingSystem} permissionBefore=$permissionBefore requestPermission=$requestPermission',
+      );
       final available = await _speech.initialize(
         onError: (error) {
+          debugPrint('[Voice][review] speech error: $error');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech error: $error',
@@ -369,6 +387,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
           _scheduleListeningRestart(countAsRetry: true);
         },
         onStatus: (status) {
+          debugPrint('[Voice][review] speech status=$status');
           if (!mounted || !_isCurrentVoiceScreen) return;
           _voiceController.logEvent(
             'speech status: $status',
@@ -406,6 +425,10 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       if (available) {
         preferredLocaleId = await _resolvePreferredSpeechLocaleId();
       }
+      final permissionAfter = await _speech.hasPermission;
+      debugPrint(
+        '[Voice][review] speech initialized available=$available permissionAfter=$permissionAfter locale=${preferredLocaleId ?? 'system'}',
+      );
       if (!mounted) return available;
       setState(() {
         _speechAvailable = available;
@@ -420,6 +443,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       }
       return available;
     } catch (error, stackTrace) {
+      debugPrint('[Voice][review] speech initialize failed: $error');
       _voiceController.logEvent(
         'speech initialize failed: $error\n$stackTrace',
         screen: QuizVoiceScreen.examReview,
@@ -682,7 +706,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       _voiceController.setVoiceEnabled(
         true,
         screen: QuizVoiceScreen.examReview,
-        requestEntryAction: true,
+        requestEntryAction: false,
       );
       await _speakReviewSummary();
     }
@@ -696,6 +720,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     );
     _listeningRestartTimer?.cancel();
     if (_isListening || _isSpeaking || _isSubmitting || _isPreparingToListen) {
+      debugPrint(
+        '[Voice][review] listen blocked reason=busy listening=$_isListening speaking=$_isSpeaking submitting=$_isSubmitting preparing=$_isPreparingToListen',
+      );
       return;
     }
     final listenSessionId = ++_listenSessionId;
@@ -704,12 +731,12 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       _heardText = '';
     });
     _voiceController.markHeardText(_heardText);
-    await _stopTtsPlayback();
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_speechAvailable) {
-      final speechReady = await _initSpeech();
+      final speechReady = await _initSpeech(requestPermission: true);
       if (!speechReady) {
         if (mounted) setState(() => _isPreparingToListen = false);
+        await _showSpeechUnavailableMessage();
         return;
       }
     }
@@ -754,6 +781,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   Future<void> _stopListening() async {
     _listenSessionId++;
+    debugPrint('[Voice][review] listen stop requested');
     await _speech.stop();
     await _cancelFallbackAudioCapture();
     if (!mounted || !_isCurrentVoiceScreen) return;
@@ -782,6 +810,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (_isSpeaking) return;
+    debugPrint(
+      '[Voice][review] recognized="${result.recognizedWords}" final=${result.finalResult} confidence=${result.confidence}',
+    );
     setState(() => _heardText = result.recognizedWords);
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
@@ -831,6 +862,9 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
     final result = decision.parseResult;
+    debugPrint(
+      '[Voice][review] normalized="${result.normalizedText}" decision=${decision.analytics['decision']} intent=${decision.intent?.name} fallbackUsed=${decision.analytics['fallbackUsed']}',
+    );
     final questionNumber = decision.questionNumber;
     final String? retryFeedback =
         !decision.shouldExecute && decision.feedback != null

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:ej_flutter/controllers/quiz_voice_controller.dart';
@@ -22,6 +23,9 @@ void main() {
     test('normalizes common option and number transcripts', () {
       expect(VoiceTextNormalizer.normalize('option bee'), 'option b');
       expect(VoiceTextNormalizer.normalize('opson bee'), 'option b');
+      expect(VoiceTextNormalizer.normalize('option si'), 'option c');
+      expect(VoiceTextNormalizer.normalize('option see'), 'option c');
+      expect(VoiceTextNormalizer.normalize('option sea'), 'option c');
       expect(VoiceTextNormalizer.normalize('nex question'), 'next question');
       expect(VoiceTextNormalizer.normalize('question five'), 'question 5');
     });
@@ -57,6 +61,39 @@ void main() {
       expect(result.decision, core.VoiceCommandDecision.execute);
       expect(result.intent?.type, VoiceIntentType.optionB);
       expect(result.intent?.value, 'b');
+    });
+
+    test('direct option C variants override stale learned option A', () {
+      for (final phrase in const ['option si', 'option see', 'option sea']) {
+        final result = VoiceCommandParser.parse(
+          rawText: phrase,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+          learnedCorrections: [
+            VoiceLearnedCorrection(
+              context: VoiceScreenContext.quiz,
+              phrase: phrase,
+              intent: VoiceIntent(
+                type: VoiceIntentType.optionA,
+                value: 'a',
+                confidence: 0.95,
+                isRisky: false,
+                rawText: phrase,
+                normalizedText: VoiceTextNormalizer.normalize(phrase),
+                source: 'test_stale_correction',
+              ),
+            ),
+          ],
+        );
+
+        expect(
+          result.decision,
+          core.VoiceCommandDecision.execute,
+          reason: phrase,
+        );
+        expect(result.intent?.type, VoiceIntentType.optionC, reason: phrase);
+        expect(result.intent?.value, 'c', reason: phrase);
+      }
     });
 
     test('maps next question transcript to next', () {
@@ -210,6 +247,57 @@ void main() {
         await service.findCorrection('reset answers', VoiceScreenContext.quiz),
         isNull,
       );
+    });
+
+    test('does not save conflicting C-like option corrections', () async {
+      SharedPreferences.setMockInitialValues({});
+      const service = VoiceLearningService(userOrDeviceId: 'voice-test');
+
+      final saved = await service.saveCorrection(
+        rawHeardText: 'option si',
+        intent: const VoiceIntent(
+          type: VoiceIntentType.optionA,
+          value: 'a',
+          confidence: 1,
+          isRisky: false,
+          rawText: 'option si',
+          normalizedText: 'option c',
+          source: 'test_stale_correction',
+        ),
+        screenContext: VoiceScreenContext.quiz,
+        userConfirmed: true,
+      );
+
+      expect(saved, isFalse);
+      expect(await service.getCorrections(VoiceScreenContext.quiz), isEmpty);
+    });
+
+    test('deletes stored C-like corrections that point to option A', () async {
+      const service = VoiceLearningService(userOrDeviceId: 'voice-test');
+      final now = DateTime.utc(2026, 1, 1).toIso8601String();
+      SharedPreferences.setMockInitialValues({
+        service.storageKey: [
+          jsonEncode({
+            'rawHeardText': 'option si',
+            'normalizedText': 'option si',
+            'intentType': VoiceIntentType.optionA.name,
+            'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+        ],
+      });
+
+      expect(
+        await service.getParserCorrections(VoiceScreenContext.quiz),
+        isEmpty,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getStringList(service.storageKey), isEmpty);
     });
 
     test('processor applies safe learned corrections screen-aware', () async {

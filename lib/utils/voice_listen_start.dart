@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -19,6 +20,15 @@ Future<bool> startSpeechListeningSafely({
   required String? localeId,
 }) async {
   try {
+    if (speech.isListening) {
+      debugPrint(
+        '[Voice][${screen.name}] listen start skipped: already active',
+      );
+      return true;
+    }
+    debugPrint(
+      '[Voice][${screen.name}] listen start requested locale=${localeId ?? 'system'}',
+    );
     await speech.listen(
       onResult: onResult,
       listenFor: const Duration(minutes: 1),
@@ -29,8 +39,12 @@ Future<bool> startSpeechListeningSafely({
         partialResults: true,
       ),
     );
-    return speech.isListening;
+    debugPrint(
+      '[Voice][${screen.name}] listen call accepted isListening=${speech.isListening}',
+    );
+    return true;
   } catch (error, stackTrace) {
+    debugPrint('[Voice][${screen.name}] listen start failed: $error');
     controller.logEvent(
       'speech listen start failed: $error\n$stackTrace',
       screen: screen,
