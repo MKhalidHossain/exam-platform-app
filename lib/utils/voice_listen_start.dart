@@ -5,6 +5,8 @@ import 'package:speech_to_text/speech_to_text.dart';
 import '../controllers/quiz_voice_controller.dart';
 
 const Duration minimumVoiceListenRetryDelay = Duration(seconds: 1);
+const Duration voiceListenForDuration = Duration(seconds: 25);
+const Duration voicePauseForDuration = Duration(seconds: 4);
 
 Duration enforceMinimumVoiceListenRetryDelay(Duration delay) {
   return delay < minimumVoiceListenRetryDelay
@@ -31,8 +33,8 @@ Future<bool> startSpeechListeningSafely({
     );
     await speech.listen(
       onResult: onResult,
-      listenFor: const Duration(minutes: 1),
-      pauseFor: const Duration(minutes: 1),
+      listenFor: voiceListenForDuration,
+      pauseFor: voicePauseForDuration,
       localeId: localeId,
       listenOptions: SpeechListenOptions(
         cancelOnError: false,
@@ -40,7 +42,7 @@ Future<bool> startSpeechListeningSafely({
       ),
     );
     debugPrint(
-      '[Voice][${screen.name}] listen call accepted isListening=${speech.isListening}',
+      '[Voice][${screen.name}] listen call accepted; awaiting listening status',
     );
     return true;
   } catch (error, stackTrace) {
