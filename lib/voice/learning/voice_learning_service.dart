@@ -98,11 +98,26 @@ class VoiceLearningService {
     required bool userConfirmed,
     DateTime? now,
   }) async {
-    if (!userConfirmed) return false;
-    if (VoiceSafetyPolicy.isRiskyIntent(intent)) return false;
+    if (!userConfirmed) {
+      debugPrint(
+        '[VoiceLearning] learned correction ignored phrase="$rawHeardText" screen=${screenContext.name} reason=notConfirmed intent=${intent.type.name}',
+      );
+      return false;
+    }
+    if (VoiceSafetyPolicy.isRiskyIntent(intent)) {
+      debugPrint(
+        '[VoiceLearning] learned correction ignored phrase="$rawHeardText" screen=${screenContext.name} reason=risky intent=${intent.type.name}',
+      );
+      return false;
+    }
 
     final normalizedText = VoiceTextNormalizer.normalize(rawHeardText);
-    if (normalizedText.isEmpty) return false;
+    if (normalizedText.isEmpty) {
+      debugPrint(
+        '[VoiceLearning] learned correction ignored phrase="$rawHeardText" screen=${screenContext.name} reason=emptyNormalized intent=${intent.type.name}',
+      );
+      return false;
+    }
     if (_hasConflictingDirectOption(
       rawHeardText: rawHeardText,
       normalizedText: normalizedText,
@@ -118,7 +133,12 @@ class VoiceLearningService {
         intent.isRisky ||
         VoiceSafetyPolicy.isRiskyIntentType(intent.type) ||
         VoiceSafetyPolicy.isRiskyText(normalizedText);
-    if (isRisky) return false;
+    if (isRisky) {
+      debugPrint(
+        '[VoiceLearning] learned correction ignored phrase="$rawHeardText" normalized="$normalizedText" screen=${screenContext.name} reason=riskyNormalized intent=${intent.type.name}',
+      );
+      return false;
+    }
 
     final timestamp = now ?? DateTime.now();
     final prefs = await SharedPreferences.getInstance();
@@ -149,6 +169,9 @@ class VoiceLearningService {
     ].take(maxCorrections).toList(growable: false);
 
     await _writeCorrections(prefs, nextCorrections);
+    debugPrint(
+      '[VoiceLearning] learned correction saved phrase="$rawHeardText" normalized="$normalizedText" screen=${screenContext.name} intent=${intent.type.name}',
+    );
     return true;
   }
 
@@ -176,7 +199,7 @@ class VoiceLearningService {
         if (correction == null || correction.isRisky) continue;
         if (_isConflictingDirectOptionCorrection(correction)) {
           debugPrint(
-            '[VoiceLearning] learned correction deleted phrase="${correction.rawHeardText}" normalized="${correction.normalizedText}" reason=directOptionConflict intent=${correction.intentType.name}',
+            '[VoiceLearning] learned correction cleaned phrase="${correction.rawHeardText}" normalized="${correction.normalizedText}" reason=directOptionConflict intent=${correction.intentType.name}',
           );
           deletedConflictingCorrection = true;
           continue;

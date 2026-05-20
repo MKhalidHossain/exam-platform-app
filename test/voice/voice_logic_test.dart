@@ -26,7 +26,23 @@ void main() {
       expect(VoiceTextNormalizer.normalize('option si'), 'option c');
       expect(VoiceTextNormalizer.normalize('option see'), 'option c');
       expect(VoiceTextNormalizer.normalize('option sea'), 'option c');
+      expect(VoiceTextNormalizer.normalize('select see'), 'select c');
+      expect(VoiceTextNormalizer.normalize('select sea'), 'select c');
+      expect(VoiceTextNormalizer.normalize('select si'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylhetse'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylhet see'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylhet c'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylet see'), 'select c');
+      expect(VoiceTextNormalizer.normalize('syletse'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylnetse'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sylentse'), 'select c');
+      expect(VoiceTextNormalizer.normalize('syllet see'), 'select c');
+      expect(VoiceTextNormalizer.normalize('sillect c'), 'select c');
+      expect(VoiceTextNormalizer.normalize('go nest'), 'go next');
       expect(VoiceTextNormalizer.normalize('nex question'), 'next question');
+      expect(VoiceTextNormalizer.normalize('reed question'), 'read question');
+      expect(VoiceTextNormalizer.normalize('flug'), 'flag');
+      expect(VoiceTextNormalizer.normalize('flak'), 'flag');
       expect(VoiceTextNormalizer.normalize('question five'), 'question 5');
     });
   });
@@ -63,8 +79,104 @@ void main() {
       expect(result.intent?.value, 'b');
     });
 
+    test('maps common safe aliases and accent variants', () {
+      final cases = <String, VoiceIntentType>{
+        'next': VoiceIntentType.next,
+        'go nest': VoiceIntentType.next,
+        'nex question': VoiceIntentType.next,
+        'reed question': VoiceIntentType.readQuestion,
+        'repeat': VoiceIntentType.repeat,
+        'flug': VoiceIntentType.flag,
+        'flak': VoiceIntentType.flag,
+        'bookmark': VoiceIntentType.bookmark,
+        'sillect c': VoiceIntentType.optionC,
+        'choose sea': VoiceIntentType.optionC,
+        'select see': VoiceIntentType.optionC,
+        'select sea': VoiceIntentType.optionC,
+        'select si': VoiceIntentType.optionC,
+        'go back': VoiceIntentType.previous,
+        'back': VoiceIntentType.previous,
+        'previous question': VoiceIntentType.previous,
+        'prev': VoiceIntentType.previous,
+        'move back': VoiceIntentType.previous,
+      };
+
+      for (final entry in cases.entries) {
+        final result = VoiceCommandParser.parse(
+          rawText: entry.key,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+        );
+
+        expect(
+          result.decision,
+          core.VoiceCommandDecision.execute,
+          reason: entry.key,
+        );
+        expect(result.intent?.type, entry.value, reason: entry.key);
+      }
+    });
+
+    test('distorted select C transcripts execute option C', () {
+      for (final phrase in const [
+        'sylhetse',
+        'sylhet see',
+        'sylhet c',
+        'sylet see',
+        'syletse',
+        'sylnetse',
+        'sylentse',
+        'syllet see',
+        'sillect c',
+        'select see',
+        'select sea',
+        'select si',
+      ]) {
+        final result = VoiceCommandParser.parse(
+          rawText: phrase,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+        );
+
+        expect(
+          result.decision,
+          core.VoiceCommandDecision.execute,
+          reason: phrase,
+        );
+        expect(result.intent?.type, VoiceIntentType.optionC, reason: phrase);
+        expect(result.intent?.value, 'c', reason: phrase);
+      }
+    });
+
+    test('exact safe alias executes with high local confidence', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'next',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.strict,
+      );
+
+      expect(result.decision, core.VoiceCommandDecision.execute);
+      expect(result.intent?.type, VoiceIntentType.next);
+      expect(result.intent?.confidence, 1);
+      expect(result.intent?.source, 'exact_alias');
+    });
+
     test('direct option C variants override stale learned option A', () {
-      for (final phrase in const ['option si', 'option see', 'option sea']) {
+      for (final phrase in const [
+        'option si',
+        'option see',
+        'option sea',
+        'sylhetse',
+        'sylhet see',
+        'sylhet c',
+        'sylet see',
+        'syletse',
+        'sylnetse',
+        'sylentse',
+        'answer si',
+        'answer see',
+        'answer sea',
+      ]) {
         final result = VoiceCommandParser.parse(
           rawText: phrase,
           context: VoiceScreenContext.quiz,
@@ -95,6 +207,38 @@ void main() {
         expect(result.intent?.value, 'c', reason: phrase);
       }
     });
+
+    test(
+      'canonical quiz answer grammar maps C-like transcripts to index C',
+      () {
+        for (final phrase in const [
+          'option si',
+          'option see',
+          'option sea',
+          'sylhetse',
+          'sylhet see',
+          'sylhet c',
+          'sylet see',
+          'syletse',
+          'sylnetse',
+          'sylentse',
+          'answer si',
+          'answer see',
+          'answer sea',
+        ]) {
+          expect(
+            VoiceCommandParser.quizAnswerIndexesForText(
+              rawText: phrase,
+              optionCount: 4,
+              isTrueFalse: false,
+              isMultiSelect: false,
+            ),
+            {2},
+            reason: phrase,
+          );
+        }
+      },
+    );
 
     test('maps next question transcript to next', () {
       final result = VoiceCommandParser.parse(
@@ -243,6 +387,35 @@ void main() {
       );
 
       expect(saved, isFalse);
+      final submitSaved = await service.saveCorrection(
+        rawHeardText: 'submit',
+        intent: const VoiceIntent(
+          type: VoiceIntentType.submit,
+          confidence: 1,
+          isRisky: true,
+          rawText: 'submit',
+          normalizedText: 'submit',
+          source: 'test',
+        ),
+        screenContext: VoiceScreenContext.quiz,
+        userConfirmed: true,
+      );
+      final finalSubmitSaved = await service.saveCorrection(
+        rawHeardText: 'final submit',
+        intent: const VoiceIntent(
+          type: VoiceIntentType.finalSubmit,
+          confidence: 1,
+          isRisky: true,
+          rawText: 'final submit',
+          normalizedText: 'final submit',
+          source: 'test',
+        ),
+        screenContext: VoiceScreenContext.review,
+        userConfirmed: true,
+      );
+
+      expect(submitSaved, isFalse);
+      expect(finalSubmitSaved, isFalse);
       expect(
         await service.findCorrection('reset answers', VoiceScreenContext.quiz),
         isNull,
@@ -253,22 +426,68 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       const service = VoiceLearningService(userOrDeviceId: 'voice-test');
 
-      final saved = await service.saveCorrection(
-        rawHeardText: 'option si',
-        intent: const VoiceIntent(
-          type: VoiceIntentType.optionA,
-          value: 'a',
-          confidence: 1,
-          isRisky: false,
-          rawText: 'option si',
-          normalizedText: 'option c',
-          source: 'test_stale_correction',
-        ),
-        screenContext: VoiceScreenContext.quiz,
-        userConfirmed: true,
-      );
+      for (final phrase in const [
+        'option si',
+        'option see',
+        'option sea',
+        'select see',
+        'sylhetse',
+        'sylhet see',
+        'sylhet c',
+        'sylet see',
+        'syletse',
+        'syllet see',
+        'sylnetse',
+        'sylentse',
+        'galaxy',
+        'answer sea',
+      ]) {
+        final saved = await service.saveCorrection(
+          rawHeardText: phrase,
+          intent: VoiceIntent(
+            type: VoiceIntentType.optionA,
+            value: 'a',
+            confidence: 1,
+            isRisky: false,
+            rawText: phrase,
+            normalizedText: VoiceTextNormalizer.normalize(phrase),
+            source: 'test_stale_correction',
+          ),
+          screenContext: VoiceScreenContext.quiz,
+          userConfirmed: true,
+        );
 
-      expect(saved, isFalse);
+        expect(saved, isFalse, reason: phrase);
+      }
+      for (final targetType in const [
+        VoiceIntentType.optionA,
+        VoiceIntentType.optionB,
+        VoiceIntentType.optionD,
+      ]) {
+        for (final phrase in const ['sylhetse', 'galaxy']) {
+          final saved = await service.saveCorrection(
+            rawHeardText: phrase,
+            intent: VoiceIntent(
+              type: targetType,
+              value: switch (targetType) {
+                VoiceIntentType.optionA => 'a',
+                VoiceIntentType.optionB => 'b',
+                VoiceIntentType.optionD => 'd',
+                _ => null,
+              },
+              confidence: 1,
+              isRisky: false,
+              rawText: phrase,
+              normalizedText: VoiceTextNormalizer.normalize(phrase),
+              source: 'test_stale_correction',
+            ),
+            screenContext: VoiceScreenContext.quiz,
+            userConfirmed: true,
+          );
+
+          expect(saved, isFalse, reason: '$phrase ${targetType.name}');
+        }
+      }
       expect(await service.getCorrections(VoiceScreenContext.quiz), isEmpty);
     });
 
@@ -282,6 +501,66 @@ void main() {
             'normalizedText': 'option si',
             'intentType': VoiceIntentType.optionA.name,
             'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+          jsonEncode({
+            'rawHeardText': 'answer sea',
+            'normalizedText': 'answer sea',
+            'intentType': VoiceIntentType.optionA.name,
+            'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+          jsonEncode({
+            'rawHeardText': 'syllet see',
+            'normalizedText': 'syllet see',
+            'intentType': VoiceIntentType.optionA.name,
+            'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+          jsonEncode({
+            'rawHeardText': 'sylhetse',
+            'normalizedText': 'sylhetse',
+            'intentType': VoiceIntentType.optionA.name,
+            'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+          jsonEncode({
+            'rawHeardText': 'sylnetse',
+            'normalizedText': 'sylnetse',
+            'intentType': VoiceIntentType.optionA.name,
+            'value': 'a',
+            'number': null,
+            'screenContext': VoiceScreenContext.quiz.name,
+            'createdAt': now,
+            'lastUsedAt': now,
+            'useCount': 0,
+            'isRisky': false,
+          }),
+          jsonEncode({
+            'rawHeardText': 'galaxy',
+            'normalizedText': 'galaxy',
+            'intentType': VoiceIntentType.optionB.name,
+            'value': 'b',
             'number': null,
             'screenContext': VoiceScreenContext.quiz.name,
             'createdAt': now,
@@ -335,6 +614,47 @@ void main() {
       expect(quizResult.analytics['source'], 'correction');
       expect(reviewResult.shouldExecute, isFalse);
     });
+
+    test(
+      'yes saves suggestion and next time executes learned option C',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        const service = VoiceLearningService(userOrDeviceId: 'voice-test');
+        final processor = VoiceCommandProcessor(learningService: service);
+
+        final suggestion = await processor.process(
+          screen: QuizVoiceScreen.mcq,
+          heardText: 'galaxy',
+          sensitivity: CommandSensitivity.normal,
+        );
+
+        expect(suggestion.shouldExecute, isFalse);
+        expect(suggestion.intent, legacy.VoiceIntent.optionC);
+        expect(suggestion.feedback, contains('Did you mean'));
+        expect(suggestion.analytics['parserSource'], 'suggestion');
+
+        final accepted = await processor.process(
+          screen: QuizVoiceScreen.mcq,
+          heardText: 'yes',
+          sensitivity: CommandSensitivity.normal,
+        );
+
+        expect(accepted.shouldExecute, isTrue);
+        expect(accepted.intent, legacy.VoiceIntent.optionC);
+        expect(accepted.analytics['correctionSaved'], isTrue);
+
+        final learned = await processor.process(
+          screen: QuizVoiceScreen.mcq,
+          heardText: 'galaxy',
+          sensitivity: CommandSensitivity.normal,
+        );
+
+        expect(learned.shouldExecute, isTrue);
+        expect(learned.intent, legacy.VoiceIntent.optionC);
+        expect(learned.analytics['parserSource'], 'learned_correction');
+        expect(learned.analytics['source'], 'correction');
+      },
+    );
   });
 
   group('cloud fallback guard', () {
@@ -381,6 +701,10 @@ void main() {
 
         expect(cloudService.calls, 0);
         expect(result.analytics['fallbackUsed'], isFalse);
+        expect(
+          result.feedback,
+          "I didn't understand. Try saying Option A, Option B, Option C, Next question, or Go back.",
+        );
       } finally {
         if (await audioFile.exists()) {
           await audioFile.delete();

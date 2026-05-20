@@ -1,331 +1,666 @@
-# AGENT.md — Market-Ready Voice Assistant Stabilization
+# AGENT.md — Adaptive Voice Command Learning for Flutter Quiz Assistant
 
 ## Role
 
 You are a senior Flutter engineer improving an existing quiz/exam app voice assistant.
 
-The current workflow is already correct and must be preserved:
+The assistant already has a working flow:
 
 ```text
-Enter MCQ screen
+MCQ screen opens
 → assistant reads the question first
 → after TTS finishes, assistant listens
-→ user says answer/command
-→ assistant follows command
+→ user speaks a command
+→ assistant executes the command
 ```
 
-Do not redesign this workflow. Your job is to fix platform issues, improve recognition reliability, and make the assistant production-ready for different English accents.
+Do not redesign this flow. Your task is to make the assistant smarter, more forgiving, and more efficient at understanding user commands, spelling mistakes, STT mistakes, accent variants, and learned user-specific phrases.
+
+This phase is **no-cloud / no-paid-AI**. Use the existing native `speech_to_text`, parser, normalizer, fuzzy matcher, learning service, and TTS flow.
 
 ---
 
 ## Main Goal
 
-Make the voice assistant reliable on iOS and Android, and more tolerant of global English accents.
+Add **Adaptive Voice Command Understanding**.
 
-The app currently uses:
-
-- `speech_to_text`
-- `flutter_tts`
-- existing voice parser / voice command processor
-- existing quiz and review voice flows
-
-Keep existing features working.
-
----
-
-## Known Client Feedback
-
-Client reported:
+The assistant should understand:
 
 ```text
-iPhone: voice assistant works about 60% of the time; user must repeat commands.
-Android: voice assistant does not recognize voice input at all.
+next
+go next
+go nest
+nex question
+read
+reed question
+repeat
+flag
+flug
+bookmark
+select c
+select see
+select sea
+syllet see
+sillect c
+option si
+option see
+option sea
 ```
 
-Treat this as the main production bug to fix.
+and map them to the correct app command when safe.
 
----
+If the assistant is unsure, it should ask a simple confirmation:
 
-## Known Audit Findings
+```text
+Did you mean Select C?
+```
 
-### Critical Issues
+If the user says:
 
-1. Android first-run permission/init flow is broken.
-   - Manifest has RECORD_AUDIO, but auto voice flow may check permission and return before requesting it.
-   - Voice mode may call speech init without requesting permission.
+```text
+yes
+```
 
-2. Android listen start can be treated as failed too early.
-   - Do not rely on immediate `speech.isListening` after `speech.listen()`.
-   - Android listening status can update asynchronously.
+then the assistant should execute the suggested command and save the correction for future use.
 
-3. iOS partial results are processed too early.
-   - Partial transcripts can be unstable.
-   - Do not execute commands from weak partial text like only `option` before final `option A`.
-
-4. STT locale and TTS language must be separated.
-   - STT must use `speechLocaleCode`.
-   - TTS must use `languageCode`.
-
-5. TTS/listening lifecycle must be locked.
-   - Listening must not start while TTS is reading.
-   - Auto-listen starts only after TTS completion.
-   - User mic tap can interrupt TTS intentionally.
-
-6. MCQ answer parsing should use the canonical normalizer/parser.
-   - Avoid duplicate parsing and duplicate normalizers.
-
-7. Cloud fallback may exist but must be optional and safe.
-   - No API keys in Flutter.
-   - Never upload audio if disabled.
-   - Never execute cloud transcript directly.
+Next time the same phrase should execute the correct command directly, unless it is risky or conflicting.
 
 ---
 
 ## Non-Negotiable Rules
 
-- Do not rewrite the whole voice assistant.
-- Do not change the working MCQ startup flow.
-- Do not redesign UI unless required for a bug fix.
-- Do not change unrelated quiz/business logic.
-- Do not add provider API keys or secrets to Flutter.
-- Do not store raw audio permanently.
-- Keep app working offline with native STT.
-- Cloud fallback must be optional.
-- Final submit must remain safe.
-- All transcripts must pass through the same parser/safety layer before command execution.
-- Prefer small, localized fixes.
-- Run `flutter analyze` after changes.
+- Do not rewrite the whole assistant.
+- Do not redesign MCQ/review/settings UI.
+- Do not change the read-first-then-listen workflow.
+- Do not execute raw STT text directly.
+- Do not execute unstable partial STT text.
+- Do not weaken submit/final-submit safety.
+- Do not auto-learn risky commands.
+- Do not save conflicting option corrections.
+- Direct option grammar must always beat learned corrections.
+- If text clearly sounds like Option C, never save it as Option A.
+- If text clearly sounds like Option B, never save it as Option D.
+- Prefer asking retry/confirmation over executing the wrong command.
+- Keep the app working offline.
+- Keep changes small and testable.
 
 ---
 
-## Correct Voice Pipeline
+## Correct Command Pipeline
 
-All recognized text should follow this pipeline:
+All command recognition should follow this pipeline:
 
 ```text
-raw STT transcript
+raw final STT transcript
 → canonical normalizer
-→ screen-aware parser
-→ fuzzy/alias matching
+→ direct option grammar
+→ exact safe alias match
+→ learned correction if safe and non-conflicting
+→ fuzzy / phonetic match
+→ ambiguity check
 → confidence decision
-→ safety policy
-→ execute / ask retry / ask yes-no / fallback
+→ execute / ask confirmation / ask retry
+→ save safe correction only after yes
 ```
 
-Cloud transcript and learned corrections must also pass through this same pipeline.
+Partial STT results should update heard text/debug UI only.
 
 ---
 
-## Platform Requirements
+## Parser Priority
 
-### Android
+Use this order:
 
-Fix and verify:
+1. Normalize text.
+2. Direct option grammar.
+3. True/False grammar.
+4. Number/question grammar.
+5. Exact safe alias match.
+6. Safe learned correction.
+7. Fuzzy/phonetic match.
+8. Confirmation or retry.
 
-- `RECORD_AUDIO` permission exists.
-- Permission is requested when user enables voice or auto voice starts.
-- Do not silently return false when permission is missing.
-- `speech_to_text.initialize()` is called safely before listen.
-- Do not treat immediate `speech.isListening == false` as listen failure.
-- Use status callbacks/logs to track real listen state.
-- If Android speech service is unavailable, show helpful message.
-- Add debug logs for permission, init, listen start, status, errors.
-
-### iOS
-
-Fix and verify:
-
-- `NSMicrophoneUsageDescription` exists.
-- `NSSpeechRecognitionUsageDescription` exists.
-- Speech and mic permission handling is correct.
-- Do not execute weak partial transcripts.
-- Use final result for command execution unless a partial phrase is stable and complete.
-- Do not stop STT before full command is received.
-- TTS must finish before auto-listen starts.
-
----
-
-## Accent Recognition Requirements
-
-Support common transcript variations:
+Important:
 
 ```text
-option bee -> option b
-option be -> option b
-opson bee -> option b
-of shun b -> option b
-answer sea / answer see -> answer c
-option dee -> option d
-fals / falls -> false
-nex question -> next question
-kweschen -> question
-question five -> question 5
+Direct option grammar > learned correction
+Exact safe alias > STT confidence
+Risky command safety > everything
 ```
-
-Use:
-
-- canonical normalizer
-- command aliases
-- fuzzy matcher
-- ambiguity detection
-- learned corrections where safe
-
-Do not over-normalize risky commands.
 
 ---
 
-## Command Safety
+## Exact Safe Command Rule
 
-### Quiz / MCQ Screen
+If the transcript exactly matches a safe command alias, execute it with high local parser confidence, even if STT confidence is low or null.
 
-- `submit` or `submit quiz` opens review only.
-- It must not final-submit from quiz screen.
+Safe examples:
+
+```text
+flag
+flag question
+bookmark
+next
+next question
+read
+read question
+repeat
+explain
+help
+option a
+option b
+option c
+option d
+select c
+choose c
+```
+
+Risky commands are different:
+
+```text
+submit
+final submit
+reset
+delete
+exit
+```
+
+Risky commands must still go through stricter safety rules.
+
+---
+
+## Required Alias Expansion
+
+Add or verify aliases for these command groups.
+
+### Next Question
+
+```text
+next
+next question
+go next
+go nest
+move next
+continue
+nex
+nex question
+```
+
+### Previous Question
+
+```text
+previous
+previous question
+back
+go back
+last question
+prev
+preveous
+```
+
+### Read / Repeat
+
+```text
+read
+read question
+reed
+reed question
+repeat
+repeat question
+say again
+read again
+```
+
+### Explain
+
+```text
+explain
+explain answer
+explanation
+show explanation
+```
+
+### Flag / Bookmark
+
+```text
+flag
+flag question
+flug
+flak
+flagged
+bookmark
+bookmark question
+mark
+mark question
+```
+
+### Review
+
+```text
+review
+open review
+go review
+go to review
+review answers
+```
+
+### Option A
+
+```text
+a
+option a
+option ay
+option hey
+option eh
+answer a
+select a
+choose a
+first
+first option
+option one
+```
+
+### Option B
+
+```text
+b
+option b
+option bee
+option be
+option bi
+answer b
+select b
+choose b
+second
+second option
+option two
+```
+
+### Option C
+
+```text
+c
+option c
+option see
+option sea
+option si
+option she
+answer c
+answer see
+answer sea
+answer si
+select c
+select see
+select sea
+select si
+syllet see
+sillect c
+slect c
+sellect c
+choose c
+choose see
+choose sea
+third
+third option
+option three
+```
+
+### Option D
+
+```text
+d
+option d
+option dee
+option de
+option the
+answer d
+select d
+choose d
+fourth
+fourth option
+option four
+```
+
+### True / False
+
+```text
+true
+tru
+through
+false
+fals
+falls
+```
+
+### Question Jump
+
+```text
+question five
+question 5
+go to question five
+go to question 5
+number five
+number 5
+```
+
+---
+
+## Normalization Requirements
+
+Normalize common spelling/STT/accent mistakes:
+
+```text
+go nest -> go next
+nex -> next
+queshan / kweshen / queschen / kweschen -> question
+reed -> read
+flug / flak / flagged -> flag
+syllet / sillect / slect / sellect -> select
+fals / falls -> false
+tru / through -> true
+```
+
+Context-aware option normalization:
+
+```text
+option see / option sea / option si -> option c
+answer see / answer sea / answer si -> answer c
+select see / select sea / select si -> select c
+choose see / choose sea / choose si -> choose c
+
+option bee / option be / option bi -> option b
+answer bee / answer be / answer bi -> answer b
+select bee / select be / select bi -> select b
+
+option dee / option de / option the -> option d
+answer dee / answer de -> answer d
+select dee / select de -> select d
+```
+
+Do not globally convert every word `see` to `c`; only convert it in option/select/choose/answer contexts.
+
+---
+
+## Suggestion and Confirmation Flow
+
+If the parser is not confident enough to execute but finds a likely safe command, ask:
+
+```text
+Did you mean Select C?
+```
+
+or
+
+```text
+Did you mean Next question?
+```
+
+If user says yes:
+
+```text
+yes
+yeah
+yep
+correct
+right
+that's right
+```
+
+then:
+
+1. Execute the suggested command if safe.
+2. Save learned correction if non-risky and non-conflicting.
+3. Log the learned correction.
+
+If user says no:
+
+```text
+no
+nope
+wrong
+cancel
+```
+
+then:
+
+1. Do not execute.
+2. Ask the user to repeat.
+
+Do not ask confirmation forever. Use a pending suggestion state and clear it after yes/no/timeout.
+
+---
+
+## Learned Correction Rules
+
+Save fields:
+
+```text
+rawHeardText
+normalizedText
+screenContext
+intentType
+value
+number
+confidence
+matchSource
+createdAt
+lastUsedAt
+useCount
+isRisky
+```
+
+Rules:
+
+- Store per user/device/profile if the project supports it.
+- Keep corrections screen-aware.
+- Cap total corrections, e.g. 200.
+- Prefer recent successful corrections.
+- Increment use count when applied.
+- Add clear corrections option if not already present.
+- Do not learn final-submit.
+- Do not learn reset/delete/exit/destructive actions.
+- Do not save conflicting option mappings.
+
+---
+
+## Conflict Detection
+
+Reject or clean corrections like:
+
+```text
+option si -> Option A
+option see -> Option A
+option sea -> Option A
+answer see -> Option A
+answer sea -> Option A
+select see -> Option A
+syllet see -> Option A
+sillect c -> Option A
+```
+
+General rule:
+
+```text
+C-like heard text cannot map to A/B/D.
+B-like heard text cannot map to A/C/D unless direct grammar confirms.
+D-like heard text cannot map to A/B/C unless direct grammar confirms.
+```
+
+Direct grammar always wins over learned correction.
+
+---
+
+## Fuzzy Matching Rules
+
+Use fuzzy matching only after direct/alias/learning checks.
+
+Rules:
+
+- Keep matcher lightweight.
+- If top match score is high and not ambiguous, execute safe command.
+- If medium confidence, ask confirmation.
+- If low confidence, ask retry.
+- If top two matches are too close, do not execute; ask clarification/retry.
+- Single-letter commands should only execute in safe screen contexts.
+- Risky commands need stricter thresholds and should not be learned automatically.
+
+---
+
+## Screen-Aware Behavior
+
+### MCQ Screen
+
+Allowed adaptive commands:
+
+```text
+option/select/choose A-D
+true/false
+next
+previous/back
+read/repeat
+explain
+flag/bookmark
+open review
+submit quiz
+question number jump
+```
 
 ### Review Screen
 
-- Strong direct `submit` or `submit quiz` may final-submit if current product behavior requires that.
-- Weak, fuzzy, ambiguous, learned-only, or uncertain cloud submit must not final-submit directly.
-- If confirmation is needed, use simple yes/no:
+Allowed adaptive commands:
+
+```text
+unanswered
+flagged
+question number jump
+read summary
+submit quiz
+back
+help
+```
+
+### Settings Screen
+
+Allowed adaptive commands:
+
+```text
+start quiz
+timed mode on/off
+increase/decrease questions
+set questions to N
+help
+back
+```
+
+Do not match commands that are irrelevant to the current screen.
+
+---
+
+## Submit Safety
+
+Do not weaken submit safety.
+
+Rules:
+
+- MCQ screen: `submit` / `submit quiz` opens review only.
+- Review screen: strong direct submit may final-submit if this is current product behavior.
+- Weak/fuzzy/ambiguous/learned-only submit must not final-submit directly.
+- If confirmation is needed, ask simple yes/no:
   - “Do you want to submit your quiz?”
-  - User says “yes” or “no”
-- Do not require the phrase “confirm submit” unless product requirements change.
-
-### Other Screens
-
-- Submit must not final-submit.
+- Do not require the phrase `confirm submit`.
+- Do not auto-learn submit/final submit.
 
 ---
 
-## TTS and Listening Lifecycle
+## Debug Logging
 
-Required behavior:
-
-```text
-TTS reading question -> listening blocked
-TTS completed -> listening allowed if auto-listen enabled
-manual mic tap -> may stop TTS and start listening
-auto-listen -> must never stop active TTS
-```
-
-Guard all listen entry points:
+Add or keep debug logs for:
 
 ```text
-if TTS is speaking or question is reading:
-    do not start listening
+raw transcript
+normalized transcript
+screen context
+match source: direct / exactAlias / learned / fuzzy / suggestion
+confidence
+suggested command
+learned correction saved/ignored
+conflict reason
+reject reason
+STT confidence
 ```
-
-Check and guard:
-
-- initState
-- post-frame callbacks
-- Future.delayed listen
-- auto-listen
-- resume-listen
-- TTS completion handlers
-- mic tap handler
-- retry listen
-
-Only one owner should schedule listening after TTS.
-
----
-
-## Debug Logging Requirements
-
-Use existing logging style or `debugPrint`.
-
-Log:
-
-- platform
-- permission requested/result
-- speech initialized
-- speech available
-- selected STT locale
-- fallback STT locale
-- listen start/stop
-- speech status
-- speech error
-- recognized words
-- finalResult
-- confidence
-- normalized transcript
-- parser decision
-- fallback used
-- blocked listen reason
 
 Do not log raw audio.
 
 ---
 
-## Cloud Fallback Rules
+## Tests Required
 
-Cloud fallback is optional and should be used only when:
+Add or update tests for:
 
-- native STT fails
-- parser cannot understand
-- confidence is too low
-- cloud fallback setting is enabled
-- internet is available
-- temporary audio exists
+```text
+next -> next question
+go next -> next question
+go nest -> next question
+nex question -> next question
 
-Rules:
+read -> read question
+reed question -> read question
+repeat -> read question
 
-- No cloud API keys in Flutter.
-- Flutter calls backend only.
-- Do not upload audio when fallback is disabled.
-- Delete temporary audio after use.
-- Cloud transcript must pass through the same parser/safety policy.
-- Never execute cloud transcript directly.
+flag -> flag question
+flug -> flag question
+flak -> flag question
+bookmark -> flag question
+
+select c -> Option C
+select see -> Option C
+select sea -> Option C
+syllet see -> Select C suggestion
+sillect c -> Option C
+option si -> Option C
+option see -> Option C
+option sea -> Option C
+
+user confirms syllet see -> saved correction
+next time syllet see -> Option C
+bad correction syllet see -> Option A is ignored
+direct option grammar beats learned correction
+
+exact safe alias with low STT confidence still executes
+weak submit fuzzy match does not execute
+risky command is not auto-learned
+```
 
 ---
 
-## Recommended Fix Order
-
-1. Android permission/init flow.
-2. Android async listen-start handling.
-3. iOS partial result handling.
-4. STT locale vs TTS language separation.
-5. TTS/listening lifecycle hardening.
-6. Canonical normalizer/parser usage.
-7. Fuzzy ambiguity improvements.
-8. User correction learning integration.
-9. Optional cloud fallback wiring.
-10. Debug logs and analytics.
-11. Real device QA.
-
----
-
-## Low Context Coding Rules
-
-For Codex/Claude Code tasks:
+## Low-Context Rules For Codex
 
 - Do not re-audit unless explicitly asked.
-- Do not scan unrelated files.
 - Work only on files listed in the prompt.
+- Do not scan unrelated files.
 - Make the smallest safe change.
-- Stop after the requested task.
 - Do not rewrite screens.
-- Do not refactor unrelated logic.
-- If a broad fix is risky, add a TODO and explain.
-- Run targeted tests when possible.
-- Always report files changed and analyze/test result.
+- Preserve existing read-first-then-listen flow.
+- Do not change submit behavior except preserving safety.
+- Run `dart format` on changed files.
+- Run `flutter analyze`.
+- Run targeted voice tests if available.
+- Stop after the requested task.
 
 ---
 
-## Acceptance Criteria
+## Definition Of Done
 
-The voice assistant is market-ready for this phase when:
+This task is complete when:
 
-- Android recognizes voice on real device after permission is granted.
-- iPhone does not execute incomplete partial transcripts.
-- MCQ screen reads question first, then listens.
-- Listening never interrupts TTS unless user taps mic.
-- STT uses `speechLocaleCode`.
-- TTS uses `languageCode`, pitch, and speed.
-- Parser uses canonical normalizer.
-- Common accent variants are handled.
-- Unknown commands give helpful retry feedback.
-- Cloud fallback is optional and safe.
-- No API keys/secrets exist in Flutter.
-- Final submit remains safe.
+- Common spelling/accent mistakes map to correct commands.
+- Exact safe commands execute even if STT confidence is low.
+- `go nest` executes Next question.
+- `flug` executes Flag.
+- `syllet see` can be suggested as Select C.
+- If user says yes, the correction is saved.
+- Next time the learned phrase executes the correct command.
+- Bad learned corrections are rejected/cleaned.
+- Submit/final-submit safety is preserved.
+- Voice tests pass.
 - `flutter analyze` passes.
-- Voice tests pass where available.

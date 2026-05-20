@@ -27,6 +27,12 @@ void main() {
         'choose b': VoiceIntentType.optionB,
         'answer b': VoiceIntentType.optionB,
         'select bee': VoiceIntentType.optionB,
+        'option si': VoiceIntentType.optionC,
+        'option see': VoiceIntentType.optionC,
+        'option sea': VoiceIntentType.optionC,
+        'answer si': VoiceIntentType.optionC,
+        'answer see': VoiceIntentType.optionC,
+        'answer sea': VoiceIntentType.optionC,
         'select c': VoiceIntentType.optionC,
         'select sea': VoiceIntentType.optionC,
         'select d': VoiceIntentType.optionD,
@@ -47,6 +53,42 @@ void main() {
         );
         expect(result.intent?.type, entry.value, reason: entry.key);
       }
+    });
+
+    test('learned corrections cannot override direct option grammar', () {
+      final staleOptionA = VoiceCommandAliases.intentFor(
+        type: VoiceIntentType.optionA,
+        phrase: 'option a',
+        value: 'a',
+      );
+
+      for (final phrase in ['option si', 'answer sea']) {
+        final result = VoiceCommandParser.parse(
+          rawText: phrase,
+          context: VoiceScreenContext.quiz,
+          sensitivity: VoiceCommandSensitivity.normal,
+          learnedCorrections: [
+            VoiceLearnedCorrection(
+              context: VoiceScreenContext.quiz,
+              phrase: phrase,
+              intent: staleOptionA,
+            ),
+          ],
+        );
+
+        expect(result.decision, VoiceCommandDecision.execute, reason: phrase);
+        expect(result.intent?.type, VoiceIntentType.optionC, reason: phrase);
+      }
+    });
+
+    test('partial weak option text does not execute', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'option',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(result.decision, isNot(VoiceCommandDecision.execute));
     });
 
     test('keeps option selection aliases quiz-screen only', () {
@@ -177,6 +219,17 @@ void main() {
       expect(result.intent?.source, 'fuzzy_alias');
     });
 
+    test('ambiguous fuzzy commands ask for retry instead of executing', () {
+      final result = VoiceCommandParser.parse(
+        rawText: 'go review',
+        context: VoiceScreenContext.quiz,
+        sensitivity: VoiceCommandSensitivity.normal,
+      );
+
+      expect(result.decision, VoiceCommandDecision.notUnderstood);
+      expect(result.message, contains('more than one command'));
+    });
+
     test('falls back to cloud for unknown local commands', () {
       final result = VoiceCommandParser.parse(
         rawText: 'show me the moon',
@@ -206,6 +259,7 @@ void main() {
 
       expect(result.decision, VoiceCommandDecision.execute);
       expect(result.intent?.type, VoiceIntentType.submit);
+      expect(result.intent?.type, isNot(VoiceIntentType.confirmSubmit));
       expect(result.intent?.isRisky, isTrue);
       expect(finish.decision, VoiceCommandDecision.execute);
       expect(finish.intent?.type, VoiceIntentType.submit);

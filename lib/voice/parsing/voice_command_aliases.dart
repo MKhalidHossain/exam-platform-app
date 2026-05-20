@@ -131,13 +131,17 @@ class VoiceCommandAliases {
   static final List<VoiceCommandPatternAlias> patternAliases = [
     VoiceCommandPatternAlias(
       context: VoiceScreenContext.quiz,
-      pattern: RegExp(r'^(?:question|go to question|go to|number|q)\s+(\d+)$'),
+      pattern: RegExp(
+        r'^(?:question|go to question|jump to question|jump question|go to|jump to|number|q)\s+(\d+)$',
+      ),
       intentType: VoiceIntentType.questionNumber,
       phraseTemplate: 'question <number>',
     ),
     VoiceCommandPatternAlias(
       context: VoiceScreenContext.review,
-      pattern: RegExp(r'^(?:question|go to question|go to|number|q)\s+(\d+)$'),
+      pattern: RegExp(
+        r'^(?:question|go to question|jump to question|jump question|go to|jump to|number|q)\s+(\d+)$',
+      ),
       intentType: VoiceIntentType.questionNumber,
       phraseTemplate: 'question <number>',
     ),
@@ -196,6 +200,12 @@ class VoiceCommandAliases {
     ),
     _alias(
       VoiceScreenContext.quiz,
+      'option one',
+      VoiceIntentType.optionA,
+      value: 'a',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
       'a',
       VoiceIntentType.optionA,
       value: 'a',
@@ -241,6 +251,12 @@ class VoiceCommandAliases {
     _alias(
       VoiceScreenContext.quiz,
       'second option',
+      VoiceIntentType.optionB,
+      value: 'b',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
+      'option two',
       VoiceIntentType.optionB,
       value: 'b',
     ),
@@ -296,6 +312,12 @@ class VoiceCommandAliases {
     ),
     _alias(
       VoiceScreenContext.quiz,
+      'option three',
+      VoiceIntentType.optionC,
+      value: 'c',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
       'c',
       VoiceIntentType.optionC,
       value: 'c',
@@ -346,6 +368,12 @@ class VoiceCommandAliases {
     ),
     _alias(
       VoiceScreenContext.quiz,
+      'option four',
+      VoiceIntentType.optionD,
+      value: 'd',
+    ),
+    _alias(
+      VoiceScreenContext.quiz,
       'd',
       VoiceIntentType.optionD,
       value: 'd',
@@ -366,12 +394,25 @@ class VoiceCommandAliases {
     ),
     _alias(VoiceScreenContext.quiz, 'next question', VoiceIntentType.next),
     _alias(VoiceScreenContext.quiz, 'next', VoiceIntentType.next),
+    _alias(VoiceScreenContext.quiz, 'go next', VoiceIntentType.next),
+    _alias(VoiceScreenContext.quiz, 'go next question', VoiceIntentType.next),
     _alias(
       VoiceScreenContext.quiz,
       'previous question',
       VoiceIntentType.previous,
     ),
     _alias(VoiceScreenContext.quiz, 'previous', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'prev', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'last question', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'go back', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'move back', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'back question', VoiceIntentType.previous),
+    _alias(VoiceScreenContext.quiz, 'go previous', VoiceIntentType.previous),
+    _alias(
+      VoiceScreenContext.quiz,
+      'go previous question',
+      VoiceIntentType.previous,
+    ),
     _alias(VoiceScreenContext.quiz, 'back', VoiceIntentType.previous),
     _alias(VoiceScreenContext.quiz, 'skip question', VoiceIntentType.skip),
     _alias(VoiceScreenContext.quiz, 'skip', VoiceIntentType.skip),
@@ -380,7 +421,11 @@ class VoiceCommandAliases {
       'read question',
       VoiceIntentType.readQuestion,
     ),
+    _alias(VoiceScreenContext.quiz, 'read', VoiceIntentType.readQuestion),
     _alias(VoiceScreenContext.quiz, 'repeat question', VoiceIntentType.repeat),
+    _alias(VoiceScreenContext.quiz, 'repeat', VoiceIntentType.repeat),
+    _alias(VoiceScreenContext.quiz, 'read again', VoiceIntentType.repeat),
+    _alias(VoiceScreenContext.quiz, 'repeat again', VoiceIntentType.repeat),
     _alias(VoiceScreenContext.quiz, 'explain', VoiceIntentType.explain),
     _alias(VoiceScreenContext.quiz, 'explain answer', VoiceIntentType.explain),
     _alias(VoiceScreenContext.quiz, 'explanation', VoiceIntentType.explain),
@@ -395,11 +440,13 @@ class VoiceCommandAliases {
       VoiceIntentType.explain,
     ),
     _alias(VoiceScreenContext.quiz, 'flag question', VoiceIntentType.flag),
+    _alias(VoiceScreenContext.quiz, 'flag', VoiceIntentType.flag),
     _alias(
       VoiceScreenContext.quiz,
       'bookmark question',
       VoiceIntentType.bookmark,
     ),
+    _alias(VoiceScreenContext.quiz, 'bookmark', VoiceIntentType.bookmark),
     _alias(VoiceScreenContext.quiz, 'open review', VoiceIntentType.review),
     _alias(VoiceScreenContext.quiz, 'review', VoiceIntentType.review),
     _alias(VoiceScreenContext.quiz, 'go to review', VoiceIntentType.review),

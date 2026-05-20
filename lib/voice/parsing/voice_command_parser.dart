@@ -25,6 +25,14 @@ class VoiceLearnedCorrection {
 class VoiceCommandParser {
   static const double _learnedCorrectionConfidence = 0.95;
   static const double _patternConfidence = 1.0;
+  static const double _suggestionConfidence = 0.72;
+  static const Set<String> _selectCCompactSuggestionVariants = {
+    'galaxy',
+    'galaxi',
+    'sylnetse',
+    'sylentse',
+    'silnetse',
+  };
 
   const VoiceCommandParser._();
 
@@ -32,10 +40,14 @@ class VoiceCommandParser {
     required String rawText,
     required VoiceScreenContext context,
     required VoiceCommandSensitivity sensitivity,
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
     List<VoiceLearnedCorrection> learnedCorrections =
         const <VoiceLearnedCorrection>[],
   }) {
-    final normalizedText = VoiceTextNormalizer.normalize(rawText);
+    final normalizedText = VoiceTextNormalizer.normalize(
+      rawText,
+      accentProfile: accentProfile,
+    );
     if (normalizedText.isEmpty) {
       return const VoiceCommandResult(
         decision: VoiceCommandDecision.notUnderstood,
@@ -47,6 +59,7 @@ class VoiceCommandParser {
       rawText: rawText,
       normalizedText: normalizedText,
       context: context,
+      accentProfile: accentProfile,
     );
     if (directOptionIntent != null) {
       _logIgnoredLearnedCorrectionsForDirectOption(
@@ -54,6 +67,7 @@ class VoiceCommandParser {
         context: context,
         learnedCorrections: learnedCorrections,
         directOptionIntent: directOptionIntent,
+        accentProfile: accentProfile,
       );
       return _decide(
         directOptionIntent,
@@ -63,26 +77,11 @@ class VoiceCommandParser {
       );
     }
 
-    final learnedIntent = _matchLearnedCorrection(
-      rawText: rawText,
-      normalizedText: normalizedText,
-      context: context,
-      learnedCorrections: learnedCorrections,
-    );
-    if (learnedIntent != null) {
-      return _decide(
-        learnedIntent,
-        context: context,
-        sensitivity: sensitivity,
-        isFuzzyMatch: false,
-        isLearnedCorrection: true,
-      );
-    }
-
     final exactAliasIntent = _matchExactAlias(
       rawText: rawText,
       normalizedText: normalizedText,
       context: context,
+      accentProfile: accentProfile,
     );
     if (exactAliasIntent != null) {
       return _decide(
@@ -107,12 +106,37 @@ class VoiceCommandParser {
       );
     }
 
-    final fuzzyResult = FuzzyMatcher.matchAliases(normalizedText, context);
-    final fuzzyIntent = fuzzyResult?.intent?.copyWith(
-      confidence: fuzzyResult.score,
+    final learnedIntent = _matchLearnedCorrection(
       rawText: rawText,
       normalizedText: normalizedText,
-      source: 'fuzzy_alias',
+      context: context,
+      learnedCorrections: learnedCorrections,
+      accentProfile: accentProfile,
+    );
+    if (learnedIntent != null) {
+      return _decide(
+        learnedIntent,
+        context: context,
+        sensitivity: sensitivity,
+        isFuzzyMatch: false,
+        isLearnedCorrection: true,
+      );
+    }
+
+    final fuzzyResult = FuzzyMatcher.matchAliases(
+      normalizedText,
+      context,
+      accentProfile: accentProfile,
+    );
+    final fuzzyIntent = fuzzyResult?.intent?.copyWith(
+      confidence: _requiresSuggestionBeforeLearning(rawText)
+          ? fuzzyResult.score.clamp(0.0, _suggestionConfidence).toDouble()
+          : fuzzyResult.score,
+      rawText: rawText,
+      normalizedText: normalizedText,
+      source: _requiresSuggestionBeforeLearning(rawText)
+          ? 'suggestion'
+          : 'fuzzy_alias',
     );
     if (fuzzyIntent == null) {
       return const VoiceCommandResult(
@@ -127,22 +151,43 @@ class VoiceCommandParser {
       sensitivity: sensitivity,
       isFuzzyMatch: true,
       isAmbiguousFuzzyMatch: fuzzyResult?.isAmbiguous ?? false,
+      forceSuggestion: _requiresSuggestionBeforeLearning(rawText),
     );
   }
 
   static VoiceIntentType? directOptionTypeForText(String text) {
-    final normalizedText = VoiceTextNormalizer.normalize(text);
-    if (normalizedText.isEmpty) return null;
-    return directOptionTypeForNormalized(normalizedText);
+    return directOptionTypeForTextWithProfile(text);
   }
 
-  static VoiceIntentType? directOptionTypeForNormalized(String normalizedText) {
+  static VoiceIntentType? directOptionTypeForTextWithProfile(
+    String text, {
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
+    final normalizedText = VoiceTextNormalizer.normalize(
+      text,
+      accentProfile: accentProfile,
+    );
+    if (normalizedText.isEmpty) return null;
+    return directOptionTypeForNormalized(
+      normalizedText,
+      accentProfile: accentProfile,
+    );
+  }
+
+  static VoiceIntentType? directOptionTypeForNormalized(
+    String normalizedText, {
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
     for (final alias in VoiceCommandAliases.forContext(
       VoiceScreenContext.quiz,
       includeGlobal: false,
     )) {
       if (!_isOptionIntentType(alias.intent.type)) continue;
-      if (VoiceTextNormalizer.normalize(alias.phrase) != normalizedText) {
+      if (VoiceTextNormalizer.normalize(
+            alias.phrase,
+            accentProfile: accentProfile,
+          ) !=
+          normalizedText) {
         continue;
       }
       return alias.intent.type;
@@ -154,14 +199,113 @@ class VoiceCommandParser {
     required String phrase,
     required VoiceIntentType intentType,
   }) {
-    final directOptionType = directOptionTypeForText(phrase);
-    return directOptionType != null && directOptionType != intentType;
+    final optionType =
+        directOptionTypeForText(phrase) ?? suggestedOptionTypeForText(phrase);
+    return optionType != null && optionType != intentType;
+  }
+
+  static VoiceIntentType? suggestedOptionTypeForText(
+    String text, {
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
+    final directType = directOptionTypeForTextWithProfile(
+      text,
+      accentProfile: accentProfile,
+    );
+    if (directType != null) return directType;
+
+    final compactText = _compactRawText(text);
+    if (_selectCCompactSuggestionVariants.contains(compactText)) {
+      return VoiceIntentType.optionC;
+    }
+    return null;
+  }
+
+  static Set<int> quizAnswerIndexesForText({
+    required String rawText,
+    required int optionCount,
+    required bool isTrueFalse,
+    required bool isMultiSelect,
+    List<String> optionTexts = const <String>[],
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
+    if (optionCount <= 0) return const <int>{};
+    final directType = directOptionTypeForTextWithProfile(
+      rawText,
+      accentProfile: accentProfile,
+    );
+    final directIndex = _optionIndexForType(directType);
+    if (directIndex != null && directIndex < optionCount) {
+      return {directIndex};
+    }
+
+    final normalized =
+        VoiceTextNormalizer.normalize(rawText, accentProfile: accentProfile)
+            .replaceAll(
+              RegExp(
+                r'\b(answer|answers|option|options|select|choose|letter|and)\b',
+              ),
+              ' ',
+            )
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+    if (normalized.isEmpty) return const <int>{};
+
+    if (isTrueFalse) {
+      final wantsTrue = RegExp(r'\btrue\b').hasMatch(normalized);
+      final wantsFalse = RegExp(r'\bfalse\b').hasMatch(normalized);
+      if (wantsTrue == wantsFalse) return const <int>{};
+      final target = wantsTrue ? 'true' : 'false';
+      final optionIndex = optionTexts.indexWhere(
+        (option) =>
+            VoiceTextNormalizer.normalize(
+              option,
+              accentProfile: accentProfile,
+            ) ==
+            target,
+      );
+      final index = optionIndex >= 0 ? optionIndex : (wantsTrue ? 0 : 1);
+      return index < optionCount ? {index} : const <int>{};
+    }
+
+    final indexes = <int>{};
+    final tokens = normalized.split(RegExp(r'\s+'));
+    const wordIndexes = <String, int>{
+      'a': 0,
+      'ay': 0,
+      'one': 0,
+      'first': 0,
+      'b': 1,
+      'bee': 1,
+      'be': 1,
+      'two': 1,
+      'second': 1,
+      'c': 2,
+      'si': 2,
+      'see': 2,
+      'sea': 2,
+      'three': 2,
+      'third': 2,
+      'd': 3,
+      'dee': 3,
+      'four': 3,
+      'fourth': 3,
+    };
+    for (final token in tokens) {
+      final index = wordIndexes[token];
+      if (index != null && index < optionCount) {
+        indexes.add(index);
+      }
+    }
+    if (!isMultiSelect && indexes.length > 1) return const <int>{};
+    return indexes;
   }
 
   static VoiceIntent? _matchDirectOption({
     required String rawText,
     required String normalizedText,
     required VoiceScreenContext context,
+    required VoiceAccentProfile accentProfile,
   }) {
     if (context != VoiceScreenContext.quiz) return null;
 
@@ -170,7 +314,10 @@ class VoiceCommandParser {
       includeGlobal: false,
     )) {
       if (!_isOptionIntentType(alias.intent.type)) continue;
-      final normalizedAlias = VoiceTextNormalizer.normalize(alias.phrase);
+      final normalizedAlias = VoiceTextNormalizer.normalize(
+        alias.phrase,
+        accentProfile: accentProfile,
+      );
       if (normalizedAlias != normalizedText) continue;
 
       return alias.intent.copyWith(
@@ -188,6 +335,7 @@ class VoiceCommandParser {
     required VoiceScreenContext context,
     required List<VoiceLearnedCorrection> learnedCorrections,
     required VoiceIntent directOptionIntent,
+    required VoiceAccentProfile accentProfile,
   }) {
     for (final correction in learnedCorrections) {
       if (correction.context != context &&
@@ -197,6 +345,7 @@ class VoiceCommandParser {
 
       final normalizedCorrection = VoiceTextNormalizer.normalize(
         correction.phrase,
+        accentProfile: accentProfile,
       );
       if (normalizedCorrection != normalizedText) continue;
 
@@ -211,6 +360,7 @@ class VoiceCommandParser {
     required String normalizedText,
     required VoiceScreenContext context,
     required List<VoiceLearnedCorrection> learnedCorrections,
+    required VoiceAccentProfile accentProfile,
   }) {
     for (final correction in learnedCorrections) {
       if (correction.context != context &&
@@ -220,6 +370,7 @@ class VoiceCommandParser {
 
       final normalizedCorrection = VoiceTextNormalizer.normalize(
         correction.phrase,
+        accentProfile: accentProfile,
       );
       if (normalizedCorrection != normalizedText) continue;
       if (VoiceSafetyPolicy.isRiskyIntent(correction.intent)) {
@@ -255,9 +406,17 @@ class VoiceCommandParser {
     required String rawText,
     required String normalizedText,
     required VoiceScreenContext context,
+    required VoiceAccentProfile accentProfile,
   }) {
     for (final alias in VoiceCommandAliases.forContext(context)) {
-      final normalizedAlias = VoiceTextNormalizer.normalize(alias.phrase);
+      if (_requiresSuggestionBeforeLearning(rawText) &&
+          _isOptionIntentType(alias.intent.type)) {
+        continue;
+      }
+      final normalizedAlias = VoiceTextNormalizer.normalize(
+        alias.phrase,
+        accentProfile: accentProfile,
+      );
       if (normalizedAlias != normalizedText) continue;
 
       return alias.intent.copyWith(
@@ -303,6 +462,7 @@ class VoiceCommandParser {
     required bool isFuzzyMatch,
     bool isAmbiguousFuzzyMatch = false,
     bool isLearnedCorrection = false,
+    bool forceSuggestion = false,
   }) {
     final thresholds = _thresholdsFor(sensitivity);
     final isRisky = VoiceSafetyPolicy.isRiskyIntent(intent);
@@ -341,10 +501,25 @@ class VoiceCommandParser {
 
     if (isAmbiguousFuzzyMatch &&
         effectiveIntent.confidence >= thresholds.confirm) {
+      debugPrint(
+        '[Voice][${context.name}] fuzzy rejected raw="${effectiveIntent.rawText}" normalized="${effectiveIntent.normalizedText}" source=${effectiveIntent.source} confidence=${effectiveIntent.confidence.toStringAsFixed(2)} reason=ambiguous',
+      );
+      return VoiceCommandResult(
+        decision: VoiceCommandDecision.notUnderstood,
+        intent: effectiveIntent,
+        message:
+            'That sounded close to more than one command. Please repeat it.',
+      );
+    }
+
+    if (forceSuggestion && effectiveIntent.confidence >= thresholds.confirm) {
+      debugPrint(
+        '[Voice][${context.name}] suggestion raw="${effectiveIntent.rawText}" normalized="${effectiveIntent.normalizedText}" source=${effectiveIntent.source} confidence=${effectiveIntent.confidence.toStringAsFixed(2)} suggestion=${effectiveIntent.type.name}',
+      );
       return VoiceCommandResult(
         decision: VoiceCommandDecision.askConfirmation,
         intent: effectiveIntent,
-        message: 'Did you mean ${effectiveIntent.normalizedText}?',
+        message: 'Did you mean ${_commandLabelForIntent(effectiveIntent)}?',
       );
     }
 
@@ -359,10 +534,24 @@ class VoiceCommandParser {
       return VoiceCommandResult(
         decision: VoiceCommandDecision.askConfirmation,
         intent: effectiveIntent,
-        message: 'Did you mean ${effectiveIntent.normalizedText}?',
+        message: 'Did you mean ${_commandLabelForIntent(effectiveIntent)}?',
       );
     }
 
+    if (isFuzzyMatch && effectiveIntent.confidence >= thresholds.suggest) {
+      debugPrint(
+        '[Voice][${context.name}] low confidence suggestion raw="${effectiveIntent.rawText}" normalized="${effectiveIntent.normalizedText}" source=${effectiveIntent.source} confidence=${effectiveIntent.confidence.toStringAsFixed(2)} suggestion=${effectiveIntent.type.name} reason=belowExecuteThreshold',
+      );
+      return VoiceCommandResult(
+        decision: VoiceCommandDecision.askConfirmation,
+        intent: effectiveIntent.copyWith(source: 'suggestion'),
+        message: 'Did you mean ${_commandLabelForIntent(effectiveIntent)}?',
+      );
+    }
+
+    debugPrint(
+      '[Voice][${context.name}] low confidence rejected raw="${effectiveIntent.rawText}" normalized="${effectiveIntent.normalizedText}" bestSuggestion=${effectiveIntent.type.name} suggestionConfidence=${effectiveIntent.confidence.toStringAsFixed(2)} reason=belowSuggestionThreshold',
+    );
     return VoiceCommandResult(
       decision: VoiceCommandDecision.fallbackToCloud,
       intent: effectiveIntent,
@@ -404,16 +593,19 @@ class VoiceCommandParser {
         execute: 0.90,
         confirm: 0.75,
         risky: 0.94,
+        suggest: 0.60,
       ),
       VoiceCommandSensitivity.normal => const _VoiceParserThresholds(
         execute: 0.85,
         confirm: 0.65,
         risky: 0.90,
+        suggest: 0.52,
       ),
       VoiceCommandSensitivity.flexible => const _VoiceParserThresholds(
         execute: 0.78,
         confirm: 0.58,
         risky: 0.86,
+        suggest: 0.48,
       ),
     };
   }
@@ -424,16 +616,66 @@ class VoiceCommandParser {
         type == VoiceIntentType.optionC ||
         type == VoiceIntentType.optionD;
   }
+
+  static bool _requiresSuggestionBeforeLearning(String rawText) {
+    final normalizedRaw = rawText
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .trim();
+    final compactRaw = _compactRawText(rawText);
+    return RegExp(r'(^|\s)syllet(?=\s|$)').hasMatch(normalizedRaw) ||
+        _selectCCompactSuggestionVariants.contains(compactRaw);
+  }
+
+  static String _compactRawText(String rawText) {
+    return rawText
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), '');
+  }
+
+  static String _commandLabelForIntent(VoiceIntent intent) {
+    return switch (intent.type) {
+      VoiceIntentType.optionA => 'Select A',
+      VoiceIntentType.optionB => 'Select B',
+      VoiceIntentType.optionC => 'Select C',
+      VoiceIntentType.optionD => 'Select D',
+      VoiceIntentType.trueAnswer => 'True',
+      VoiceIntentType.falseAnswer => 'False',
+      VoiceIntentType.next || VoiceIntentType.skip => 'Next question',
+      VoiceIntentType.previous => 'Previous question',
+      VoiceIntentType.repeat || VoiceIntentType.readQuestion => 'Read question',
+      VoiceIntentType.flag || VoiceIntentType.bookmark => 'Flag question',
+      VoiceIntentType.explain => 'Explain',
+      VoiceIntentType.review => 'Open review',
+      VoiceIntentType.questionNumber =>
+        'Question ${intent.number ?? ''}'.trim(),
+      VoiceIntentType.help => 'Help',
+      _ => intent.normalizedText,
+    };
+  }
+
+  static int? _optionIndexForType(VoiceIntentType? type) {
+    return switch (type) {
+      VoiceIntentType.optionA => 0,
+      VoiceIntentType.optionB => 1,
+      VoiceIntentType.optionC => 2,
+      VoiceIntentType.optionD => 3,
+      _ => null,
+    };
+  }
 }
 
 class _VoiceParserThresholds {
   final double execute;
   final double confirm;
   final double risky;
+  final double suggest;
 
   const _VoiceParserThresholds({
     required this.execute,
     required this.confirm,
     required this.risky,
+    required this.suggest,
   });
 }

@@ -49,23 +49,21 @@ class VoiceCommandProcessor {
     CloudSpeechTranscriber? cloudSpeechService,
     File? fallbackAudioFile,
     String locale = 'en-US',
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
     List<String> availableCommands = const <String>[],
   }) async {
     final pendingConfirmation = _pendingConfirmation;
     if (pendingConfirmation != null) {
       if (_isYesText(heardText)) {
         _pendingConfirmation = null;
+        var correctionSaved = false;
         if (!pendingConfirmation.isRisky &&
             QuizVoiceIntentParser.canLearnCorrection(
               pendingConfirmation.parseResult.intent,
             )) {
-          await QuizVoiceIntentParser.rememberCorrection(
-            pendingConfirmation.parseResult.heardText,
-            pendingConfirmation.parseResult.intent!,
-          );
           final learnedIntent = pendingConfirmation.coreResult.intent;
           if (learnedIntent != null) {
-            await _learningService.saveCorrection(
+            correctionSaved = await _learningService.saveCorrection(
               rawHeardText: pendingConfirmation.parseResult.heardText,
               intent: learnedIntent,
               screenContext: _coreContextFor(pendingConfirmation.screen),
@@ -73,6 +71,9 @@ class VoiceCommandProcessor {
             );
           }
         }
+        debugPrint(
+          '[Voice][${pendingConfirmation.screen.name}] suggestion accepted raw="${pendingConfirmation.parseResult.heardText}" normalized="${pendingConfirmation.parseResult.normalizedText}" parserSource=${pendingConfirmation.coreResult.intent?.source} confidence=${pendingConfirmation.parseResult.confidence.toStringAsFixed(2)} suggestion=${pendingConfirmation.coreResult.intent?.type.name} correctionSaved=$correctionSaved',
+        );
         return _decisionFromParseResult(
           pendingConfirmation.parseResult,
           feedback: null,
@@ -84,18 +85,24 @@ class VoiceCommandProcessor {
             parseResult: pendingConfirmation.parseResult,
             locale: locale,
             sensitivity: sensitivity,
+            accentProfile: accentProfile,
             source: 'correction',
             fallbackUsed: pendingConfirmation.fallbackUsed,
             confirmationShown: true,
             confirmationAccepted: true,
             confirmationTranscript: heardText,
             decisionName: core_result.VoiceCommandDecision.execute.name,
+            suggestion: pendingConfirmation.coreResult.intent?.type.name,
+            correctionSaved: correctionSaved,
           ),
         );
       }
 
       if (_isNoText(heardText)) {
         _pendingConfirmation = null;
+        debugPrint(
+          '[Voice][${pendingConfirmation.screen.name}] suggestion rejected raw="${pendingConfirmation.parseResult.heardText}" normalized="${pendingConfirmation.parseResult.normalizedText}" parserSource=${pendingConfirmation.coreResult.intent?.source} confidence=${pendingConfirmation.parseResult.confidence.toStringAsFixed(2)} suggestion=${pendingConfirmation.coreResult.intent?.type.name}',
+        );
         return _decisionFromParseResult(
           pendingConfirmation.parseResult,
           feedback: 'Okay. Please repeat the command.',
@@ -107,12 +114,14 @@ class VoiceCommandProcessor {
             parseResult: pendingConfirmation.parseResult,
             locale: locale,
             sensitivity: sensitivity,
+            accentProfile: accentProfile,
             source: pendingConfirmation.source,
             fallbackUsed: pendingConfirmation.fallbackUsed,
             confirmationShown: true,
             confirmationRejected: true,
             confirmationTranscript: heardText,
             decisionName: core_result.VoiceCommandDecision.ignored.name,
+            suggestion: pendingConfirmation.coreResult.intent?.type.name,
           ),
         );
       }
@@ -124,6 +133,7 @@ class VoiceCommandProcessor {
       screen: screen,
       heardText: heardText,
       sensitivity: sensitivity,
+      accentProfile: accentProfile,
     );
     var fallbackAttempted = false;
     var fallbackUsed = false;
@@ -142,6 +152,7 @@ class VoiceCommandProcessor {
         cloudSpeechService: cloudSpeechService!,
         fallbackAudioFile: fallbackAudioFile!,
         locale: locale,
+        accentProfile: accentProfile,
         availableCommands: availableCommands,
       );
       if (cloudOutcome != null) {
@@ -159,7 +170,11 @@ class VoiceCommandProcessor {
     }
 
     var result = outcome.parseResult;
-    final feedback = _feedbackForCoreDecision(outcome.coreResult, result);
+    final feedback = _feedbackForCoreDecision(
+      outcome.coreResult,
+      result,
+      screen,
+    );
     final source = outcome.coreResult.intent?.source == 'learned_correction'
         ? 'correction'
         : fallbackUsed
@@ -173,6 +188,7 @@ class VoiceCommandProcessor {
       parseResult: result,
       locale: locale,
       sensitivity: sensitivity,
+      accentProfile: accentProfile,
       source: source,
       fallbackAttempted: fallbackAttempted,
       fallbackUsed: fallbackUsed,
@@ -184,10 +200,26 @@ class VoiceCommandProcessor {
           outcome.coreResult.decision !=
               core_result.VoiceCommandDecision.execute,
       errorType: errorType ?? _errorTypeFor(outcome.coreResult.decision),
+      suggestion:
+          outcome.coreResult.decision ==
+              core_result.VoiceCommandDecision.askConfirmation
+          ? outcome.coreResult.intent?.type.name
+          : null,
     );
     debugPrint(
-      '[Voice][${screen.name}] normalized="${result.normalizedText}" parserDecision=${outcome.coreResult.decision.name} source=$source intent=${result.intent?.name} confidence=${result.confidence.toStringAsFixed(2)} fallbackUsed=$fallbackUsed',
+      '[Voice][${screen.name}] normalized="${result.normalizedText}" parserDecision=${outcome.coreResult.decision.name} source=$source intent=${result.intent?.name} confidence=${result.confidence.toStringAsFixed(2)} fallbackUsed=$fallbackUsed accentProfile=${accentProfile.name}',
     );
+    if (result.intent == null) {
+      debugPrint(
+        '[Voice][${screen.name}] unknown command raw="$heardText" normalized="${result.normalizedText}" accentProfile=${accentProfile.name}',
+      );
+    }
+    if (outcome.coreResult.decision ==
+        core_result.VoiceCommandDecision.askConfirmation) {
+      debugPrint(
+        '[Voice][${screen.name}] suggestion raw="$heardText" normalized="${result.normalizedText}" parserSource=${outcome.coreResult.intent?.source} confidence=${result.confidence.toStringAsFixed(2)} suggestion=${outcome.coreResult.intent?.type.name}',
+      );
+    }
 
     if (feedback != null &&
         outcome.coreResult.decision ==
@@ -248,7 +280,8 @@ class VoiceCommandProcessor {
 
   bool _isYesText(String text) {
     final normalizedText = VoiceTextNormalizer.normalize(text);
-    return QuizVoiceIntentParser.isConfirmationText(normalizedText);
+    return QuizVoiceIntentParser.isConfirmationText(normalizedText) ||
+        const {'that s right', 'thats right'}.contains(normalizedText);
   }
 
   bool _isNoText(String text) {
@@ -315,6 +348,7 @@ class VoiceCommandProcessor {
     required CloudSpeechTranscriber cloudSpeechService,
     required File fallbackAudioFile,
     required String locale,
+    required VoiceAccentProfile accentProfile,
     required List<String> availableCommands,
   }) async {
     try {
@@ -338,6 +372,7 @@ class VoiceCommandProcessor {
         screen: screen,
         heardText: cloudResult.transcript,
         sensitivity: sensitivity,
+        accentProfile: accentProfile,
       );
     } finally {
       try {
@@ -354,8 +389,12 @@ class VoiceCommandProcessor {
     required QuizVoiceScreen screen,
     required String heardText,
     required CommandSensitivity sensitivity,
+    required VoiceAccentProfile accentProfile,
   }) async {
-    final normalizedText = VoiceTextNormalizer.normalize(heardText);
+    final normalizedText = VoiceTextNormalizer.normalize(
+      heardText,
+      accentProfile: accentProfile,
+    );
     final context = _coreContextFor(screen);
     final learnedCorrections = await _learningService.getParserCorrections(
       context,
@@ -364,10 +403,11 @@ class VoiceCommandProcessor {
       rawText: heardText,
       context: context,
       sensitivity: _coreSensitivityFor(sensitivity),
+      accentProfile: accentProfile,
       learnedCorrections: learnedCorrections,
     );
     debugPrint(
-      '[Voice][${screen.name}] parser normalized="$normalizedText" decision=${decision.decision.name} intent=${decision.intent?.type.name} source=${decision.intent?.source} corrections=${learnedCorrections.length}',
+      '[Voice][${screen.name}] parser normalized="$normalizedText" decision=${decision.decision.name} intent=${decision.intent?.type.name} source=${decision.intent?.source} corrections=${learnedCorrections.length} accentProfile=${accentProfile.name}',
     );
     final coreIntent = decision.intent;
     final legacyIntent = coreIntent == null
@@ -404,6 +444,7 @@ class VoiceCommandProcessor {
   String? _feedbackForCoreDecision(
     core_result.VoiceCommandResult coreDecision,
     VoiceParseResult result,
+    QuizVoiceScreen screen,
   ) {
     return switch (coreDecision.decision) {
       core_result.VoiceCommandDecision.execute => null,
@@ -414,9 +455,22 @@ class VoiceCommandProcessor {
                 : 'Did you mean ${QuizVoiceIntentParser.commandLabelFor(result.intent!)}?'),
       core_result.VoiceCommandDecision.fallbackToCloud ||
       core_result.VoiceCommandDecision.notUnderstood =>
-        'I did not understand. Say help to hear commands.',
+        _unknownCommandFeedbackForScreen(screen, coreDecision.message),
       core_result.VoiceCommandDecision.ignored => null,
     };
+  }
+
+  String _unknownCommandFeedbackForScreen(
+    QuizVoiceScreen screen,
+    String? message,
+  ) {
+    if (screen == QuizVoiceScreen.mcq &&
+        (message == null ||
+            message == 'Local confidence was too low.' ||
+            message == 'No local command matched.')) {
+      return "I didn't understand. Try saying Option A, Option B, Option C, Next question, or Go back.";
+    }
+    return message ?? 'I did not understand. Say help to hear commands.';
   }
 
   String _cloudRiskyConfirmationMessage(
@@ -442,6 +496,7 @@ class VoiceCommandProcessor {
     required VoiceParseResult parseResult,
     required String locale,
     required CommandSensitivity sensitivity,
+    required VoiceAccentProfile accentProfile,
     required String source,
     bool fallbackAttempted = false,
     bool fallbackUsed = false,
@@ -449,13 +504,16 @@ class VoiceCommandProcessor {
     bool confirmationAccepted = false,
     bool confirmationRejected = false,
     bool riskyCommandBlocked = false,
+    bool? correctionSaved,
     String? confirmationTranscript,
     String? decisionName,
     String? errorType,
+    String? suggestion,
   }) {
     final coreIntent = coreResult.intent;
     return <String, dynamic>{
       'screenContext': _coreContextFor(screen).name,
+      'platform': Platform.operatingSystem,
       'rawTranscript': rawText,
       'normalizedTranscript': normalizedText,
       'detectedIntent': coreIntent?.type.name ?? parseResult.intent?.name,
@@ -469,7 +527,10 @@ class VoiceCommandProcessor {
       'confirmationAccepted': confirmationAccepted,
       'confirmationRejected': confirmationRejected,
       'riskyCommandBlocked': riskyCommandBlocked,
+      'suggestion': suggestion,
+      'correctionSaved': correctionSaved,
       'selectedLocale': locale,
+      'accentProfile': accentProfile.name,
       'sensitivity': sensitivity.name,
       'confirmationTranscript': confirmationTranscript,
       'errorType': errorType,

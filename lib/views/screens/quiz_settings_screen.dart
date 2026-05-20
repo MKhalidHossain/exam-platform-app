@@ -45,6 +45,8 @@ class QuizSettingsScreen extends StatefulWidget {
 class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     with QuizVoiceRouteAware<QuizSettingsScreen> {
   static final Map<String, int> _savedQuestionCountsByExam = <String, int>{};
+  static const Duration _listenStartStatusTimeout = Duration(seconds: 4);
+  static const int _unknownCommandHelpThreshold = 2;
 
   final ApiService _apiService = ApiService();
   final SpeechToText _speech = SpeechToText();
@@ -61,11 +63,14 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   bool _isPreparingToListen = false;
   bool _isSpeaking = false;
   Timer? _listeningRestartTimer;
+  Timer? _listenStartWatchdogTimer;
   String? _speechLocaleId;
   String _heardText = '';
   final VoiceCommandProcessor _voiceCommandProcessor = VoiceCommandProcessor();
   int _ttsSessionId = 0;
   int _listenSessionId = 0;
+  int? _activeListenSessionId;
+  int _consecutiveUnknownCommands = 0;
   bool _isTtsAwaitingCompletion = false;
   final String _voiceScreenToken =
       'quizSettings-${DateTime.now().microsecondsSinceEpoch}';
@@ -129,6 +134,8 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   @override
   void dispose() {
     _listeningRestartTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
+    _invalidateListenSession('dispose');
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     _voiceController.unbindScreen(
@@ -148,9 +155,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
   Future<void> _hardStopInactiveVoice() async {
     _listeningRestartTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
-    _listenSessionId++;
+    _invalidateListenSession('inactive_screen');
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -244,9 +252,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
     await _stopTtsPlayback();
     await _speech.cancel();
-    _listenSessionId++;
+    _invalidateListenSession('force_recovery');
     if (!mounted ||
         !_isCurrentVoiceScreen ||
         !_voiceModeEnabled ||
@@ -299,8 +308,72 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         ? QuizVoicePhase.speaking
         : _isListening
         ? QuizVoicePhase.listening
+        : _isPreparingToListen
+        ? QuizVoicePhase.processing
         : QuizVoicePhase.idle;
     _voiceController.setPhase(phase, screen: QuizVoiceScreen.quizSettings);
+  }
+
+  int _beginListenSession(String reason) {
+    final sessionId = ++_listenSessionId;
+    _activeListenSessionId = sessionId;
+    debugPrint(
+      '[Voice][settings] listen session=$sessionId start reason=$reason',
+    );
+    return sessionId;
+  }
+
+  void _invalidateListenSession(String reason) {
+    _listenSessionId++;
+    _activeListenSessionId = null;
+    _cancelListenStartWatchdog();
+    debugPrint(
+      '[Voice][settings] listen session invalidated reason=$reason next=$_listenSessionId',
+    );
+  }
+
+  bool _isCurrentListenSession(int sessionId) {
+    return mounted &&
+        _isCurrentVoiceScreen &&
+        _activeListenSessionId == sessionId &&
+        _listenSessionId == sessionId;
+  }
+
+  bool get _hasActiveListenSession =>
+      _activeListenSessionId != null &&
+      _activeListenSessionId == _listenSessionId;
+
+  void _cancelListenStartWatchdog() {
+    _listenStartWatchdogTimer?.cancel();
+    _listenStartWatchdogTimer = null;
+  }
+
+  void _scheduleListenStartWatchdog(int sessionId) {
+    _cancelListenStartWatchdog();
+    _listenStartWatchdogTimer = Timer(_listenStartStatusTimeout, () {
+      if (!_isCurrentListenSession(sessionId) ||
+          !_isPreparingToListen ||
+          _isListening) {
+        return;
+      }
+      debugPrint(
+        '[Voice][settings] listen start timeout session=$sessionId; restarting',
+      );
+      _voiceController.logEvent(
+        'speech listen start timeout, retry scheduled',
+        screen: QuizVoiceScreen.quizSettings,
+      );
+      _invalidateListenSession('listen_start_timeout');
+      unawaited(_speech.cancel());
+      if (mounted && _isCurrentVoiceScreen) {
+        setState(() {
+          _isListening = false;
+          _isPreparingToListen = false;
+        });
+        _syncVoiceSessionState();
+      }
+      _scheduleListeningRestart();
+    });
   }
 
   Future<void> _primeSpeechAvailability({
@@ -358,10 +431,17 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         onError: (error) {
           debugPrint('[Voice][settings] speech error: $error');
           if (!mounted || !_isCurrentVoiceScreen) return;
+          if (!_hasActiveListenSession) {
+            debugPrint(
+              '[Voice][settings] speech error ignored: no active session',
+            );
+            return;
+          }
           _voiceController.logEvent(
             'speech error: $error',
             screen: QuizVoiceScreen.quizSettings,
           );
+          _invalidateListenSession('speech_error');
           setState(() {
             _isListening = false;
             _isPreparingToListen = false;
@@ -372,6 +452,12 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         onStatus: (status) {
           debugPrint('[Voice][settings] speech status=$status');
           if (!mounted || !_isCurrentVoiceScreen) return;
+          if (!_hasActiveListenSession) {
+            debugPrint(
+              '[Voice][settings] speech status ignored: no active session',
+            );
+            return;
+          }
           _voiceController.logEvent(
             'speech status: $status',
             screen: QuizVoiceScreen.quizSettings,
@@ -381,14 +467,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
             screen: QuizVoiceScreen.quizSettings,
             screenToken: _voiceScreenToken,
           );
-          if (status == 'listening' && !_isSpeaking && _isPreparingToListen) {
-            setState(() {
-              _isListening = true;
-              _isPreparingToListen = false;
-            });
-            _syncVoiceSessionState();
-          }
-          if (status == 'done' || status == 'notListening') {
+          if (status == 'listening' && _isSpeaking) {
+            _invalidateListenSession('listening_during_tts');
+            unawaited(_speech.cancel());
             if (_isListening || _isPreparingToListen) {
               setState(() {
                 _isListening = false;
@@ -396,7 +477,31 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
               });
               _syncVoiceSessionState();
             }
-            _scheduleListeningRestart();
+            return;
+          }
+          if (status == 'listening' && !_isSpeaking && _isPreparingToListen) {
+            _cancelListenStartWatchdog();
+            setState(() {
+              _isListening = true;
+              _isPreparingToListen = false;
+            });
+            _syncVoiceSessionState();
+            _voiceController.logEvent(
+              'speech listen active from status',
+              screen: QuizVoiceScreen.quizSettings,
+            );
+          }
+          if (status == 'done' || status == 'notListening') {
+            final hadHeardText = _heardText.trim().isNotEmpty;
+            _invalidateListenSession('speech_status_$status');
+            if (_isListening || _isPreparingToListen) {
+              setState(() {
+                _isListening = false;
+                _isPreparingToListen = false;
+              });
+              _syncVoiceSessionState();
+            }
+            if (!hadHeardText) _scheduleListeningRestart();
           }
         },
         options: [SpeechToText.androidNoBluetooth],
@@ -461,8 +566,9 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
+    _invalidateListenSession('feedback_tts_start');
     await _speech.cancel();
-    _listenSessionId++;
     await _stopTtsPlayback();
     await _applyVoiceAssistantSettings();
     if (!mounted) return;
@@ -521,20 +627,14 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     _listeningRestartTimer?.cancel();
     if (!_voiceModeEnabled || !_autoListenEnabled) return;
     final retryDelay = enforceMinimumVoiceListenRetryDelay(delay);
-    if (mounted &&
-        !_isListening &&
-        !_isSpeaking &&
-        !_isStarterUsageLoading &&
-        !_isPreparingToListen) {
-      setState(() => _isPreparingToListen = true);
-    }
     _listeningRestartTimer = Timer(retryDelay, () {
       if (!mounted ||
           !_isCurrentVoiceScreen ||
           !_voiceModeEnabled ||
           _isListening ||
           _isSpeaking ||
-          _isStarterUsageLoading) {
+          _isStarterUsageLoading ||
+          _isPreparingToListen) {
         return;
       }
       unawaited(_startListening());
@@ -548,23 +648,32 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     _listeningRestartTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
     if (_isListening || _isSpeaking || _isPreparingToListen) {
       debugPrint(
         '[Voice][settings] listen blocked reason=busy listening=$_isListening speaking=$_isSpeaking preparing=$_isPreparingToListen',
       );
       return;
     }
-    final listenSessionId = ++_listenSessionId;
+    final listenSessionId = _beginListenSession('start_listening');
     setState(() {
       _isPreparingToListen = true;
       _heardText = '';
     });
+    _syncVoiceSessionState();
     _voiceController.markHeardText(_heardText);
-    if (!mounted || !_isCurrentVoiceScreen) return;
+    if (!mounted || !_isCurrentVoiceScreen) {
+      _invalidateListenSession('screen_changed_before_listen');
+      return;
+    }
     if (!_speechAvailable) {
       final speechReady = await _initSpeech(requestPermission: true);
       if (!speechReady) {
-        if (mounted) setState(() => _isPreparingToListen = false);
+        _invalidateListenSession('speech_unavailable');
+        if (mounted) {
+          setState(() => _isPreparingToListen = false);
+          _syncVoiceSessionState();
+        }
         await _showSpeechUnavailableMessage();
         return;
       }
@@ -573,16 +682,19 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       'speech listen call starting',
       screen: QuizVoiceScreen.quizSettings,
     );
+    _scheduleListenStartWatchdog(listenSessionId);
     final started = await startSpeechListeningSafely(
       speech: _speech,
       controller: _voiceController,
       screen: QuizVoiceScreen.quizSettings,
-      onResult: _onSpeechResult,
+      onResult: (result) => _onSpeechResult(result, listenSessionId),
       localeId: _speechLocaleId,
+      fastSpeakerMode: _voiceController.assistantSettings.value.fastSpeakerMode,
     );
     if (listenSessionId != _listenSessionId) return;
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!started) {
+      _invalidateListenSession('listen_start_failed');
       setState(() {
         _isListening = false;
         _isPreparingToListen = false;
@@ -595,20 +707,25 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       _scheduleListeningRestart();
       return;
     }
-    setState(() {
-      _isListening = true;
-      _isPreparingToListen = false;
-    });
-    _syncVoiceSessionState();
+    debugPrint(
+      '[Voice][settings] listen start pending session=$listenSessionId waiting for status=listening',
+    );
     _voiceController.logEvent(
-      'speech listen active',
+      'speech listen pending status',
       screen: QuizVoiceScreen.quizSettings,
     );
   }
 
-  void _onSpeechResult(SpeechRecognitionResult result) {
+  void _onSpeechResult(SpeechRecognitionResult result, int listenSessionId) {
     if (!mounted || !_isCurrentVoiceScreen) return;
+    if (!_isCurrentListenSession(listenSessionId)) {
+      debugPrint(
+        '[Voice][settings] speech result ignored stale session=$listenSessionId active=$_activeListenSessionId current=$_listenSessionId',
+      );
+      return;
+    }
     if (_isSpeaking) return;
+    _cancelListenStartWatchdog();
     debugPrint(
       '[Voice][settings] recognized="${result.recognizedWords}" final=${result.finalResult} confidence=${result.confidence}',
     );
@@ -620,6 +737,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       screen: QuizVoiceScreen.quizSettings,
     );
     if (result.finalResult) {
+      _invalidateListenSession('final_command');
       setState(() {
         _isListening = false;
         _isPreparingToListen = false;
@@ -636,10 +754,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   }
 
   Future<void> _handleVoiceCommand(String rawText) async {
+    final settings = _voiceController.assistantSettings.value;
     final decision = await _voiceCommandProcessor.process(
       screen: QuizVoiceScreen.quizSettings,
       heardText: rawText,
-      sensitivity: _voiceController.assistantSettings.value.commandSensitivity,
+      sensitivity: settings.commandSensitivity,
+      locale: _speechLocaleId ?? settings.speechLocaleCode,
+      accentProfile: settings.accentProfile,
     );
     final result = decision.parseResult;
     debugPrint(
@@ -659,10 +780,18 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
       confidence: result.confidence,
       retry: decision.feedback,
     );
-    if (!decision.shouldExecute && decision.feedback != null) {
-      unawaited(_speakFeedback(decision.feedback!));
+    final String? retryFeedback =
+        !decision.shouldExecute && decision.feedback != null
+        ? result.intent == null
+              ? _feedbackForUnknownCommand(decision.feedback!)
+              : decision.feedback
+        : decision.feedback;
+    if (!decision.shouldExecute && retryFeedback != null) {
+      if (result.intent != null) _resetVoiceRetryState();
+      unawaited(_speakFeedback(retryFeedback));
       return;
     }
+    _resetVoiceRetryState();
 
     switch (decision.intent) {
       case VoiceIntent.stopVoice:
@@ -718,9 +847,27 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
     unawaited(
       _speakFeedback(
-        '${heard}Try set questions to a number, timed mode on or off, start quiz, or go back.',
+        _feedbackForUnknownCommand(
+          '${heard}Try set questions to a number, timed mode on or off, start quiz, or go back.',
+        ),
       ),
     );
+  }
+
+  void _resetVoiceRetryState() {
+    _consecutiveUnknownCommands = 0;
+  }
+
+  String _feedbackForUnknownCommand(String feedback) {
+    _consecutiveUnknownCommands++;
+    _voiceController.logEvent(
+      'unknown command retry=$_consecutiveUnknownCommands',
+      screen: QuizVoiceScreen.quizSettings,
+    );
+    if (_consecutiveUnknownCommands < _unknownCommandHelpThreshold) {
+      return feedback;
+    }
+    return '$feedback Move closer to the microphone or use a headset if it keeps missing you.';
   }
 
   void _setQuestionCount(int requested) {
@@ -770,11 +917,12 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     _cacheSelectedQuestionCount(_effectiveQuestionCount.toInt());
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
-    _listenSessionId++;
+    _invalidateListenSession('start_quiz');
     if (mounted) {
       setState(() {
         _isSpeaking = false;
         _isListening = false;
+        _isPreparingToListen = false;
       });
     }
     _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examSession);
@@ -800,12 +948,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   Future<void> _startManualPractice() async {
     if (_voiceModeEnabled) {
       await _speech.cancel();
-      _listenSessionId++;
+      _invalidateListenSession('start_manual_practice');
       await _stopTtsPlayback();
       if (!mounted) return;
       setState(() {
         _voiceModeEnabled = false;
         _isListening = false;
+        _isPreparingToListen = false;
         _isSpeaking = false;
         _heardText = '';
       });
@@ -851,7 +1000,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
     _cacheSelectedQuestionCount(_effectiveQuestionCount.toInt());
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
-    _listenSessionId++;
+    _invalidateListenSession('start_voice_practice');
     _voiceController.beginNavigation(targetScreen: QuizVoiceScreen.examLoading);
     context.push(
       '/exam-loading',
@@ -1093,11 +1242,12 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   void _goBackHome() {
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
-    _listenSessionId++;
+    _invalidateListenSession('go_back_home');
     if (mounted) {
       setState(() {
         _isSpeaking = false;
         _isListening = false;
+        _isPreparingToListen = false;
       });
     }
     _voiceController.setVoiceEnabled(
@@ -1110,12 +1260,13 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   Future<void> _speakAndDisableVoiceMode(String message) async {
     _listeningRestartTimer?.cancel();
     await _speech.cancel();
-    _listenSessionId++;
+    _invalidateListenSession('voice_mode_disabled_with_feedback');
     await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
       _voiceModeEnabled = false;
       _isListening = false;
+      _isPreparingToListen = false;
       _isSpeaking = false;
       _heardText = '';
     });

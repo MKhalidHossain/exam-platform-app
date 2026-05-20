@@ -52,5 +52,43 @@ void main() {
       expect(VoiceTextNormalizer.normalize('confarm submit'), 'confarm submit');
       expect(VoiceTextNormalizer.normalize('summit quiz'), 'summit quiz');
     });
+
+    test('applies African English accent profile variants locally', () {
+      expect(
+        VoiceTextNormalizer.normalize(
+          'kweshen five',
+          accentProfile: VoiceAccentProfile.africanEnglish,
+        ),
+        'question 5',
+      );
+      expect(
+        VoiceTextNormalizer.normalize(
+          'queshan',
+          accentProfile: VoiceAccentProfile.africanEnglish,
+        ),
+        'question',
+      );
+      expect(
+        VoiceTextNormalizer.normalize(
+          'queschen',
+          accentProfile: VoiceAccentProfile.africanEnglish,
+        ),
+        'question',
+      );
+      expect(
+        VoiceTextNormalizer.normalize(
+          'sub meet quiz',
+          accentProfile: VoiceAccentProfile.africanEnglish,
+        ),
+        'submit quiz',
+      );
+      expect(
+        VoiceTextNormalizer.normalize(
+          'summit quiz',
+          accentProfile: VoiceAccentProfile.africanEnglish,
+        ),
+        'submit quiz',
+      );
+    });
   });
 }

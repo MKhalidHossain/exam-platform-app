@@ -1,3 +1,23 @@
+enum VoiceAccentProfile {
+  defaultEnglish,
+  africanEnglish,
+  indianEnglish,
+  ukEnglish,
+  usEnglish,
+  customLearned,
+}
+
+extension VoiceAccentProfileLabel on VoiceAccentProfile {
+  String get label => switch (this) {
+    VoiceAccentProfile.defaultEnglish => 'Default English',
+    VoiceAccentProfile.africanEnglish => 'African English',
+    VoiceAccentProfile.indianEnglish => 'Indian English',
+    VoiceAccentProfile.ukEnglish => 'UK English',
+    VoiceAccentProfile.usEnglish => 'US English',
+    VoiceAccentProfile.customLearned => 'Custom Learned',
+  };
+}
+
 class VoiceTextNormalizer {
   static const Map<String, String> _phraseCorrections = {
     'of shun': 'option',
@@ -7,17 +27,55 @@ class VoiceTextNormalizer {
     'op sun': 'option',
     'opson': 'option',
     'opshun': 'option',
+    'go nest': 'go next',
+    'go nex': 'go next',
+    'kweshen': 'question',
     'kweschen': 'question',
+    'queshan': 'question',
+    'queshen': 'question',
     'queschen': 'question',
     'kwestion': 'question',
     'queston': 'question',
+    'sylhetse': 'select c',
+    'syletse': 'select c',
+    'sylnetse': 'select c',
+    'sylentse': 'select c',
     'sub mit': 'submit',
     'ree view': 'review',
+  };
+
+  static const Map<VoiceAccentProfile, Map<String, String>>
+  _profilePhraseCorrections = {
+    VoiceAccentProfile.africanEnglish: {
+      'kweshen': 'question',
+      'queshen': 'question',
+      'queshan': 'question',
+      'sub meet': 'submit',
+      'sum mit': 'submit',
+    },
+    VoiceAccentProfile.indianEnglish: {
+      'sub meet': 'submit',
+      'kweshen': 'question',
+    },
+    VoiceAccentProfile.ukEnglish: {},
+    VoiceAccentProfile.usEnglish: {},
+    VoiceAccentProfile.customLearned: {},
   };
 
   static const Map<String, String> _wordCorrections = {
     'nex': 'next',
     'neckst': 'next',
+    'nest': 'next',
+    'reed': 'read',
+    'flug': 'flag',
+    'flak': 'flag',
+    'flagged': 'flag',
+    'syllet': 'select',
+    'sillect': 'select',
+    'sylhet': 'select',
+    'sylet': 'select',
+    'slect': 'select',
+    'sellect': 'select',
     'sabmit': 'submit',
     'sabit': 'submit',
     'finis': 'finish',
@@ -26,6 +84,8 @@ class VoiceTextNormalizer {
     'veiw': 'view',
     'fals': 'false',
     'falls': 'false',
+    'tru': 'true',
+    'through': 'true',
     'tree': 'three',
     'free': 'three',
     'won': 'one',
@@ -34,15 +94,32 @@ class VoiceTextNormalizer {
     'fore': 'four',
   };
 
+  static const Map<VoiceAccentProfile, Map<String, String>>
+  _profileWordCorrections = {
+    VoiceAccentProfile.africanEnglish: {
+      'summit': 'submit',
+      'kweshen': 'question',
+      'queshen': 'question',
+      'queshan': 'question',
+    },
+    VoiceAccentProfile.indianEnglish: {'summit': 'submit'},
+    VoiceAccentProfile.ukEnglish: {},
+    VoiceAccentProfile.usEnglish: {},
+    VoiceAccentProfile.customLearned: {},
+  };
+
   static const Map<String, String> _optionLetterCorrections = {
     'ay': 'a',
     'hey': 'a',
     'bee': 'b',
     'be': 'b',
+    'bi': 'b',
     'si': 'c',
     'sea': 'c',
     'see': 'c',
     'dee': 'd',
+    'de': 'd',
+    'the': 'd',
   };
 
   static const Map<String, String> _numberWords = {
@@ -93,18 +170,29 @@ class VoiceTextNormalizer {
 
   const VoiceTextNormalizer._();
 
-  static String normalize(String text) {
+  static String normalize(
+    String text, {
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
     var normalized = text.toLowerCase();
     normalized = normalized.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
     normalized = _normalizeSpaces(normalized);
     if (normalized.isEmpty) return normalized;
 
     normalized = _replacePhrases(normalized, _phraseCorrections);
+    normalized = _replacePhrases(
+      normalized,
+      _profilePhraseCorrections[accentProfile] ?? const <String, String>{},
+    );
     normalized = _normalizeSpaces(normalized);
 
+    final wordCorrections = {
+      ..._wordCorrections,
+      ...?_profileWordCorrections[accentProfile],
+    };
     final tokens = normalized
         .split(' ')
-        .map((token) => _wordCorrections[token] ?? token)
+        .map((token) => wordCorrections[token] ?? token)
         .toList(growable: false);
 
     return _normalizeSpaces(_normalizeContextualTokens(tokens).join(' '));

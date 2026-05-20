@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../../controllers/quiz_voice_controller.dart';
 import '../../services/voice_assistant_settings_service.dart';
 import '../../voice/learning/voice_learning_service.dart';
+import '../../voice/parsing/voice_text_normalizer.dart';
 import '../../voice/ui/voice_calibration_screen.dart';
 
 class QuizVoiceDebugPanel extends StatelessWidget {
@@ -245,6 +246,27 @@ class _VoiceSettingsControls extends StatelessWidget {
             },
           ),
           const SizedBox(height: 4),
+          DropdownButtonFormField<VoiceAccentProfile>(
+            initialValue: settings.accentProfile,
+            decoration: const InputDecoration(
+              labelText: 'Accent profile',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            items: VoiceAccentProfile.values
+                .map(
+                  (profile) => DropdownMenuItem(
+                    value: profile,
+                    child: Text(profile.label),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value == null) return;
+              onChanged(settings.copyWith(accentProfile: value));
+            },
+          ),
+          const SizedBox(height: 4),
           _CompactSwitch(
             label: 'Auto listen on open',
             value: settings.autoListenOnScreenOpen,
@@ -264,10 +286,13 @@ class _VoiceSettingsControls extends StatelessWidget {
                 onChanged(settings.copyWith(showDebugConfidence: value)),
           ),
           _CompactSwitch(
-            label: 'Enable cloud fallback',
-            value: settings.cloudFallbackEnabled,
+            label: 'Fast speaker mode',
+            value: settings.fastSpeakerMode,
             onChanged: (value) =>
-                onChanged(settings.copyWith(cloudFallbackEnabled: value)),
+                onChanged(settings.copyWith(fastSpeakerMode: value)),
+          ),
+          const _UnavailableSettingNote(
+            label: 'Cloud fallback unavailable in native-only mode',
           ),
           Align(
             alignment: Alignment.centerLeft,
@@ -389,6 +414,39 @@ class _CompactSwitch extends StatelessWidget {
       dense: true,
       visualDensity: VisualDensity.compact,
       contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
+class _UnavailableSettingNote extends StatelessWidget {
+  final String label;
+
+  const _UnavailableSettingNote({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            size: 16,
+            color: Color(0xFF64748B),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -14,6 +14,7 @@ import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
+import '../../voice/parsing/voice_command_parser.dart' as core_parser;
 import '../../voice/parsing/voice_text_normalizer.dart';
 import '../../voice/recognition/voice_audio_recorder.dart';
 import '../widgets/api_disclaimer_section.dart';
@@ -745,6 +746,16 @@ class _McqScreenState extends State<McqScreen>
         _lastVoiceAmplitudeDb != null && _lastVoiceAmplitudeDb! < -45
         ? ' I may be hearing you too quietly. Move closer to the microphone or use a headset.'
         : '';
+    if (audioHint.isNotEmpty) {
+      _voiceController.logEvent(
+        'too quiet warning retry=$_consecutiveUnknownCommands amplitude=${_lastVoiceAmplitudeDb?.toStringAsFixed(1)}',
+        screen: QuizVoiceScreen.mcq,
+      );
+    }
+    _voiceController.logEvent(
+      'unknown command retry=$_consecutiveUnknownCommands',
+      screen: QuizVoiceScreen.mcq,
+    );
     if (_consecutiveUnknownCommands < _unknownCommandHelpThreshold) {
       return '$feedback$audioHint';
     }
@@ -1466,6 +1477,7 @@ class _McqScreenState extends State<McqScreen>
       screen: QuizVoiceScreen.mcq,
       onResult: (result) => _onSpeechResult(result, listenSessionId),
       localeId: _speechLocaleId,
+      fastSpeakerMode: _voiceController.assistantSettings.value.fastSpeakerMode,
     );
     if (listenSessionId != _listenSessionId) return;
     if (!mounted || !_isCurrentVoiceScreen) return;
@@ -1722,6 +1734,7 @@ class _McqScreenState extends State<McqScreen>
       cloudSpeechService: _voiceController.cloudSpeechTranscriber,
       fallbackAudioFile: fallbackAudioFile,
       locale: _speechLocaleId ?? settings.speechLocaleCode,
+      accentProfile: settings.accentProfile,
       availableCommands: const <String>[
         'a',
         'b',
@@ -1904,69 +1917,39 @@ class _McqScreenState extends State<McqScreen>
 
   bool _tryHandleQuestionAnswer(String rawText) {
     final question = _questions[_currentIndex];
-    final parsed = _parseVoiceAnswerIndexes(rawText, question);
+    final settings = _voiceController.assistantSettings.value;
+    final parsed = core_parser.VoiceCommandParser.quizAnswerIndexesForText(
+      rawText: rawText,
+      optionCount: question.options.length,
+      isTrueFalse: question.isTrueFalse,
+      isMultiSelect: question.isMultiSelect,
+      optionTexts: question.options,
+      accentProfile: settings.accentProfile,
+    );
     if (parsed.isEmpty) return false;
     if (!question.isMultiSelect && parsed.length > 1) {
       unawaited(_speakFeedback('Please give one answer for this question.'));
       return true;
     }
+    _recordVoiceCommandAnalytics({
+      'screenContext': 'quiz',
+      'platform': Platform.operatingSystem,
+      'rawTranscript': rawText,
+      'normalizedTranscript': VoiceTextNormalizer.normalize(
+        rawText,
+        accentProfile: settings.accentProfile,
+      ),
+      'detectedIntent': 'answerSelection',
+      'confidence': 1.0,
+      'source': 'native',
+      'parserSource': 'direct_option_grammar',
+      'fallbackAttempted': false,
+      'fallbackUsed': false,
+      'selectedLocale': _speechLocaleId ?? settings.speechLocaleCode,
+      'accentProfile': settings.accentProfile.name,
+    });
     _answerViaVoice(parsed);
     return true;
-  }
-
-  Set<int> _parseVoiceAnswerIndexes(String rawText, _Question question) {
-    final normalized = VoiceTextNormalizer.normalize(rawText)
-        .replaceAll(
-          RegExp(
-            r'\b(answer|answers|option|options|select|choose|letter|and)\b',
-          ),
-          ' ',
-        )
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (normalized.isEmpty) return const <int>{};
-
-    if (question.isTrueFalse) {
-      final wantsTrue = RegExp(r'\btrue\b').hasMatch(normalized);
-      final wantsFalse = RegExp(r'\bfalse\b').hasMatch(normalized);
-      if (wantsTrue == wantsFalse) return const <int>{};
-      final target = wantsTrue ? 'true' : 'false';
-      final index = question.options.indexWhere(
-        (option) => option.trim().toLowerCase() == target,
-      );
-      if (index >= 0) return {index};
-    }
-
-    final indexes = <int>{};
-    final tokens = normalized.split(RegExp(r'\s+'));
-    const wordIndexes = <String, int>{
-      'a': 0,
-      'ay': 0,
-      'one': 0,
-      'first': 0,
-      'b': 1,
-      'bee': 1,
-      'be': 1,
-      'two': 1,
-      'second': 1,
-      'c': 2,
-      'see': 2,
-      'sea': 2,
-      'three': 2,
-      'third': 2,
-      'd': 3,
-      'dee': 3,
-      'four': 3,
-      'fourth': 3,
-    };
-    for (final token in tokens) {
-      final index = wordIndexes[token];
-      if (index != null && index < question.options.length) {
-        indexes.add(index);
-      }
-    }
-    if (!question.isMultiSelect && indexes.length > 1) return const <int>{};
-    return indexes;
   }
 
   void _answerViaVoice(Set<int> selectedIndexes) {

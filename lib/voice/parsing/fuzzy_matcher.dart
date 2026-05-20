@@ -38,21 +38,28 @@ class FuzzyMatcher {
 
   static FuzzyMatchResult? match(
     String query,
-    Iterable<FuzzyMatchCandidate> candidates,
-  ) {
-    final normalizedQuery = VoiceTextNormalizer.normalize(query);
+    Iterable<FuzzyMatchCandidate> candidates, {
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
+  }) {
+    final normalizedQuery = VoiceTextNormalizer.normalize(
+      query,
+      accentProfile: accentProfile,
+    );
     if (normalizedQuery.isEmpty) return null;
 
     FuzzyMatchResult? bestResult;
     FuzzyMatchResult? secondBestResult;
     for (final candidate in candidates) {
-      final normalizedPhrase = VoiceTextNormalizer.normalize(candidate.phrase);
+      final normalizedPhrase = VoiceTextNormalizer.normalize(
+        candidate.phrase,
+        accentProfile: accentProfile,
+      );
       if (normalizedPhrase.isEmpty) continue;
       if (normalizedQuery.length == 1 && normalizedPhrase != normalizedQuery) {
         continue;
       }
 
-      final score = similarity(normalizedQuery, normalizedPhrase);
+      final score = _bestSimilarity(normalizedQuery, normalizedPhrase);
       final result = FuzzyMatchResult(
         matchedPhrase: candidate.phrase,
         normalizedQuery: normalizedQuery,
@@ -85,8 +92,12 @@ class FuzzyMatcher {
     String query,
     VoiceScreenContext context, {
     bool includeGlobal = true,
+    VoiceAccentProfile accentProfile = VoiceAccentProfile.defaultEnglish,
   }) {
-    final normalizedQuery = VoiceTextNormalizer.normalize(query);
+    final normalizedQuery = VoiceTextNormalizer.normalize(
+      query,
+      accentProfile: accentProfile,
+    );
     if (normalizedQuery.length == 1 && context != VoiceScreenContext.quiz) {
       return null;
     }
@@ -98,7 +109,7 @@ class FuzzyMatcher {
           (alias) =>
               FuzzyMatchCandidate(phrase: alias.phrase, intent: alias.intent),
         );
-    return match(query, candidates);
+    return match(query, candidates, accentProfile: accentProfile);
   }
 
   static double similarity(String first, String second) {
@@ -109,6 +120,28 @@ class FuzzyMatcher {
     final longest = first.length > second.length ? first.length : second.length;
     if (longest == 0) return 1.0;
     return (1 - (distance / longest)).clamp(0.0, 1.0).toDouble();
+  }
+
+  static double _bestSimilarity(String first, String second) {
+    final normalScore = similarity(first, second);
+    final compactFirst = _compactForMatch(first);
+    final compactSecond = _compactForMatch(second);
+    if (compactFirst == first && compactSecond == second) return normalScore;
+
+    final compactScore = similarity(compactFirst, compactSecond);
+    return normalScore > compactScore ? normalScore : compactScore;
+  }
+
+  static String _compactForMatch(String text) {
+    final compact = text.replaceAll(RegExp(r'\s+'), '');
+    return switch (compact) {
+      'galaxy' ||
+      'galaxi' ||
+      'sylnetse' ||
+      'sylentse' ||
+      'silnetse' => 'selectc',
+      _ => compact,
+    };
   }
 
   static bool _isBetterMatch(

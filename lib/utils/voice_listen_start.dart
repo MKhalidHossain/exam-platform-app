@@ -7,6 +7,7 @@ import '../controllers/quiz_voice_controller.dart';
 const Duration minimumVoiceListenRetryDelay = Duration(seconds: 1);
 const Duration voiceListenForDuration = Duration(seconds: 25);
 const Duration voicePauseForDuration = Duration(seconds: 4);
+const Duration fastVoicePauseForDuration = Duration(seconds: 3);
 
 Duration enforceMinimumVoiceListenRetryDelay(Duration delay) {
   return delay < minimumVoiceListenRetryDelay
@@ -20,6 +21,7 @@ Future<bool> startSpeechListeningSafely({
   required QuizVoiceScreen screen,
   required void Function(SpeechRecognitionResult result) onResult,
   required String? localeId,
+  bool fastSpeakerMode = false,
 }) async {
   try {
     if (speech.isListening) {
@@ -29,12 +31,14 @@ Future<bool> startSpeechListeningSafely({
       return true;
     }
     debugPrint(
-      '[Voice][${screen.name}] listen start requested locale=${localeId ?? 'system'}',
+      '[Voice][${screen.name}] listen start requested locale=${localeId ?? 'system'} fastSpeaker=$fastSpeakerMode',
     );
     await speech.listen(
       onResult: onResult,
       listenFor: voiceListenForDuration,
-      pauseFor: voicePauseForDuration,
+      pauseFor: fastSpeakerMode
+          ? fastVoicePauseForDuration
+          : voicePauseForDuration,
       localeId: localeId,
       listenOptions: SpeechListenOptions(
         cancelOnError: false,
