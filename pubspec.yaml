@@ -2,7 +2,7 @@ name: ej_flutter
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.2+17
+version: 1.0.2+18
 
 environment:
   sdk: ^3.10.4
@@ -34,16 +34,16 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  
+
   # State Management
   get: ^4.6.6
-  
+
   # Routing
   go_router: ^14.2.0
-  
+
   # HTTP Client
   http: ^1.2.0
-  
+
   # Shared Preferences
   shared_preferences: ^2.2.2
 
@@ -52,10 +52,10 @@ dependencies:
 
   # UUID generator
   uuid: ^4.5.1
-  
+
   # Image Picker
   image_picker: ^1.0.7
-  
+
   # URL Launcher
   url_launcher: ^6.3.2
 
@@ -67,10 +67,9 @@ dependencies:
 
   # In-app PDF reader
   syncfusion_flutter_pdfviewer: ^27.2.5
-  
+
   # Path Provider (for cache clearing)
   path_provider: ^2.1.2
-
 
   # Stripe payments
   flutter_stripe: ^12.2.0
@@ -86,7 +85,7 @@ dependencies:
 
   # Shimmer loading
   shimmer: ^3.0.0
-  
+
   # Lottie animations
   lottie: ^2.7.0
 
@@ -106,7 +105,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
