@@ -274,6 +274,50 @@ void main() {
     controller.onClose();
   });
 
+  testWidgets('lifecycle background hard stops voice and blocks recovery', (
+    tester,
+  ) async {
+    final controller = QuizVoiceController();
+    var deactivateCount = 0;
+    var recoveryCount = 0;
+
+    controller.onInit();
+    controller.activateScreen(
+      QuizVoiceScreen.mcq,
+      'current-token',
+      onDeactivate: () async {
+        deactivateCount++;
+      },
+    );
+    controller.bindScreen(
+      screen: QuizVoiceScreen.mcq,
+      screenToken: 'current-token',
+      onRecoverListening: () async {
+        recoveryCount++;
+      },
+    );
+    controller.setVoiceEnabled(true, screen: QuizVoiceScreen.mcq);
+    await tester.pump(const Duration(milliseconds: 20));
+    recoveryCount = 0;
+
+    controller.setVoiceState(VoiceState.listening, screen: QuizVoiceScreen.mcq);
+    controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await tester.pump();
+
+    expect(deactivateCount, 1);
+    expect(controller.currentStateValue, VoiceState.paused);
+
+    controller.requestRecovery(force: true, screenToken: 'current-token');
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(recoveryCount, 0);
+
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(recoveryCount, greaterThan(0));
+
+    controller.onClose();
+  });
+
   test('strict sensitivity keeps borderline command from executing', () async {
     final result = await QuizVoiceIntentParser.parse(
       QuizVoiceScreen.mcq,

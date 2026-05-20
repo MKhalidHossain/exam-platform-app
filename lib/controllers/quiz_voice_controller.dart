@@ -82,6 +82,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   bool _entryActionPending = false;
   bool _recoveryInFlight = false;
   bool _recoveryRunning = false;
+  bool _isAppInForeground = true;
   String? _activeScreenName;
   DateTime _lastPhaseChangeAt = DateTime.now();
   DateTime _lastRecoveryAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -158,8 +159,62 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     logEvent('app lifecycle: $state');
     if (state == AppLifecycleState.resumed) {
+      _resumeVoiceAfterBackground();
       _scheduleActivationRecovery(reason: 'app resumed');
+      return;
     }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state.name == 'hidden') {
+      _pauseVoiceForBackground(state);
+    }
+  }
+
+  void _pauseVoiceForBackground(AppLifecycleState state) {
+    if (!_isAppInForeground) {
+      logEvent('app background hard stop already applied: ${state.name}');
+      return;
+    }
+    _isAppInForeground = false;
+    _activationRecoveryTimer?.cancel();
+    _activationRecoveryTimer = null;
+    _entryActionPending = false;
+    _recoveryRunning = false;
+    _recoveryInFlight = false;
+
+    final deactivate = _activeDeactivateCallback;
+    if (deactivate != null) {
+      logEvent('hard stop voice for app background: ${state.name}');
+      unawaited(deactivate());
+    }
+
+    _runReactiveMutation(() {
+      if (!isEnabled.value) return;
+      phase.value = QuizVoicePhase.idle;
+      _setVoiceStateLocked(
+        VoiceState.paused,
+        screen: _activeScreen ?? activeScreen.value,
+      );
+      heardText.value = '';
+      recognizedCommand.value = '';
+      commandConfidence.value = 0;
+      retryMessage.value = '';
+      _lastPhaseChangeAt = DateTime.now();
+    });
+  }
+
+  void _resumeVoiceAfterBackground() {
+    _isAppInForeground = true;
+    _runReactiveMutation(() {
+      if (!isEnabled.value || voiceState.value != VoiceState.paused) return;
+      _setVoiceStateLocked(
+        VoiceState.idle,
+        screen: _activeScreen ?? activeScreen.value,
+      );
+      phase.value = QuizVoicePhase.idle;
+      _lastPhaseChangeAt = DateTime.now();
+    });
   }
 
   void bindScreen({
@@ -578,6 +633,10 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       logEvent('[Voice][RECOVERY skipped] old token');
       return;
     }
+    if (!_isAppInForeground) {
+      logEvent('[Voice][RECOVERY skipped] app background');
+      return;
+    }
     if (!isEnabled.value || _recoveryRunning || _recoveryInFlight) {
       logEvent('[Voice][RECOVERY skipped] busy or disabled');
       return;
@@ -627,6 +686,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
     String? screenToken,
   }) {
     _activationRecoveryTimer?.cancel();
+    if (!_isAppInForeground) return;
     if (!isEnabled.value) return;
 
     _activationRecoveryTimer = Timer(_activationRecoveryDelay, () {
@@ -661,6 +721,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
 
   void _requestHealthRecovery(String reason, {String? screenToken}) {
     if (screenToken != null && !isCurrentScreenToken(screenToken)) return;
+    if (!_isAppInForeground) return;
     if (!isEnabled.value || _activeScreenName == null) return;
     if (voiceState.value == VoiceState.paused) return;
     if (_recoveryInFlight || _recoveryRunning) {
@@ -688,6 +749,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   }
 
   void _onWatchdogTick() {
+    if (!_isAppInForeground) return;
     if (!isEnabled.value || _recoveryInFlight) return;
     if (_recoveryCallback == null && !_entryActionPending) return;
     if (_activeScreenName == null) return;
