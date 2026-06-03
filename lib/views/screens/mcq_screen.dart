@@ -104,6 +104,7 @@ class _McqScreenState extends State<McqScreen>
   Timer? _voiceLoopRecoveryTimer;
   Timer? _listenStartWatchdogTimer;
   Timer? _partialCommandDebounceTimer;
+
   /// Fires [voicePartialResultEndpointDelay] after the last partial speech
   /// result. When it elapses we call `_speech.stop()` to force the native
   /// engine to finalise the utterance early — way faster than waiting for
@@ -324,7 +325,10 @@ class _McqScreenState extends State<McqScreen>
     // Pick the highest-quality installed voice for the locale (network voices
     // on Android, premium voices on iOS) instead of letting the platform fall
     // back to a low-quality "compact" voice. Always sets the language too.
-    await TtsVoicePicker.applyBestVoice(_tts, languageCode: settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(
+      _tts,
+      languageCode: settings.languageCode,
+    );
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }
@@ -1523,8 +1527,9 @@ class _McqScreenState extends State<McqScreen>
         audioFile: audioFile,
         locale: _speechLocaleId ?? settings.speechLocaleCode,
         screenContext: VoiceScreenContext.quiz,
-        availableCommands:
-            VoiceCommandVocabulary.commandsFor(QuizVoiceScreen.mcq),
+        availableCommands: VoiceCommandVocabulary.commandsFor(
+          QuizVoiceScreen.mcq,
+        ),
       );
       if (result.status != voice_pkg.SpeechRecognitionStatus.success) {
         debugPrint(
@@ -2139,7 +2144,9 @@ class _McqScreenState extends State<McqScreen>
       fallbackAudioFile: fallbackAudioFile,
       locale: _speechLocaleId ?? settings.speechLocaleCode,
       accentProfile: settings.accentProfile,
-      availableCommands: VoiceCommandVocabulary.commandsFor(QuizVoiceScreen.mcq),
+      availableCommands: VoiceCommandVocabulary.commandsFor(
+        QuizVoiceScreen.mcq,
+      ),
     );
     unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
@@ -2307,9 +2314,7 @@ class _McqScreenState extends State<McqScreen>
     }
     final targetIndex = isTrue ? trueIndex : falseIndex;
     if (targetIndex == null) {
-      unawaited(
-        _speakFeedback("Couldn't find that option for this question."),
-      );
+      unawaited(_speakFeedback("Couldn't find that option for this question."));
       return;
     }
     _selectViaVoice(targetIndex);
@@ -2343,8 +2348,8 @@ class _McqScreenState extends State<McqScreen>
     final label = delta == null
         ? 'Reading speed reset.'
         : delta > 0
-            ? 'Reading faster.'
-            : 'Reading slower.';
+        ? 'Reading faster.'
+        : 'Reading slower.';
     unawaited(_speakFeedback(label));
   }
 
@@ -3062,7 +3067,6 @@ class _McqScreenState extends State<McqScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const _McqVoiceCommandHints(),
                     QuizVoiceOverlay(
                       isListening: _isListening,
                       isPreparingToListen: _isPreparingToListen,
@@ -3127,31 +3131,6 @@ class _Question {
 
   bool get isMultiSelect => type == _QuestionType.multiSelect;
   bool get isTrueFalse => type == _QuestionType.trueFalse;
-}
-
-class _McqVoiceCommandHints extends StatelessWidget {
-  const _McqVoiceCommandHints();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: const Color(0xF2F8FAFC),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      child: const Text(
-        'Try saying: Option A • Select A • Choose A • Next question'
-        ' • Read question • Explain • Flag • Submit quiz',
-        style: TextStyle(
-          fontSize: 11.5,
-          color: Color(0xFF64748B),
-          fontWeight: FontWeight.w500,
-        ),
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
