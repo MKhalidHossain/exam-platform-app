@@ -4,8 +4,8 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // API Constants
-  //   static const String apiOrigin = 'http://187.77.10.158:5001';
-  static const String apiOrigin = 'http://localhost:5001';
+    static const String apiOrigin = 'http://187.77.10.158:5001';
+//   static const String apiOrigin = 'http://localhost:5001';
   static const String baseUrl = '$apiOrigin/api/v1';
   static const String publicBaseUrl = apiOrigin;
   static const Duration apiTimeout = Duration(seconds: 30);
