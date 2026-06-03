@@ -22,9 +22,7 @@ void main() async {
   await Stripe.instance.applySettings();
 
   // Ensure installation identifier exists before any API/auth actions.
-  if (AppConstants.deviceBlockingEnabled) {
-    await InstallationIdService().getOrCreateInstallationId();
-  }
+  await InstallationIdService().getOrCreateInstallationId();
 
   // Initialize GetX
   Get.put(ThemeController());
