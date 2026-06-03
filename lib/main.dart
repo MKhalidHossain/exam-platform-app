@@ -5,7 +5,7 @@ import 'utils/app_theme.dart';
 import 'utils/app_constants.dart';
 import 'routes/app_router.dart';
 import 'services/installation_id_service.dart';
-import 'services/app_link_service.dart'; 
+import 'services/app_link_service.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/quiz_voice_controller.dart';
 import 'controllers/splash_controller.dart';
@@ -22,7 +22,9 @@ void main() async {
   await Stripe.instance.applySettings();
 
   // Ensure installation identifier exists before any API/auth actions.
-  await InstallationIdService().getOrCreateInstallationId();
+  if (AppConstants.deviceBlockingEnabled) {
+    await InstallationIdService().getOrCreateInstallationId();
+  }
 
   // Initialize GetX
   Get.put(ThemeController());

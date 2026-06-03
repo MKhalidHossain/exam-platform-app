@@ -31,15 +31,23 @@ class ApiService {
     await _storageService.clearSessionData();
   }
 
+  Future<String?> _getInstallationIdForDeviceBlocking() async {
+    if (!AppConstants.deviceBlockingEnabled) return null;
+    return _storageService.getOrCreateInstallationId();
+  }
+
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storageService.getToken();
-    final installationId = await _storageService.getOrCreateInstallationId();
-    return {
+    final installationId = await _getInstallationIdForDeviceBlocking();
+    final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      AppConstants.installationIdHeaderKey: installationId,
       if (token != null) 'Authorization': 'Bearer $token',
     };
+    if (installationId != null) {
+      headers[AppConstants.installationIdHeaderKey] = installationId;
+    }
+    return headers;
   }
 
   Future<bool> _refreshToken() async {
@@ -56,24 +64,23 @@ class ApiService {
         completer.complete(false);
         return false;
       }
-      final installationId = await _storageService.getOrCreateInstallationId();
+      final installationId = await _getInstallationIdForDeviceBlocking();
 
       final uri = Uri.parse(
         '${AppConstants.baseUrl}${ApiEndpoints.refreshToken}',
       );
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      final body = {'refreshToken': refreshToken};
+      if (installationId != null) {
+        headers[AppConstants.installationIdHeaderKey] = installationId;
+        body['installationId'] = installationId;
+      }
+
       final response = await http
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              AppConstants.installationIdHeaderKey: installationId,
-            },
-            body: jsonEncode({
-              'refreshToken': refreshToken,
-              'installationId': installationId,
-            }),
-          )
+          .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(AppConstants.apiTimeout);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -262,13 +269,15 @@ class ApiService {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final token = await _storageService.getToken();
-      final installationId = await _storageService.getOrCreateInstallationId();
+      final installationId = await _getInstallationIdForDeviceBlocking();
 
       final request = http.MultipartRequest('PUT', uri);
 
       // Add headers
       request.headers['Accept'] = 'application/json';
-      request.headers[AppConstants.installationIdHeaderKey] = installationId;
+      if (installationId != null) {
+        request.headers[AppConstants.installationIdHeaderKey] = installationId;
+      }
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -343,12 +352,14 @@ class ApiService {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}$endpoint');
       final token = await _storageService.getToken();
-      final installationId = await _storageService.getOrCreateInstallationId();
+      final installationId = await _getInstallationIdForDeviceBlocking();
 
       final request = http.MultipartRequest('POST', uri);
 
       request.headers['Accept'] = 'application/json';
-      request.headers[AppConstants.installationIdHeaderKey] = installationId;
+      if (installationId != null) {
+        request.headers[AppConstants.installationIdHeaderKey] = installationId;
+      }
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
@@ -510,16 +521,18 @@ class ApiService {
     String? referralCode,
   }) async {
     final trimmedReferralCode = referralCode?.trim() ?? '';
-    final installationId = await _storageService.getOrCreateInstallationId();
+    final installationId = await _getInstallationIdForDeviceBlocking();
     final body = {
       'phone': phone,
       'name': name,
       'email': email,
       'password': password,
       'confirmPassword': confirmPassword,
-      'installationId': installationId,
       if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
     };
+    if (installationId != null) {
+      body['installationId'] = installationId;
+    }
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);
@@ -637,12 +650,11 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final installationId = await _storageService.getOrCreateInstallationId();
-    final body = {
-      'email': email,
-      'password': password,
-      'installationId': installationId,
-    };
+    final installationId = await _getInstallationIdForDeviceBlocking();
+    final body = {'email': email, 'password': password};
+    if (installationId != null) {
+      body['installationId'] = installationId;
+    }
 
     return post<Map<String, dynamic>>(
       ApiEndpoints.requestDeviceReset,
@@ -658,8 +670,11 @@ class ApiService {
     required String email,
     required String otp,
   }) async {
-    final installationId = await _storageService.getOrCreateInstallationId();
-    final body = {'email': email, 'otp': otp, 'installationId': installationId};
+    final installationId = await _getInstallationIdForDeviceBlocking();
+    final body = {'email': email, 'otp': otp};
+    if (installationId != null) {
+      body['installationId'] = installationId;
+    }
 
     return post<Map<String, dynamic>>(
       ApiEndpoints.verifyDeviceReset,
@@ -676,12 +691,11 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final installationId = await _storageService.getOrCreateInstallationId();
-    final body = {
-      'email': email,
-      'password': password,
-      'installationId': installationId,
-    };
+    final installationId = await _getInstallationIdForDeviceBlocking();
+    final body = {'email': email, 'password': password};
+    if (installationId != null) {
+      body['installationId'] = installationId;
+    }
 
     // Convert to JSON string to show exact format
     final bodyJson = jsonEncode(body);

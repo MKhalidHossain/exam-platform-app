@@ -26,6 +26,7 @@ class AppConstants {
   static const String installationIdSecureKey = 'installation_id';
   static const String installationBootstrapKey = 'installation_bootstrapped';
   static const String installationIdHeaderKey = 'X-App-Installation-Id';
+  static const bool deviceBlockingEnabled = false;
   static const String isLoggedInKey = 'is_logged_in';
   static const String userDataKey = 'user_data';
   static const String userRoleKey = 'user_role';
