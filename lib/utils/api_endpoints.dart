@@ -6,6 +6,8 @@ class ApiEndpoints {
   // Auth Endpoints
   static const String register = '$auth/register';
   static const String login = '$auth/login';
+  static const String requestDeviceReset = '$auth/request-device-reset';
+  static const String verifyDeviceReset = '$auth/verify-device-reset';
   static const String verifyEmail = '$auth/verify';
   static const String forgetPassword = '$auth/forget';
   static const String resetPassword = '$auth/reset-password';

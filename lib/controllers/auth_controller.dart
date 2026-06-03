@@ -102,8 +102,17 @@ class AuthController extends GetxController {
           response,
           failureFallback: 'Login failed. Please try again.',
         );
-        if (_isAlreadyLoggedInAnotherInstallation(message)) {
-          await _showAlreadyLoggedInAlert(context, message);
+        if (_isDeviceMismatchResponse(
+          response.code,
+          response.rawData,
+          message,
+        )) {
+          isLoading.value = false;
+          await _showDeviceRelinkDialog(
+            context,
+            email: email,
+            password: password,
+          );
         } else {
           ErrorHandler.showSnackBar(message, context: context);
         }
@@ -308,30 +317,142 @@ class AuthController extends GetxController {
     }
   }
 
-  bool _isAlreadyLoggedInAnotherInstallation(String message) {
+  Future<void> requestDeviceReset(
+    BuildContext context, {
+    required String email,
+    required String password,
+  }) async {
+    if (isLoading.value) return;
+    isLoading.value = true;
+    try {
+      final response = await _apiService.requestDeviceReset(
+        email: email,
+        password: password,
+      );
+      if (!context.mounted) return;
+
+      if (response.success) {
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Device verification OTP sent to your email',
+          ),
+          isError: false,
+          context: context,
+        );
+        context.go(
+          '/verify-otp',
+          extra: {
+            'email': email,
+            'password': password,
+            'isForDeviceReset': true,
+          },
+        );
+      } else {
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Unable to request device verification OTP.',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ErrorHandler.showFromException(e, context: context);
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> verifyDeviceResetWithOtp(
+    BuildContext context, {
+    required String email,
+    required String otp,
+    required String password,
+  }) async {
+    if (isLoading.value) return;
+    isLoading.value = true;
+    try {
+      final response = await _apiService.verifyDeviceReset(
+        email: email,
+        otp: otp,
+      );
+      if (!context.mounted) return;
+
+      if (response.success) {
+        ErrorHandler.showSnackBar(
+          ErrorHandler.getMessageFromResponse(
+            response,
+            successFallback: 'Device re-linked successfully.',
+          ),
+          isError: false,
+          context: context,
+        );
+        isLoading.value = false;
+        await login(context, email: email, password: password);
+      } else {
+        ErrorHandler.showFromResponse(
+          response,
+          context: context,
+          failureFallback: 'Device verification failed. Please try again.',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ErrorHandler.showFromException(e, context: context);
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  bool _isDeviceMismatchResponse(
+    String? responseCode,
+    dynamic rawData,
+    String message,
+  ) {
+    if (responseCode == 'DEVICE_MISMATCH') return true;
+    if (rawData is Map) {
+      final code = rawData['code']?.toString();
+      if (code == 'DEVICE_MISMATCH') return true;
+      if (rawData['can_request_device_reset'] == true) return true;
+    }
     final lower = message.toLowerCase();
-    return lower.contains('already logged in on another installation') ||
+    return lower.contains('already linked to another installation') ||
+        lower.contains('already logged in on another installation') ||
         lower.contains('locked to another installation') ||
         (lower.contains('already logged in') &&
             lower.contains('another installation'));
   }
 
-  Future<void> _showAlreadyLoggedInAlert(
-    BuildContext context,
-    String message,
-  ) async {
-    await showDialog<void>(
+  Future<void> _showDeviceRelinkDialog(
+    BuildContext context, {
+    required String email,
+    required String password,
+  }) async {
+    final shouldVerify = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Login Blocked'),
-        content: Text(message),
+        title: const Text('New installation detected'),
+        content: const Text(
+          'This account is already linked to another app installation. '
+          'Please verify your account to re-link this device.',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Verify & Relink'),
           ),
         ],
       ),
     );
+
+    if (shouldVerify == true && context.mounted) {
+      await requestDeviceReset(context, email: email, password: password);
+    }
   }
 }

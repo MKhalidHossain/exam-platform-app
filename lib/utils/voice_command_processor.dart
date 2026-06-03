@@ -34,7 +34,12 @@ class VoiceCommandDecision {
 }
 
 class VoiceCommandProcessor {
+  /// Stale "Did you mean…" prompts are dropped after this so a "yes" the user
+  /// says many seconds later doesn't trigger an old, unrelated intent.
+  static const Duration _confirmationTtl = Duration(seconds: 15);
+
   _PendingVoiceConfirmation? _pendingConfirmation;
+  DateTime? _pendingConfirmationAt;
   final VoiceLearningService _learningService;
 
   VoiceCommandProcessor({VoiceLearningService? learningService})
@@ -53,9 +58,28 @@ class VoiceCommandProcessor {
     List<String> availableCommands = const <String>[],
   }) async {
     final pendingConfirmation = _pendingConfirmation;
-    if (pendingConfirmation != null) {
+    final pendingConfirmationAt = _pendingConfirmationAt;
+    final pendingExpired = pendingConfirmation != null &&
+        pendingConfirmationAt != null &&
+        DateTime.now().difference(pendingConfirmationAt) > _confirmationTtl;
+    if (pendingConfirmation != null && pendingConfirmation.screen != screen) {
+      // The pending confirmation was queued on a different screen. If the user
+      // navigated away (e.g. mid-confirmation of "submit exam?") and arrived at
+      // a new screen, the next "yes"/"no" must not silently fire the previous
+      // screen's intent. Drop the stale confirmation and treat this utterance
+      // as a fresh command on the current screen.
+      debugPrint(
+        '[Voice] discarding stale confirmation from screen=${pendingConfirmation.screen.name} now=${screen.name}',
+      );
+      _clearPendingConfirmation();
+    } else if (pendingExpired) {
+      debugPrint(
+        '[Voice] discarding expired confirmation (>${_confirmationTtl.inSeconds}s old) screen=${pendingConfirmation.screen.name}',
+      );
+      _clearPendingConfirmation();
+    } else if (pendingConfirmation != null) {
       if (_isYesText(heardText)) {
-        _pendingConfirmation = null;
+        _clearPendingConfirmation();
         var correctionSaved = false;
         if (!pendingConfirmation.isRisky &&
             QuizVoiceIntentParser.canLearnCorrection(
@@ -99,7 +123,7 @@ class VoiceCommandProcessor {
       }
 
       if (_isNoText(heardText)) {
-        _pendingConfirmation = null;
+        _clearPendingConfirmation();
         debugPrint(
           '[Voice][${pendingConfirmation.screen.name}] suggestion rejected raw="${pendingConfirmation.parseResult.heardText}" normalized="${pendingConfirmation.parseResult.normalizedText}" parserSource=${pendingConfirmation.coreResult.intent?.source} confidence=${pendingConfirmation.parseResult.confidence.toStringAsFixed(2)} suggestion=${pendingConfirmation.coreResult.intent?.type.name}',
         );
@@ -126,7 +150,34 @@ class VoiceCommandProcessor {
         );
       }
 
-      _pendingConfirmation = null;
+      // The user said something while a confirmation was pending but it
+      // wasn't a clear yes/no. Keep the prompt alive (refresh its TTL) and
+      // ask them to repeat — better than silently treating their reply as
+      // a fresh command that almost certainly won't match.
+      _pendingConfirmationAt = DateTime.now();
+      debugPrint(
+        '[Voice][${pendingConfirmation.screen.name}] confirmation reply unclear — re-prompting',
+      );
+      return _decisionFromParseResult(
+        pendingConfirmation.parseResult,
+        feedback: 'Sorry, please say yes or no.',
+        analytics: _voiceAnalytics(
+          screen: pendingConfirmation.screen,
+          rawText: pendingConfirmation.parseResult.heardText,
+          normalizedText: pendingConfirmation.parseResult.normalizedText,
+          coreResult: pendingConfirmation.coreResult,
+          parseResult: pendingConfirmation.parseResult,
+          locale: locale,
+          sensitivity: sensitivity,
+          accentProfile: accentProfile,
+          source: pendingConfirmation.source,
+          fallbackUsed: pendingConfirmation.fallbackUsed,
+          confirmationShown: true,
+          confirmationTranscript: heardText,
+          decisionName: core_result.VoiceCommandDecision.askConfirmation.name,
+          suggestion: pendingConfirmation.coreResult.intent?.type.name,
+        ),
+      );
     }
 
     var outcome = await _parseWithCoreParser(
@@ -235,6 +286,7 @@ class VoiceCommandProcessor {
           fallbackUsed: fallbackUsed,
           source: source,
         );
+        _pendingConfirmationAt = DateTime.now();
       } else if (screen == QuizVoiceScreen.examReview &&
           (result.intent == VoiceIntent.submit ||
               result.intent == VoiceIntent.confirmSubmit) &&
@@ -247,6 +299,7 @@ class VoiceCommandProcessor {
           fallbackUsed: fallbackUsed,
           source: source,
         );
+        _pendingConfirmationAt = DateTime.now();
       }
     }
 
@@ -275,29 +328,79 @@ class VoiceCommandProcessor {
   }
 
   void clearPendingCorrection() {
-    _pendingConfirmation = null;
+    _clearPendingConfirmation();
   }
+
+  void _clearPendingConfirmation() {
+    _pendingConfirmation = null;
+    _pendingConfirmationAt = null;
+  }
+
+  static const Set<String> _yesTokens = {
+    'yes',
+    'yeah',
+    'yep',
+    'yup',
+    'yah',
+    'ya',
+    'sure',
+    'ok',
+    'okay',
+    'confirm',
+    'confirmed',
+    'correct',
+    'right',
+    'affirmative',
+    'proceed',
+    'go',
+  };
+
+  static const Set<String> _noTokens = {
+    'no',
+    'nope',
+    'nah',
+    'cancel',
+    'wrong',
+    'incorrect',
+    'negative',
+    'dont',
+    'stop',
+    'abort',
+  };
 
   bool _isYesText(String text) {
     final normalizedText = VoiceTextNormalizer.normalize(text);
-    return QuizVoiceIntentParser.isConfirmationText(normalizedText) ||
-        const {'that s right', 'thats right'}.contains(normalizedText);
+    if (normalizedText.isEmpty) return false;
+    if (QuizVoiceIntentParser.isConfirmationText(normalizedText)) return true;
+    if (normalizedText == 'that s right' || normalizedText == 'thats right') {
+      return true;
+    }
+    // Be tolerant of trailing words like "yes please", "yes go back", "okay
+    // do it". The user clearly intends to confirm — exact-match was too
+    // strict and silently dropped those.
+    final tokens = normalizedText.split(' ');
+    if (tokens.isEmpty) return false;
+    if (_yesTokens.contains(tokens.first)) return true;
+    // "that is right", "that's correct" etc. — check first two tokens.
+    if (tokens.length >= 2 &&
+        (tokens.first == 'that' || tokens.first == 'thats') &&
+        _yesTokens.contains(tokens[1])) {
+      return true;
+    }
+    return false;
   }
 
   bool _isNoText(String text) {
     final normalizedText = VoiceTextNormalizer.normalize(text);
-    return const {
-      'no',
-      'nope',
-      'nah',
-      'cancel',
-      'wrong',
-      'incorrect',
-      'not correct',
-      'do not',
-      'dont',
-      'don t',
-    }.contains(normalizedText);
+    if (normalizedText.isEmpty) return false;
+    if (normalizedText == 'not correct' ||
+        normalizedText == 'do not' ||
+        normalizedText == 'don t') {
+      return true;
+    }
+    final tokens = normalizedText.split(' ');
+    if (tokens.isEmpty) return false;
+    return _noTokens.contains(tokens.first);
   }
 
   int? _questionNumberFrom(String normalizedText) {
@@ -337,9 +440,18 @@ class VoiceCommandProcessor {
     if (cloudSpeechService == null || fallbackAudioFile == null) return false;
     if (!fallbackAudioFile.existsSync()) return false;
 
-    return result.decision ==
-            core_result.VoiceCommandDecision.fallbackToCloud ||
-        result.decision == core_result.VoiceCommandDecision.notUnderstood;
+    // When the cloud transcriber is configured we treat it as the primary
+    // STT, not a fallback. Native STT is fast but frequently mis-hears
+    // accented English with confident-but-wrong results (e.g. "B" → "be"),
+    // and once the local parser has marked a result `execute` we'd never
+    // re-check with the VPS. Sending every utterance to Whisper means the
+    // accent-tuned server transcript wins whenever it's available and the
+    // native result only takes over if the VPS is unreachable.
+    //
+    // Fixed-cost VPS hosting makes this a no-brainer: there's no per-call
+    // bill, the latency cost is ~500 ms, and the accuracy gain on
+    // UK/US/African English is large.
+    return true;
   }
 
   Future<_CoreVoiceParseOutcome?> _tryCloudFallback({

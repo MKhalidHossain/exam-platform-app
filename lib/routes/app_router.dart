@@ -80,6 +80,8 @@ GoRouter getRouter() {
             return VerifyOtpScreen(
               email: data['email'] as String?,
               isForPasswordReset: data['isForPasswordReset'] as bool? ?? false,
+              isForDeviceReset: data['isForDeviceReset'] as bool? ?? false,
+              deviceResetPassword: data['password'] as String?,
             );
           } else {
             final email = state.extra as String?;

@@ -468,13 +468,17 @@ class ApiService {
         return ApiResponse<T>(
           success: true,
           message: message,
+          code: jsonData['code']?.toString(),
           data: parsedData,
+          rawData: responseData,
           statusCode: response.statusCode,
         );
       } else {
         return ApiResponse<T>(
           success: false,
           message: message,
+          code: jsonData['code']?.toString(),
+          rawData: responseData,
           error: jsonData['error'],
           statusCode: response.statusCode,
         );
@@ -627,6 +631,44 @@ class ApiService {
     debugPrint('   Has Data: ${response.data != null}');
 
     return response;
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> requestDeviceReset({
+    required String email,
+    required String password,
+  }) async {
+    final installationId = await _storageService.getOrCreateInstallationId();
+    final body = {
+      'email': email,
+      'password': password,
+      'installationId': installationId,
+    };
+
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.requestDeviceReset,
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+      allowRefresh: false,
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> verifyDeviceReset({
+    required String email,
+    required String otp,
+  }) async {
+    final installationId = await _storageService.getOrCreateInstallationId();
+    final body = {'email': email, 'otp': otp, 'installationId': installationId};
+
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.verifyDeviceReset,
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+      allowRefresh: false,
+    );
   }
 
   // User Login

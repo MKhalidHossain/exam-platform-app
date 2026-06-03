@@ -5,7 +5,7 @@ import 'utils/app_theme.dart';
 import 'utils/app_constants.dart';
 import 'routes/app_router.dart';
 import 'services/installation_id_service.dart';
-import 'services/app_link_service.dart';
+import 'services/app_link_service.dart'; 
 import 'controllers/auth_controller.dart';
 import 'controllers/quiz_voice_controller.dart';
 import 'controllers/splash_controller.dart';

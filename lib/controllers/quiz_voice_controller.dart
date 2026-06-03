@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../services/voice_assistant_settings_service.dart';
+import '../utils/tts_voice_picker.dart';
 import '../voice/recognition/cloud_speech_service.dart';
 
 enum QuizVoiceScreen {
@@ -533,6 +534,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       assistantSettings.value = settings;
       logEvent('voice assistant settings loaded');
     });
+    _syncCloudTranscriberFromSettings(settings);
   }
 
   Future<void> updateAssistantSettings(VoiceAssistantSettings settings) async {
@@ -541,6 +543,49 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
       assistantSettings.value = settings;
       logEvent('voice assistant settings updated');
     });
+    _syncCloudTranscriberFromSettings(settings);
+  }
+
+  String? _activeCloudEndpoint;
+  String? _activeCloudToken;
+
+  /// Builds (or tears down) the [CloudSpeechService] based on the persisted
+  /// settings. Called on settings load and on every settings save so the
+  /// transcriber stays in lockstep with what the user configured.
+  void _syncCloudTranscriberFromSettings(VoiceAssistantSettings settings) {
+    final url = settings.cloudEndpointUrl.trim();
+    final token = settings.cloudAuthToken.trim();
+    if (url.isEmpty) {
+      if (cloudSpeechTranscriber != null) {
+        logEvent('cloud transcriber cleared (no endpoint configured)');
+      }
+      cloudSpeechTranscriber = null;
+      _activeCloudEndpoint = null;
+      _activeCloudToken = null;
+      return;
+    }
+    if (url == _activeCloudEndpoint && token == _activeCloudToken) {
+      // Nothing changed — keep the existing transcriber instance and its
+      // pooled http.Client.
+      return;
+    }
+    final parsed = Uri.tryParse(url);
+    if (parsed == null || !parsed.hasScheme || !parsed.hasAuthority) {
+      logEvent('cloud transcriber not built: invalid url "$url"');
+      cloudSpeechTranscriber = null;
+      _activeCloudEndpoint = null;
+      _activeCloudToken = null;
+      return;
+    }
+    cloudSpeechTranscriber = CloudSpeechService(
+      endpoint: parsed,
+      headers: token.isEmpty
+          ? const <String, String>{}
+          : <String, String>{'Authorization': 'Bearer $token'},
+    );
+    _activeCloudEndpoint = url;
+    _activeCloudToken = token;
+    logEvent('cloud transcriber wired endpoint=$url');
   }
 
   // TTS/STT configuration is part of the voice lifecycle. Screens provide the
@@ -548,7 +593,7 @@ class QuizVoiceController extends GetxController with WidgetsBindingObserver {
   // resolution so behavior stays consistent across quiz voice screens.
   Future<void> applyTtsSettings(FlutterTts tts) async {
     final settings = assistantSettings.value;
-    await tts.setLanguage(settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(tts, languageCode: settings.languageCode);
     await tts.setSpeechRate(settings.voiceSpeed);
     await tts.setPitch(settings.voicePitch);
   }
