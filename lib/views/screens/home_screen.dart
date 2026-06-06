@@ -12,6 +12,7 @@ import '../../models/professional_plan_model.dart';
 import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import '../../models/exam_model.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/referral_share_message.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/app_shimmer.dart';
@@ -477,6 +478,14 @@ class HomeDashboard extends StatelessWidget {
   Future<_ExamUnlockCheckoutSelection?> _showExamUnlockAddOnSelectionDialog(
     BuildContext context,
   ) async {
+    if (!AppConstants.resourcesEnabled) {
+      return const _ExamUnlockCheckoutSelection(
+        addonProductIds: <String>[],
+        addonProductCodes: <String>[],
+        expectedTotalAmount: null,
+      );
+    }
+
     final ApiService apiService = ApiService();
     final planRes = await apiService.getProfessionalPlan();
     if (!context.mounted) return null;

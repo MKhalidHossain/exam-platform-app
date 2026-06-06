@@ -31,6 +31,7 @@ import '../views/screens/shared_ebook_redirect_screen.dart';
 import '../views/screens/shared_referral_redirect_screen.dart';
 import '../models/ebook_store_model.dart';
 import '../models/payment_success_details.dart';
+import '../utils/app_constants.dart';
 import '../utils/quiz_voice_route_observer.dart';
 import '../views/screens/ebook_category_screen.dart';
 import '../views/screens/ebook_detail_screen.dart';
@@ -141,6 +142,9 @@ GoRouter getRouter() {
         path: '/ebook-category',
         name: 'ebook-category',
         builder: (context, state) {
+          if (!AppConstants.resourcesEnabled) {
+            return const NavbarScreen(initialIndex: 1);
+          }
           final extra = state.extra;
           final category = extra is Map ? extra['category'] : null;
           return EbookCategoryScreen(
@@ -154,10 +158,15 @@ GoRouter getRouter() {
       GoRoute(
         path: '/ebook-detail',
         name: 'ebook-detail',
-        builder: (context, state) => EbookDetailScreen(
-          productId: state.uri.queryParameters['productId'] ?? '',
-          initialReferralCode: state.uri.queryParameters['ref'] ?? '',
-        ),
+        builder: (context, state) {
+          if (!AppConstants.resourcesEnabled) {
+            return const NavbarScreen(initialIndex: 1);
+          }
+          return EbookDetailScreen(
+            productId: state.uri.queryParameters['productId'] ?? '',
+            initialReferralCode: state.uri.queryParameters['ref'] ?? '',
+          );
+        },
       ),
       GoRoute(
         path: '/edit-profile',
