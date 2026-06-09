@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
@@ -514,6 +516,14 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
   }
 
   Future<void> _startCheckout(EbookProduct product) async {
+    if (Platform.isIOS) {
+      ErrorHandler.showSnackBar(
+        'Purchases are currently unavailable. Please try again later.',
+        isError: true,
+        context: context,
+      );
+      return;
+    }
     final shouldContinue = await _showCheckoutSheet(product);
     if (!mounted || shouldContinue != true) return;
     await _buyWithStripe(product);
@@ -959,7 +969,9 @@ class _EbookDetailScreenState extends State<EbookDetailScreen> {
                                 size: 18,
                               ),
                         label: Text(
-                          product.isBundle
+                          Platform.isIOS && !isUnlocked
+                              ? 'Purchases unavailable'
+                              : product.isBundle
                               ? isUnlocked
                                     ? 'Bundle Unlocked'
                                     : 'Purchase Bundle'

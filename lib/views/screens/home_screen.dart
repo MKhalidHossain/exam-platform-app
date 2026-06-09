@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +22,7 @@ import '../widgets/unlock_exam_dialog.dart';
 import '../../services/exam_service.dart';
 import '../../services/referral_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/iap_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -40,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late final HomeController _homeController;
   final StorageService _storageService = StorageService();
   final List<Worker> _sessionWorkers = <Worker>[];
+  IapCompletedPurchase? _lastHandledIapCompletion;
   bool _sessionRedirected = false;
 
   @override
@@ -63,6 +67,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (expired) _handleSessionExpired();
       }),
     );
+    if (Get.isRegistered<IapService>()) {
+      _sessionWorkers.add(
+        ever<IapCompletedPurchase?>(
+          Get.find<IapService>().lastCompletedPurchase,
+          _handleIapCompleted,
+        ),
+      );
+    }
 
     if (_userController.sessionExpired.value ||
         _homeController.sessionExpired.value) {
@@ -113,6 +125,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (!mounted) return;
     context.go('/login');
+  }
+
+  Future<void> _handleIapCompleted(IapCompletedPurchase? completed) async {
+    if (completed == null ||
+        identical(completed, _lastHandledIapCompletion) ||
+        completed.kind != IapPurchaseKind.exam) {
+      return;
+    }
+    _lastHandledIapCompletion = completed;
+
+    await _homeController.fetchActiveExams();
+    await _userController.refreshProfile();
+    if (!mounted) return;
+
+    final examId = (completed.examId ?? '').trim();
+    Exam? exam;
+    for (final item in _homeController.exams) {
+      if ((item.id ?? '').trim() == examId) {
+        exam = item;
+        break;
+      }
+    }
+    if (exam == null || completed.paymentDetails == null) {
+      ErrorHandler.showSnackBar(
+        'Exam unlocked successfully.',
+        isError: false,
+        context: context,
+      );
+      return;
+    }
+
+    context.push(
+      '/exam-unlock-success',
+      extra: {
+        'courseTitle': exam.name ?? 'Exam Unlock',
+        'examId': examId,
+        'questionCount': exam.questionCount,
+        'effectivitySheetContent': exam.effectivitySheetContent,
+        'bodyOfKnowledgeContent': exam.bodyOfKnowledgeContent,
+        'paymentSummary': completed.paymentDetails!.toJson(),
+      },
+    );
   }
 
   @override
@@ -407,7 +461,7 @@ class HomeDashboard extends StatelessWidget {
       hideLoading();
 
       if (confirmRes.success) {
-        await userController.applyProfessionalUpgrade(examId: examId);
+        await userController.addUnlockedExamId(examId);
         await userController.refreshProfile();
         if (!context.mounted) return;
         final DateTime fallbackPaidAt = DateTime.now();
@@ -670,6 +724,7 @@ class HomeDashboard extends StatelessWidget {
                             effectivitySheetContent:
                                 exam.effectivitySheetContent,
                             bodyOfKnowledgeContent: exam.bodyOfKnowledgeContent,
+                            code: exam.code,
                             isUnlocked: exam.unlocked,
                             unlockPrice: exam.unlockPrice,
                             currency: exam.currency,
@@ -687,6 +742,10 @@ class HomeDashboard extends StatelessWidget {
                 }
               }
               final orderedItems = [...unlockedItems, ...lockedItems];
+              final IapService? iapService =
+                  Platform.isIOS && Get.isRegistered<IapService>()
+                  ? Get.find<IapService>()
+                  : null;
 
               if (isLoading && controller.exams.isEmpty) {
                 return Padding(
@@ -719,12 +778,34 @@ class HomeDashboard extends StatelessWidget {
               return Column(
                 children: orderedItems.map((course) {
                   final isUnlocked = _isUnlocked(course);
+                  final resolvedExamCode = iapService?.resolveExamCode(
+                    code: course.code,
+                    name: course.title,
+                  );
+                  final iapProductId = resolvedExamCode == null
+                      ? null
+                      : examIapProductIds[resolvedExamCode];
+                  final iapPrice = iapService?.priceForExam(
+                    examCode: course.code,
+                    examName: course.title,
+                  );
+                  final iapUnavailable =
+                      iapService != null &&
+                      !isUnlocked &&
+                      (iapProductId == null || iapPrice == null);
+                  final isIapPurchasing =
+                      iapProductId != null &&
+                      (iapService?.inFlightProductIds.contains(iapProductId) ??
+                          false);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: CourseCard(
                       course: course,
                       isUnlocked: isUnlocked,
                       showPriceUnlock: planTier == PlanTier.professional,
+                      iapPrice: iapPrice,
+                      iapUnavailable: iapUnavailable,
+                      isPurchasing: isIapPurchasing,
                       onTap: () {
                         if (isUnlocked || planTier == PlanTier.starter) {
                           context.push(
@@ -738,6 +819,33 @@ class HomeDashboard extends StatelessWidget {
                               'bodyOfKnowledgeContent':
                                   course.bodyOfKnowledgeContent,
                             },
+                          );
+                          return;
+                        }
+
+                        if (Platform.isIOS) {
+                          if (iapService == null ||
+                              !iapService.isStoreAvailable.value) {
+                            ErrorHandler.showSnackBar(
+                              'Purchases are currently unavailable. Please try again later.',
+                              isError: true,
+                              context: context,
+                            );
+                            return;
+                          }
+                          if (iapUnavailable) {
+                            ErrorHandler.showSnackBar(
+                              'Purchase is not available for this exam.',
+                              isError: true,
+                              context: context,
+                            );
+                            return;
+                          }
+                          if (isIapPurchasing) return;
+                          iapService.buyExamUnlock(
+                            examId: course.examId ?? course.id,
+                            examCode: course.code,
+                            examName: course.title,
                           );
                           return;
                         }
@@ -922,6 +1030,9 @@ class CourseCard extends StatelessWidget {
   final CourseItem course;
   final bool isUnlocked;
   final bool showPriceUnlock;
+  final String? iapPrice;
+  final bool iapUnavailable;
+  final bool isPurchasing;
   final VoidCallback onTap;
 
   const CourseCard({
@@ -929,6 +1040,9 @@ class CourseCard extends StatelessWidget {
     required this.course,
     required this.isUnlocked,
     required this.showPriceUnlock,
+    this.iapPrice,
+    this.iapUnavailable = false,
+    this.isPurchasing = false,
     required this.onTap,
   });
 
@@ -999,6 +1113,9 @@ class CourseCard extends StatelessWidget {
             _CourseStatus(
               isUnlocked: isUnlocked,
               showPriceUnlock: showPriceUnlock,
+              iapPrice: iapPrice,
+              iapUnavailable: iapUnavailable,
+              isPurchasing: isPurchasing,
               unlockPrice: course.unlockPrice,
               currency: course.currency,
             ),
@@ -1026,12 +1143,18 @@ String _formatUnlockLabel(double? price, String? currency) {
 class _CourseStatus extends StatelessWidget {
   final bool isUnlocked;
   final bool showPriceUnlock;
+  final String? iapPrice;
+  final bool iapUnavailable;
+  final bool isPurchasing;
   final double? unlockPrice;
   final String? currency;
 
   const _CourseStatus({
     required this.isUnlocked,
     required this.showPriceUnlock,
+    this.iapPrice,
+    this.iapUnavailable = false,
+    this.isPurchasing = false,
     this.unlockPrice,
     this.currency,
   });
@@ -1057,7 +1180,13 @@ class _CourseStatus extends StatelessWidget {
     }
 
     if (showPriceUnlock) {
-      final label = _formatUnlockLabel(unlockPrice, currency);
+      final label = isPurchasing
+          ? 'Purchasing...'
+          : iapUnavailable
+          ? 'Unavailable'
+          : iapPrice != null
+          ? 'Unlock for $iapPrice'
+          : _formatUnlockLabel(unlockPrice, currency);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -1123,6 +1252,7 @@ class CourseItem {
   final int? questionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
+  final String? code;
   final bool? isUnlocked;
   final double? unlockPrice;
   final String? currency;
@@ -1137,6 +1267,7 @@ class CourseItem {
     this.questionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
+    this.code,
     this.isUnlocked,
     this.unlockPrice,
     this.currency,

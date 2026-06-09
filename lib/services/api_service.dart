@@ -887,6 +887,31 @@ class ApiService {
     );
   }
 
+  Future<ApiResponse<Map<String, dynamic>>> verifyAppleExamPurchase({
+    required String examId,
+    required Map<String, dynamic> purchasePayload,
+  }) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examAppleVerify(examId),
+      body: purchasePayload,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> verifyAppleProfessionalPurchase({
+    required Map<String, dynamic> purchasePayload,
+  }) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.professionalPlanAppleVerify(),
+      body: purchasePayload,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
   /// Create support ticket (Help & Support). POST {{base_url}}/api/v1/support
   /// Requires auth. Optional attachment field name is "attachment".
   Future<ApiResponse<Map<String, dynamic>>> createSupportTicket({

@@ -74,6 +74,9 @@ dependencies:
   # Stripe payments
   flutter_stripe: ^12.2.0
 
+  # Apple / Google in-app purchases
+  in_app_purchase: ^3.3.0
+
   # Text to speech
   flutter_tts: ^3.8.5
 

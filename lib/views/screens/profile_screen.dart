@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
@@ -10,6 +12,7 @@ import '../../services/user_service.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../services/iap_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -332,6 +335,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             context.push('/subscribe');
                           },
                         ),
+                        if (Platform.isIOS &&
+                            Get.isRegistered<IapService>()) ...[
+                          const SizedBox(height: 12),
+                          _SettingItem(
+                            icon: Icons.restore,
+                            title: 'Restore Purchases',
+                            subtitle:
+                                'Restore Apple purchases for this account',
+                            onTap: () {
+                              Get.find<IapService>().restorePurchases();
+                            },
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.lock_open_outlined,

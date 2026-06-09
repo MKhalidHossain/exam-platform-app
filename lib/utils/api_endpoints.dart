@@ -80,4 +80,8 @@ class ApiEndpoints {
       '$payments/plan/professional/stripe/create';
   static String professionalPlanStripeConfirm() =>
       '$payments/plan/professional/stripe/confirm';
+  static String examAppleVerify(String examId) =>
+      '$payments/apple/exam/$examId/verify';
+  static String professionalPlanAppleVerify() =>
+      '$payments/apple/plan/professional/verify';
 }
