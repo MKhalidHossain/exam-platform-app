@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
@@ -10,16 +12,19 @@ import 'controllers/auth_controller.dart';
 import 'controllers/quiz_voice_controller.dart';
 import 'controllers/splash_controller.dart';
 import 'controllers/theme_controller.dart';
+import 'services/iap_service.dart';
 
 final _router = getRouter();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  Stripe.publishableKey = AppConstants.stripePublishableKey;
-  // Return URL scheme for 3DS / redirect-based payment methods (Android & iOS)
-  Stripe.urlScheme = 'flutterstripe';
-  await Stripe.instance.applySettings();
+  if (!Platform.isIOS) {
+    Stripe.publishableKey = AppConstants.stripePublishableKey;
+    // Return URL scheme for 3DS / redirect-based payment methods.
+    Stripe.urlScheme = 'flutterstripe';
+    await Stripe.instance.applySettings();
+  }
 
   // Ensure installation identifier exists before any API/auth actions.
   await InstallationIdService().getOrCreateInstallationId();
@@ -29,6 +34,7 @@ void main() async {
   Get.put(AuthController(), permanent: true);
   Get.put(QuizVoiceController(), permanent: true);
   Get.put(SplashController(), permanent: true);
+  await Get.putAsync<IapService>(() => IapService().init(), permanent: true);
 
   runApp(const MyApp());
 }

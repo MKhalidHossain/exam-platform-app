@@ -5,6 +5,7 @@ class ExamModel {
   final int? questionCount;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
+  final String? code;
   final bool? unlocked;
   final double? unlockPrice;
   final String? currency;
@@ -16,6 +17,7 @@ class ExamModel {
     this.questionCount,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
+    this.code,
     this.unlocked,
     this.unlockPrice,
     this.currency,
@@ -34,6 +36,10 @@ class ExamModel {
       questionCount: Exam._toInt(json['n_question']),
       effectivitySheetContent: json['effectivitySheetContent']?.toString(),
       bodyOfKnowledgeContent: json['bodyOfKnowledgeContent']?.toString(),
+      code:
+          json['code']?.toString() ??
+          json['examCode']?.toString() ??
+          json['slug']?.toString(),
       unlocked: Exam._toBool(json['unlocked']),
       unlockPrice: Exam._toDouble(json['unlockPrice'] ?? json['unlock_price']),
       currency: json['currency']?.toString(),
@@ -45,10 +51,7 @@ class ExamImage {
   final String? publicId;
   final String? url;
 
-  const ExamImage({
-    this.publicId,
-    this.url,
-  });
+  const ExamImage({this.publicId, this.url});
 
   factory ExamImage.fromJson(Map<String, dynamic> json) {
     return ExamImage(
@@ -58,10 +61,7 @@ class ExamImage {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'public_id': publicId,
-      'url': url,
-    };
+    return {'public_id': publicId, 'url': url};
   }
 }
 
@@ -72,6 +72,7 @@ class Exam {
   final int? durationMinutes;
   final String? effectivitySheetContent;
   final String? bodyOfKnowledgeContent;
+  final String? code;
   final String? status;
   final int? questionCount;
   final String? createdBy;
@@ -88,6 +89,7 @@ class Exam {
     this.durationMinutes,
     this.effectivitySheetContent,
     this.bodyOfKnowledgeContent,
+    this.code,
     this.status,
     this.questionCount,
     this.createdBy,
@@ -139,6 +141,10 @@ class Exam {
       durationMinutes: _toInt(json['durationMinutes']),
       effectivitySheetContent: json['effectivitySheetContent']?.toString(),
       bodyOfKnowledgeContent: json['bodyOfKnowledgeContent']?.toString(),
+      code:
+          json['code']?.toString() ??
+          json['examCode']?.toString() ??
+          json['slug']?.toString(),
       status: json['status']?.toString(),
       questionCount: _toInt(json['n_question']),
       createdBy: json['createdBy']?.toString(),
@@ -158,6 +164,7 @@ class Exam {
       'durationMinutes': durationMinutes,
       'effectivitySheetContent': effectivitySheetContent,
       'bodyOfKnowledgeContent': bodyOfKnowledgeContent,
+      'code': code,
       'status': status,
       'n_question': questionCount,
       'createdBy': createdBy,
@@ -176,12 +183,7 @@ class ExamsMeta {
   final int? total;
   final int? totalPages;
 
-  const ExamsMeta({
-    this.page,
-    this.limit,
-    this.total,
-    this.totalPages,
-  });
+  const ExamsMeta({this.page, this.limit, this.total, this.totalPages});
 
   factory ExamsMeta.fromJson(Map<String, dynamic> json) {
     return ExamsMeta(
@@ -206,10 +208,7 @@ class ActiveExamsData {
   final List<Exam> exams;
   final ExamsMeta? meta;
 
-  const ActiveExamsData({
-    this.exams = const [],
-    this.meta,
-  });
+  const ActiveExamsData({this.exams = const [], this.meta});
 
   factory ActiveExamsData.fromJson(Map<String, dynamic> json) {
     final examsJson = json['exams'];
@@ -227,10 +226,7 @@ class ActiveExamsData {
       parsedMeta = ExamsMeta.fromJson(metaJson);
     }
 
-    return ActiveExamsData(
-      exams: parsedExams,
-      meta: parsedMeta,
-    );
+    return ActiveExamsData(exams: parsedExams, meta: parsedMeta);
   }
 
   Map<String, dynamic> toJson() {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
@@ -13,6 +15,7 @@ import '../../models/professional_plan_model.dart';
 import '../../models/referral_model.dart';
 import '../../services/api_service.dart';
 import '../../services/exam_service.dart';
+import '../../services/iap_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/app_constants.dart';
 import '../widgets/app_shimmer.dart';
@@ -30,7 +33,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   final ExamService _examService = ExamService();
   final ApiService _apiService = ApiService();
   final StorageService _storageService = StorageService();
+  final List<Worker> _iapWorkers = <Worker>[];
   late final UserController _userController;
+  IapCompletedPurchase? _lastHandledIapCompletion;
   bool _isPaymentLoading = false;
 
   ProfessionalPlanModel? professionalPlan;
@@ -43,7 +48,62 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     _userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
         : Get.put(UserController());
+    if (Get.isRegistered<IapService>()) {
+      _iapWorkers.add(
+        ever<IapCompletedPurchase?>(
+          Get.find<IapService>().lastCompletedPurchase,
+          _handleIapCompleted,
+        ),
+      );
+    }
     _loadProfessionalPlan();
+  }
+
+  @override
+  void dispose() {
+    for (final worker in _iapWorkers) {
+      worker.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _handleIapCompleted(IapCompletedPurchase? completed) async {
+    if (completed == null || identical(completed, _lastHandledIapCompletion)) {
+      return;
+    }
+    _lastHandledIapCompletion = completed;
+    await _userController.refreshProfile();
+    await _loadProfessionalPlan();
+    if (!mounted) return;
+
+    if (completed.kind == IapPurchaseKind.professional) {
+      final paymentDetails = completed.paymentDetails;
+      if (paymentDetails == null) {
+        ErrorHandler.showSnackBar(
+          'Professional Plan activated.',
+          isError: false,
+          context: context,
+        );
+        return;
+      }
+      context.push(
+        '/exam-unlock-success',
+        extra: {
+          'courseTitle': 'Professional Plan',
+          'examId': completed.examId ?? '',
+          'paymentSummary': paymentDetails.toJson(),
+        },
+      );
+      return;
+    }
+
+    if (completed.kind == IapPurchaseKind.exam) {
+      ErrorHandler.showSnackBar(
+        'Exam unlocked successfully.',
+        isError: false,
+        context: context,
+      );
+    }
   }
 
   Future<void> _loadProfessionalPlan() async {
@@ -351,6 +411,15 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         !isProfessionalActive && (professionalPlan?.referralEligible ?? false)
         ? professionalPlan?.referralOffer
         : null;
+    final IapService? iapService =
+        Platform.isIOS && Get.isRegistered<IapService>()
+        ? Get.find<IapService>()
+        : null;
+    final bool canUseIap =
+        !Platform.isIOS ||
+        (iapService != null &&
+            iapService.isStoreAvailable.value &&
+            iapService.professionalProduct != null);
 
     if (referralOffer != null) {
       children.add(_buildReferralReadyBanner(referralOffer));
@@ -369,13 +438,54 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         planTier: PlanTier.professional,
         isActive: isProfessionalActive,
         professionalPlan: professionalPlan,
-        onUpgrade: !_isPaymentLoading
+        onUpgrade: !_isPaymentLoading && canUseIap
             ? () => _openUnlockExamDialog(
                 isProfessionalActive: isProfessionalActive,
               )
             : null,
       ),
     );
+    if (Platform.isIOS && Get.isRegistered<IapService>()) {
+      final iapService = Get.find<IapService>();
+      children.add(const SizedBox(height: 14));
+      children.add(
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton.icon(
+            onPressed: iapService.isRestoring.value
+                ? null
+                : () => iapService.restorePurchases(),
+            icon: const Icon(Icons.restore),
+            label: Text(
+              iapService.isRestoring.value
+                  ? 'Restoring...'
+                  : 'Restore Purchases',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF2D4F88),
+              side: const BorderSide(color: Color(0xFF2D4F88)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+          ),
+        ),
+      );
+      if (iapService.errorMessage.value.isNotEmpty) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              iapService.errorMessage.value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 12),
+            ),
+          ),
+        );
+      }
+    }
 
     if (_isPaymentLoading) {
       children.add(
@@ -404,6 +514,24 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
       );
     }
 
+    children.add(const SizedBox(height: 18));
+    children.add(
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          TextButton(
+            onPressed: () => context.push('/privacy-policy'),
+            child: const Text('Privacy Policy'),
+          ),
+          TextButton(
+            onPressed: () => context.push('/terms-of-service'),
+            child: const Text('Terms of Use'),
+          ),
+        ],
+      ),
+    );
     children.add(const SizedBox(height: 32));
     return Column(children: children);
   }
@@ -480,6 +608,32 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           'bodyOfKnowledgeContent': result.exam.bodyOfKnowledgeContent,
         },
       );
+      return;
+    }
+
+    if (Platform.isIOS) {
+      final iapService = Get.isRegistered<IapService>()
+          ? Get.find<IapService>()
+          : null;
+      if (iapService == null || !iapService.isStoreAvailable.value) {
+        ErrorHandler.showSnackBar(
+          'Purchases are currently unavailable. Please try again later.',
+          isError: true,
+          context: context,
+        );
+        return;
+      }
+      if (isProfessionalActive) {
+        await iapService.buyExamUnlock(
+          examId: result.exam.id,
+          examCode: result.exam.code,
+          examName: result.exam.name,
+        );
+      } else {
+        await iapService.buyProfessionalSubscription(
+          selectedExamId: result.exam.id,
+        );
+      }
       return;
     }
 
@@ -913,6 +1067,11 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   }) {
     final bool isStarter = planTier == PlanTier.starter;
     final plan = professionalPlan;
+    final IapService? iapService =
+        Platform.isIOS && Get.isRegistered<IapService>()
+        ? Get.find<IapService>()
+        : null;
+    final String? appStorePlanPrice = iapService?.professionalPrice;
 
     if (!isStarter && isActive) {
       return _buildActiveProfessionalPlanCard(
@@ -1061,7 +1220,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  plan?.priceFormatted ?? '\$180.00',
+                  appStorePlanPrice ?? plan?.priceFormatted ?? 'Loading...',
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -1149,9 +1308,13 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                   elevation: 0,
                 ),
                 child: Text(
-                  plan != null
-                      ? 'Subscribe - ${plan.priceFormatted}'
-                      : 'Subscribe - \$180.00',
+                  appStorePlanPrice != null
+                      ? 'Subscribe - $appStorePlanPrice'
+                      : Platform.isIOS
+                      ? 'Purchases unavailable'
+                      : (plan != null
+                            ? 'Subscribe - ${plan.priceFormatted}'
+                            : 'Subscribe'),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
