@@ -502,22 +502,23 @@ class ApiService {
 
   // User Registration
   Future<ApiResponse<AuthResponse>> register({
-    required String phone,
+    String? phone,
     required String name,
     required String email,
     required String password,
     required String confirmPassword,
     String? referralCode,
   }) async {
+    final trimmedPhone = phone?.trim() ?? '';
     final trimmedReferralCode = referralCode?.trim() ?? '';
     final installationId = await _storageService.getOrCreateInstallationId();
     final body = {
-      'phone': phone,
       'name': name,
       'email': email,
       'password': password,
       'confirmPassword': confirmPassword,
       'installationId': installationId,
+      if (trimmedPhone.isNotEmpty) 'phone': trimmedPhone,
       if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
     };
 

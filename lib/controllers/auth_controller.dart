@@ -155,7 +155,7 @@ class AuthController extends GetxController {
 
   Future<void> register(
     BuildContext context, {
-    required String phone,
+    String? phone,
     required String name,
     required String email,
     required String password,
