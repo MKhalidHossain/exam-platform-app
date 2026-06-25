@@ -2,6 +2,10 @@ class AppConstants {
   // App Info
   static const String appName = "Inspector's Path";
   static const String appVersion = '1.0.0';
+  static const String privacyPolicyUrl =
+      'https://inspectorspath.com/privacy-policy/';
+  static const String termsOfUseUrl =
+      'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
   // API Constants
   static const String apiOrigin = 'http://187.77.10.158:5001';

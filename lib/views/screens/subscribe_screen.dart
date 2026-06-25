@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/user_controller.dart';
 import '../../core/error/error_handler.dart';
@@ -30,6 +31,15 @@ class SubscribeScreen extends StatefulWidget {
 }
 
 class _SubscribeScreenState extends State<SubscribeScreen> {
+  static const String _proPlanTitle = 'Pro Plan 6 Months';
+  static const String _proPlanDuration = '6 months';
+  static const String _proPlanBenefitsText =
+      'Includes full access to API certification exam preparation, all API exams, full-length mock exams, timed simulation mode, study mode, progress tracking, performance dashboard, exam history, and detailed answer explanations.';
+  static const String _proPlanRenewalText =
+      'This subscription auto-renews every 6 months unless cancelled at least 24 hours before the end of the current period. Payment will be charged to your Apple ID account at confirmation of purchase. You can manage or cancel your subscription in your Apple ID subscription settings.';
+  static const String _proPlanAgreementText =
+      'By subscribing, you agree to our Terms of Use and Privacy Policy.';
+
   final ExamService _examService = ExamService();
   final ApiService _apiService = ApiService();
   final StorageService _storageService = StorageService();
@@ -241,6 +251,18 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
   bool _isDuplicateResourcePurchaseResponse<T>(ApiResponse<T> response) {
     final message = response.message?.toLowerCase() ?? '';
     return message.contains('resource purchase id already exists');
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.parse(url);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ErrorHandler.showSnackBar(
+        'Unable to open link. Please try again.',
+        isError: true,
+        context: context,
+      );
+    }
   }
 
   Future<void> _completeProfessionalUpgradeSuccess(
@@ -460,7 +482,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             label: Text(
               iapService.isRestoring.value
                   ? 'Restoring...'
-                  : 'Restore Purchases',
+                  : 'Restore Purchase',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             style: OutlinedButton.styleFrom(
@@ -522,11 +544,11 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
         runSpacing: 4,
         children: [
           TextButton(
-            onPressed: () => context.push('/privacy-policy'),
+            onPressed: () => _openExternalUrl(AppConstants.privacyPolicyUrl),
             child: const Text('Privacy Policy'),
           ),
           TextButton(
-            onPressed: () => context.push('/terms-of-service'),
+            onPressed: () => _openExternalUrl(AppConstants.termsOfUseUrl),
             child: const Text('Terms of Use'),
           ),
         ],
@@ -1135,9 +1157,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            isStarter
-                                ? 'Starter Plan'
-                                : (plan?.name ?? 'Professional Plan'),
+                            isStarter ? 'Starter Plan' : _proPlanTitle,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -1229,7 +1249,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '/${plan?.interval.label ?? '3 months'}',
+                  '/ $_proPlanDuration',
                   style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
               ],
@@ -1239,9 +1259,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
           Container(height: 1, color: Colors.grey[200]),
           const SizedBox(height: 20),
           Text(
-            isStarter
-                ? 'What\'s Included in Your Plan'
-                : (plan?.description ?? 'What\'s Included in Your Plan'),
+            isStarter ? 'What\'s Included in Your Plan' : 'Benefits',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -1249,7 +1267,52 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          ..._buildFeaturesList(isStarter, professionalPlan: plan),
+          if (isStarter)
+            ..._buildFeaturesList(isStarter, professionalPlan: plan)
+          else ...[
+            const Text(
+              _proPlanBenefitsText,
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF111827),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              _proPlanRenewalText,
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF4B5563),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              _proPlanAgreementText,
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF4B5563),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 0,
+              children: [
+                TextButton(
+                  onPressed: () => _openExternalUrl(AppConstants.termsOfUseUrl),
+                  child: const Text('Terms of Use'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _openExternalUrl(AppConstants.privacyPolicyUrl),
+                  child: const Text('Privacy Policy'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           if (isStarter)
             SizedBox(
@@ -1308,13 +1371,9 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                   elevation: 0,
                 ),
                 child: Text(
-                  appStorePlanPrice != null
-                      ? 'Subscribe - $appStorePlanPrice'
-                      : Platform.isIOS
+                  Platform.isIOS && appStorePlanPrice == null
                       ? 'Purchases unavailable'
-                      : (plan != null
-                            ? 'Subscribe - ${plan.priceFormatted}'
-                            : 'Subscribe'),
+                      : 'Subscribe',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -1340,12 +1399,12 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     final subscription = plan?.subscription;
     final profileUser = _userController.user.value;
     final billingCycle =
-        subscription?.billingCycle?.label ?? plan?.interval.label ?? '3 months';
+        subscription?.billingCycle?.label ?? plan?.interval.label ?? '6 months';
     final nextBillingDate = _formatDate(
       profileUser?.subscriptionExpiresAt ?? subscription?.nextBillingDate,
     );
     final planPrice = plan?.priceFormatted ?? '\$180.00';
-    final intervalLabel = '/${plan?.interval.label ?? billingCycle}';
+    const intervalLabel = '/ 6 months';
     final unlockLabel = plan?.unlockExamPriceFormatted ?? '\$250.00';
 
     return Container(
@@ -1387,7 +1446,7 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
-                  plan?.name ?? 'Professional Plan',
+                  _proPlanTitle,
                   style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w600,
