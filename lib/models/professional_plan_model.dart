@@ -4,6 +4,7 @@
 ///   "data": { "plan": { ... }, "subscription": { ... } }
 /// }
 library;
+
 import 'referral_model.dart';
 
 class ProfessionalPlanModel {
@@ -95,7 +96,7 @@ class ProfessionalPlanModel {
                   ? planJson['interval'] as Map<String, dynamic>
                   : Map<String, dynamic>.from(planJson['interval'] as Map),
             )
-          : const PlanInterval(count: 3, unit: 'months', label: '3 months'),
+          : const PlanInterval(count: 6, unit: 'months', label: '6 months'),
       description: planJson['description'] as String?,
       features:
           (planJson['features'] as List<dynamic>?)

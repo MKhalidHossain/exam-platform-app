@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_shimmer.dart';
 import '../../core/error/error_handler.dart';
@@ -13,6 +14,7 @@ import '../../controllers/user_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../services/iap_service.dart';
+import '../../utils/app_constants.dart';
 
 class ProfileScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -52,6 +54,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 'Hi, Good Evening';
     } else {
       return 'Hi, Good Night';
+    }
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ErrorHandler.showSnackBar(
+        'Unable to open link. Please try again.',
+        isError: true,
+        context: context,
+      );
     }
   }
 
@@ -340,7 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 12),
                           _SettingItem(
                             icon: Icons.restore,
-                            title: 'Restore Purchases',
+                            title: 'Restore Purchase',
                             subtitle:
                                 'Restore Apple purchases for this account',
                             onTap: () {
@@ -369,19 +385,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.privacy_tip_outlined,
-                          title: 'Privacy policy',
+                          title: 'Privacy Policy',
                           subtitle: 'How we handle your data',
                           onTap: () {
-                            context.push('/privacy-policy');
+                            _openExternalUrl(AppConstants.privacyPolicyUrl);
                           },
                         ),
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.description_outlined,
-                          title: 'Terms of Service',
+                          title: 'Terms of Use',
                           subtitle: 'App usage terms and conditions',
                           onTap: () {
-                            context.push('/terms-of-service');
+                            _openExternalUrl(AppConstants.termsOfUseUrl);
                           },
                         ),
                         const SizedBox(height: 12),
