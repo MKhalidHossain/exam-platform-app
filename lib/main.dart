@@ -72,7 +72,7 @@ class _MyAppState extends State<MyApp> {
           : ThemeMode.light;
       return MaterialApp.router(
         key: ValueKey<ThemeMode>(themeMode),
-        title: 'EJ Flutter App',
+        title: "Inspector's Path",
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,

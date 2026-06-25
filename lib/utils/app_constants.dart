@@ -1,6 +1,6 @@
 class AppConstants {
   // App Info
-  static const String appName = 'EJ Flutter App';
+  static const String appName = "Inspector's Path";
   static const String appVersion = '1.0.0';
 
   // API Constants
@@ -9,8 +9,8 @@ class AppConstants {
   static const String baseUrl = '$apiOrigin/api/v1';
   static const String publicBaseUrl = apiOrigin;
   static const Duration apiTimeout = Duration(seconds: 30);
-  
-// Feature Flags 
+
+  // Feature Flags
   static const bool resourcesEnabled = false;
 
   // null = no timeout (wait indefinitely).
