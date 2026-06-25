@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/error/error_handler.dart';
 import '../../services/iap_service.dart';
+import '../../utils/app_constants.dart';
 import '../widgets/gradient_background.dart';
 
 class ProfessionalPlanScreen extends StatefulWidget {
@@ -15,6 +18,26 @@ class ProfessionalPlanScreen extends StatefulWidget {
 
 class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
   final RxBool _screenTick = false.obs;
+  static const String _benefitsText =
+      'Includes full access to API certification exam preparation, all API exams, full-length mock exams, timed simulation mode, study mode, progress tracking, performance dashboard, exam history, and detailed answer explanations.';
+  static const String _renewalText =
+      'This subscription auto-renews every 6 months unless cancelled at least 24 hours before the end of the current period. Payment will be charged to your Apple ID account at confirmation of purchase. You can manage or cancel your subscription in your Apple ID subscription settings.';
+  static const String _agreementText =
+      'By subscribing, you agree to our Terms of Use and Privacy Policy.';
+
+  Future<void> _openExternalUrl(String url) async {
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ErrorHandler.showSnackBar(
+        'Unable to open link. Please try again.',
+        isError: true,
+        context: context,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +128,7 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                                   const SizedBox(width: 12),
                                   const Expanded(
                                     child: Text(
-                                      'Professional Plan',
+                                      'Pro Plan 6 Months',
                                       style: TextStyle(
                                         fontSize: 24,
                                         fontWeight: FontWeight.bold,
@@ -130,7 +153,7 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    '/6 months',
+                                    '/ 6 months',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.grey[600],
@@ -142,7 +165,7 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                               Container(height: 1, color: Colors.grey[200]),
                               const SizedBox(height: 20),
                               const Text(
-                                'What\'s Included in Your Plan',
+                                'Benefits',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -150,20 +173,51 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              // Features List
-                              _buildFeatureItem('Access to selected resources'),
-                              _buildFeatureItem('Full-length mock exams'),
-                              _buildFeatureItem(
-                                'Timed & Full Simulation Modes',
+                              const Text(
+                                _benefitsText,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF111827),
+                                  height: 1.5,
+                                ),
                               ),
-                              _buildFeatureItem('Interactive study mode'),
-                              _buildFeatureItem(
-                                'Progress tracking, Performance Dashboard & exam history',
+                              const SizedBox(height: 14),
+                              const Text(
+                                _renewalText,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF4B5563),
+                                  height: 1.45,
+                                ),
                               ),
-                              _buildFeatureItem(
-                                'Detailed explanations with code references',
+                              const SizedBox(height: 14),
+                              const Text(
+                                _agreementText,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF4B5563),
+                                  height: 1.45,
+                                ),
                               ),
-                              _buildFeatureItem('All Smart Study Tools'),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => _openExternalUrl(
+                                      AppConstants.termsOfUseUrl,
+                                    ),
+                                    child: const Text('Terms of Use'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _openExternalUrl(
+                                      AppConstants.privacyPolicyUrl,
+                                    ),
+                                    child: const Text('Privacy Policy'),
+                                  ),
+                                ],
+                              ),
                               const SizedBox(height: 24),
                               // Upgrade Button
                               SizedBox(
@@ -185,7 +239,7 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                                   child: Text(
                                     appStorePrice == null
                                         ? 'Purchases unavailable'
-                                        : 'Subscribe for $appStorePrice',
+                                        : 'Subscribe',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
@@ -206,27 +260,11 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
                                   label: Text(
                                     iapService?.isRestoring.value == true
                                         ? 'Restoring...'
-                                        : 'Restore Purchases',
+                                        : 'Restore Purchase',
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 8,
-                                children: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        context.push('/privacy-policy'),
-                                    child: const Text('Privacy Policy'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        context.push('/terms-of-service'),
-                                    child: const Text('Terms of Use'),
-                                  ),
-                                ],
-                              ),
                               if (iapService?.errorMessage.value.isNotEmpty ??
                                   false)
                                 Text(
@@ -248,29 +286,6 @@ class _ProfessionalPlanScreenState extends State<ProfessionalPlanScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.check, color: Color(0xFF111827), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF111827),
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
