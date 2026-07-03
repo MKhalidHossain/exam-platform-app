@@ -80,7 +80,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     await _authController.register(
       context,
-      phone: _phoneController.text.trim(),
+      phone: _phoneController.text.trim().isEmpty
+          ? null
+          : _phoneController.text.trim(),
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -168,17 +170,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                   // Phone Number Field
                   CustomTextField(
-                    label: 'Phone Number',
-                    hint: 'Enter your Phone Number',
+                    label: 'Phone Number (Optional)',
+                    hint: 'Enter your Phone Number (Optional)',
                     prefixIcon: Icons.phone_outlined,
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your phone number';
-                      }
-                      return null;
-                    },
                   ),
 
                   const SizedBox(height: 24),

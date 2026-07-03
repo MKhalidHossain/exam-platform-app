@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/error/error_handler.dart';
 import '../../models/ebook_store_model.dart';
 import '../../services/ebook_service.dart';
+import '../../utils/app_constants.dart';
 import '../../utils/app_navigation.dart';
 import '../widgets/app_shimmer.dart';
 import '../widgets/animated_refresh_button.dart';
@@ -34,10 +35,15 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
   @override
   void initState() {
     super.initState();
+    if (!AppConstants.resourcesEnabled) {
+      _isLoading = false;
+      return;
+    }
     _loadData();
   }
 
   Future<void> _loadData() async {
+    if (!AppConstants.resourcesEnabled) return;
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -107,6 +113,53 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AppConstants.resourcesEnabled) {
+      return Scaffold(
+        body: GradientBackground(
+          useImage: true,
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10213F), Color(0xFF2D4F88)],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.inventory_2_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Resources',
+                          style: TextStyle(
+                            color: Color(0xFF10213F),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Expanded(child: _ResourcesComingSoon()),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: GradientBackground(
         useImage: true,
@@ -676,6 +729,67 @@ class _EbookTabScreenState extends State<EbookTabScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ResourcesComingSoon extends StatelessWidget {
+  const _ResourcesComingSoon();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 80, 20, 120),
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0x1F10213F)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x182D4F88),
+                blurRadius: 20,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.construction_rounded,
+                size: 54,
+                color: Color(0xFF2D4F88),
+              ),
+              SizedBox(height: 18),
+              Text(
+                'Resources Coming Soon',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF10213F),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Study guides and reporting tools are being prepared for a future update.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 14,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
