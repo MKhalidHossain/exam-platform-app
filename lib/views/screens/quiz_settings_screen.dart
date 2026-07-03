@@ -88,9 +88,10 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
   }
 
   int _resolveInitialQuestionCount() {
-    final cachedCount = _examCacheKey == null
+    final cacheKey = _examCacheKey;
+    final cachedCount = cacheKey == null
         ? null
-        : _savedQuestionCountsByExam[_examCacheKey!];
+        : _savedQuestionCountsByExam[cacheKey];
     final candidates = <int?>[
       widget.questionCount,
       widget.selectedQuestionCount,
@@ -1517,7 +1518,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
                   );
                   if (useRow) {
                     return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: manualButton),
                         const SizedBox(width: 12),
