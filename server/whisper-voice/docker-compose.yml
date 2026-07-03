@@ -1,0 +1,30 @@
+services:
+  whisper:
+    build: .
+    image: ej7696/whisper-voice:latest
+    container_name: ej7696-whisper-voice
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Set a non-empty token here AND in the Flutter app
+      # (Settings -> Cloud auth token) to lock the endpoint down.
+      AUTH_TOKEN: "${AUTH_TOKEN:-}"
+      # small.en is the sweet spot. Switch to medium.en (~1.5GB) if you
+      # need stronger African-English accuracy and have the RAM/CPU.
+      WHISPER_MODEL: "${WHISPER_MODEL:-small.en}"
+      # cpu/int8 runs fine on a modest VPS (~2 vCPU). Switch to
+      # cuda/float16 if you attach a GPU.
+      WHISPER_DEVICE: "${WHISPER_DEVICE:-cpu}"
+      WHISPER_COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8}"
+    volumes:
+      - whisper-models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  whisper-models:

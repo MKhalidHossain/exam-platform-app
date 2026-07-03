@@ -109,13 +109,8 @@ class UserService {
     );
   }
 
-  /// Delete user (design only - no API call)
+  /// Delete user by ID
   Future<ApiResponse<void>> deleteUser(String id) async {
-    // Mock response for design only
-    await Future.delayed(const Duration(milliseconds: 500));
-    return ApiResponse<void>(
-      success: false,
-      message: 'Design mode - no API calls',
-    );
+    return await _apiService.delete<void>(ApiEndpoints.deleteUser(id));
   }
 }

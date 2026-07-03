@@ -16,6 +16,10 @@ class QuizVoiceOverlay extends StatefulWidget {
   final String idleHint;
   final double bottomPadding;
   final List<String> instructionItems;
+  /// Called when the user taps the in-overlay "What can I say?" button.
+  /// Screens hook this to open [VoiceCommandSheet]. When null the button is
+  /// hidden — backward compatible for any caller that hasn't wired it.
+  final VoidCallback? onHelpTap;
 
   const QuizVoiceOverlay({
     super.key,
@@ -29,6 +33,7 @@ class QuizVoiceOverlay extends StatefulWidget {
     required this.idleHint,
     this.bottomPadding = 30,
     this.instructionItems = const <String>[],
+    this.onHelpTap,
   });
 
   @override
@@ -91,9 +96,18 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
         : Get.put(QuizVoiceController(), permanent: true);
 
     return Obx(() {
+      // Earlier UI treated "preparing" (the brief moment between sessions
+      // while the native plugin re-binds) as a separate UI state and showed
+      // "Microphone is warming up". With the new aggressive restart cadence
+      // (~150 ms) that flickered constantly and felt like the mic was always
+      // warming up. Collapse it: as long as we're either listening or about
+      // to start listening, present a single "Listening" state to the user.
       final bool preparing = widget.isPreparingToListen && !widget.isListening;
       final bool listening = widget.isListening || preparing;
-      final bool activelyListening = widget.isListening;
+      // For visual elements (pulse, ring) treat preparing as actively
+      // listening too — the mic stays "alive" instead of flashing between
+      // states between every utterance.
+      final bool activelyListening = widget.isListening || preparing;
       final bool speaking = widget.isSpeaking;
       final VoiceState voiceState = controller.voiceState.value;
       final String recognizedCommand = controller.recognizedCommand.value;
@@ -117,10 +131,12 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
           ? 0
           : DateTime.now().difference(_listeningStartedAt!).inSeconds;
 
+      // The previous "Microphone is warming up..." branch has been removed.
+      // With aggressive restart cadence the preparing state lasts <300 ms and
+      // showing dedicated copy made the UI feel perpetually in setup mode.
+      // Now the preparing state simply reuses the listening hint.
       final String helperText = retryMessage.isNotEmpty
           ? retryMessage
-          : preparing
-          ? 'Microphone is warming up. Start speaking in a moment.'
           : listening
           ? listeningSeconds >= 8
                 ? "I'm still listening. Take your time and say your command."
@@ -348,6 +364,10 @@ class _QuizVoiceOverlayState extends State<QuizVoiceOverlay>
                             ],
                           ),
                         ),
+                        if (widget.onHelpTap != null) ...[
+                          const SizedBox(width: 8),
+                          _HelpChip(onTap: widget.onHelpTap!),
+                        ],
                       ],
                     ),
                   ),
@@ -466,6 +486,54 @@ class _VoiceBars extends StatelessWidget {
             }),
           );
         },
+      ),
+    );
+  }
+}
+
+class _HelpChip extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _HelpChip({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'What can I say',
+      button: true,
+      child: Tooltip(
+        message: 'What can I say?',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.help_outline_rounded,
+                  size: 16,
+                  color: Color(0xFF1E40AF),
+                ),
+                SizedBox(width: 4),
+                Text(
+                  'Help',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E40AF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

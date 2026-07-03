@@ -1,13 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/app_shimmer.dart';
+import '../../core/error/error_handler.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
 import '../../controllers/user_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/plan_tier.dart';
+import '../../services/iap_service.dart';
+import '../../utils/app_constants.dart';
 
 class ProfileScreen extends StatefulWidget {
   final PlanTier planTier;
@@ -20,7 +27,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
   late final UserController _userController;
+  bool _isDeletingAccount = false;
 
   @override
   void initState() {
@@ -45,6 +54,108 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 'Hi, Good Evening';
     } else {
       return 'Hi, Good Night';
+    }
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ErrorHandler.showSnackBar(
+        'Unable to open link. Please try again.',
+        isError: true,
+        context: context,
+      );
+    }
+  }
+
+  Future<void> _clearSessionAndRouteToOnboarding({
+    bool closeBlockingDialog = false,
+  }) async {
+    await _authService.logout();
+    await _userController.clearState();
+    if (Get.isRegistered<HomeController>()) {
+      Get.find<HomeController>().clearState();
+    }
+
+    if (mounted) {
+      if (closeBlockingDialog) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      context.go('/onboarding');
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    if (_isDeletingAccount) return;
+
+    final userId = (_userController.user.value?.id ?? '').trim();
+    if (userId.isEmpty) {
+      ErrorHandler.showSnackBar(
+        'Unable to delete account right now. Please log in again.',
+        context: context,
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'This will permanently delete your account. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isDeletingAccount = true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: AppShimmerCircle(size: 36)),
+    );
+
+    final response = await _userService.deleteUser(userId);
+    if (!mounted) return;
+
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (!response.success) {
+      ErrorHandler.showFromResponse(
+        response,
+        context: context,
+        failureFallback: 'Unable to delete account. Please try again.',
+      );
+      setState(() => _isDeletingAccount = false);
+      return;
+    }
+
+    ErrorHandler.showSnackBar(
+      ErrorHandler.getMessageFromResponse(
+        response,
+        successFallback: 'Account deleted successfully.',
+      ),
+      isError: false,
+      context: context,
+    );
+
+    await _clearSessionAndRouteToOnboarding();
+    if (mounted) {
+      setState(() => _isDeletingAccount = false);
     }
   }
 
@@ -240,6 +351,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             context.push('/subscribe');
                           },
                         ),
+                        if (Platform.isIOS &&
+                            Get.isRegistered<IapService>()) ...[
+                          const SizedBox(height: 12),
+                          _SettingItem(
+                            icon: Icons.restore,
+                            title: 'Restore Purchase',
+                            subtitle:
+                                'Restore Apple purchases for this account',
+                            onTap: () {
+                              Get.find<IapService>().restorePurchases();
+                            },
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.lock_open_outlined,
@@ -261,19 +385,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.privacy_tip_outlined,
-                          title: 'Privacy policy',
+                          title: 'Privacy Policy',
                           subtitle: 'How we handle your data',
                           onTap: () {
-                            context.push('/privacy-policy');
+                            _openExternalUrl(AppConstants.privacyPolicyUrl);
                           },
                         ),
                         const SizedBox(height: 12),
                         _SettingItem(
                           icon: Icons.description_outlined,
-                          title: 'Terms of Service',
+                          title: 'Terms of Use',
                           subtitle: 'App usage terms and conditions',
                           onTap: () {
-                            context.push('/terms-of-service');
+                            _openExternalUrl(AppConstants.termsOfUseUrl);
                           },
                         ),
                         const SizedBox(height: 12),
@@ -293,6 +417,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onTap: () {
                             context.push('/contact-us');
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingItem(
+                          icon: Icons.delete_forever_outlined,
+                          title: 'Delete Account',
+                          subtitle: _isDeletingAccount
+                              ? 'Deleting your account...'
+                              : 'Permanently remove your account and data',
+                          isLogout: true,
+                          onTap: _deleteAccount,
                         ),
                         const SizedBox(height: 24),
                         // Log Out Button
@@ -334,23 +468,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 );
                               }
-
-                              // Clear all user data and cache
-                              await _authService.logout();
-                              await _userController.clearState();
-                              if (Get.isRegistered<HomeController>()) {
-                                Get.find<HomeController>().clearState();
-                              }
-
-                              if (context.mounted) {
-                                // Close loading dialog
-                                Navigator.of(
-                                  context,
-                                  rootNavigator: true,
-                                ).pop();
-                                // Navigate to onboarding screen
-                                context.go('/onboarding');
-                              }
+                              await _clearSessionAndRouteToOnboarding(
+                                closeBlockingDialog: true,
+                              );
                             }
                           },
                         ),

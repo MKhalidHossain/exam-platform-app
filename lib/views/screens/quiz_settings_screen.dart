@@ -16,6 +16,7 @@ import '../../utils/api_endpoints.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/tts_voice_picker.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
@@ -220,7 +221,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
 
   Future<void> _applyVoiceAssistantSettings() async {
     final settings = _voiceController.assistantSettings.value;
-    await _tts.setLanguage(settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(_tts, languageCode: settings.languageCode);
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }
@@ -590,7 +591,7 @@ class _QuizSettingsScreenState extends State<QuizSettingsScreen>
         setState(() => _isSpeaking = false);
         _syncVoiceSessionState();
         if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-          _scheduleListeningRestart(const Duration(milliseconds: 450));
+          _scheduleListeningRestart(const Duration(milliseconds: 150));
         }
       }
     }
