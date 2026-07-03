@@ -15,14 +15,17 @@ import '../../controllers/history_controller.dart';
 import '../../models/history_attempt_model.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/tts_voice_picker.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../../utils/voice_submit_confirmation_guard.dart';
+import '../../voice/core/voice_command_vocabulary.dart';
 import '../../voice/recognition/voice_audio_recorder.dart';
 import 'history_models.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
 import '../widgets/quiz_voice_overlay.dart';
+import '../widgets/voice_command_sheet.dart';
 
 class ExamReviewScreen extends StatefulWidget {
   final String courseTitle;
@@ -219,7 +222,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   Future<void> _applyVoiceAssistantSettings() async {
     final settings = _voiceController.assistantSettings.value;
-    await _tts.setLanguage(settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(_tts, languageCode: settings.languageCode);
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }
@@ -580,7 +583,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
 
   bool get _cloudFallbackReady {
     final settings = _voiceController.assistantSettings.value;
-    return settings.cloudFallbackEnabled &&
+    return settings.isCloudFallbackActive &&
         _voiceController.cloudSpeechTranscriber != null;
   }
 
@@ -983,20 +986,14 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       screen: QuizVoiceScreen.examReview,
       heardText: rawText,
       sensitivity: settings.commandSensitivity,
-      cloudFallbackEnabled: settings.cloudFallbackEnabled,
+      cloudFallbackEnabled: settings.isCloudFallbackActive,
       cloudSpeechService: _voiceController.cloudSpeechTranscriber,
       fallbackAudioFile: fallbackAudioFile,
       locale: _speechLocaleId ?? settings.speechLocaleCode,
       accentProfile: settings.accentProfile,
-      availableCommands: const <String>[
-        'submit',
-        'finish',
-        'return to question',
-        'unanswered',
-        'flagged',
-        'help',
-        'back',
-      ],
+      availableCommands: VoiceCommandVocabulary.commandsFor(
+        QuizVoiceScreen.examReview,
+      ),
     );
     unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
@@ -1071,18 +1068,16 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
         unawaited(_speakReviewSummary(force: true));
         return;
       case VoiceIntent.help:
-        unawaited(
-          _speakFeedback(
-            'Review commands. '
-            'Say submit, finish, or final submit to finish the exam. '
-            'Say question 5 to return to that question. '
-            'Say unanswered to jump to the first unanswered question. '
-            'Say flagged to jump to the first flagged question. '
-            'Say back to return to the exam. '
-            'Say read to hear this summary again. '
-            'Say stop voice mode to turn off hands free mode.',
-          ),
-        );
+        _openVoiceCommandSheet();
+        return;
+      case VoiceIntent.speakFaster:
+        unawaited(_adjustSpeechRate(0.15));
+        return;
+      case VoiceIntent.speakSlower:
+        unawaited(_adjustSpeechRate(-0.15));
+        return;
+      case VoiceIntent.speakNormal:
+        unawaited(_adjustSpeechRate(null));
         return;
       default:
         break;
@@ -1091,7 +1086,8 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
     unawaited(
       _speakFeedback(
-        '${heard}Not recognised. Try submit, finish, back, unanswered, flagged, or question number.',
+        '${heard}Sorry, I didn\'t catch that. '
+        'Say help, or tap the Help button to see every command.',
       ),
     );
   }
@@ -1106,6 +1102,52 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
       return;
     }
     unawaited(_returnToExam(index));
+  }
+
+  /// Opens the "What can I say?" sheet — same UI used on MCQ. Stops the
+  /// summary narration first so the sheet isn't talked over.
+  void _openVoiceCommandSheet() {
+    if (!mounted) return;
+    unawaited(_stopTtsPlayback());
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const VoiceCommandSheet(screen: QuizVoiceScreen.examReview),
+    );
+  }
+
+  /// Adjusts TTS speech rate. [delta] = positive → faster, negative → slower,
+  /// null → reset to default 0.5. Persists via the controller so the rate
+  /// stays applied across screens.
+  Future<void> _adjustSpeechRate(double? delta) async {
+    final settings = _voiceController.assistantSettings.value;
+    final currentRate = settings.voiceSpeed;
+    final double nextRate = delta == null
+        ? 0.5
+        : (currentRate + delta).clamp(0.2, 1.0).toDouble();
+    if (delta != null && (nextRate - currentRate).abs() < 0.01) {
+      unawaited(
+        _speakFeedback(
+          delta > 0
+              ? "I'm already at top speed."
+              : "I'm already at the slowest speed.",
+        ),
+      );
+      return;
+    }
+    final updated = settings.copyWith(voiceSpeed: nextRate);
+    await _voiceController.updateAssistantSettings(updated);
+    await _applyVoiceAssistantSettings();
+    unawaited(
+      _speakFeedback(
+        delta == null
+            ? 'Reading speed reset.'
+            : delta > 0
+                ? 'Reading faster.'
+                : 'Reading slower.',
+      ),
+    );
   }
 
   void _returnToQuestionViaVoice() {
@@ -1788,6 +1830,7 @@ class _ExamReviewScreenState extends State<ExamReviewScreen>
               idleHint: 'Tap the mic or say a review command.',
               instructionItems: const <String>['submit', 'finish', 'back'],
               bottomPadding: 42,
+              onHelpTap: _openVoiceCommandSheet,
             )
           : null,
     );
