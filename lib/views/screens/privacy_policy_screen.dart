@@ -7,10 +7,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   Future<void> _launchEmail(String email) async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: email,
-    );
+    final Uri emailUri = Uri(scheme: 'mailto', path: email);
     if (await canLaunchUrl(emailUri)) {
       await launchUrl(emailUri);
     }
@@ -52,7 +49,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
               // Content
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -121,7 +121,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       _buildBulletPoint('Fullname'),
                       _buildBulletPoint('Email address'),
-                      _buildBulletPoint('Phone number'),
+                      _buildBulletPoint(
+                        'Phone number (optional, used only if you provide it)',
+                      ),
                       _buildBulletPoint('Profile photo'),
                       _buildBulletPoint('Subscription and billing information'),
                       const SizedBox(height: 12),
@@ -137,7 +139,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       _buildBulletPoint('Exam attempts and scores'),
                       _buildBulletPoint('Study history and progress'),
                       _buildBulletPoint('App interactions and preferences'),
-                      _buildBulletPoint('Device type and operating system (for performance and security)'),
+                      _buildBulletPoint(
+                        'Device type and operating system (for performance and security)',
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'C. Payment Information:',
@@ -166,11 +170,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      _buildBulletPoint('Provide and improve exam preparation services'),
+                      _buildBulletPoint(
+                        'Provide and improve exam preparation services',
+                      ),
                       _buildBulletPoint('Personalize your learning experience'),
                       _buildBulletPoint('Track progress and exam history'),
                       _buildBulletPoint('Manage subscriptions and billing'),
-                      _buildBulletPoint('Communicate important updates (account, security, or service-related)'),
+                      _buildBulletPoint(
+                        'Communicate important updates (account, security, or service-related)',
+                      ),
                       const SizedBox(height: 24),
                       const Text(
                         '4. Data Sharing',
@@ -191,8 +199,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Payment processors (for billing)'),
-                      _buildBulletPoint('Authentication providers (for secure login)'),
-                      _buildBulletPoint('Legal authorities, if required by law'),
+                      _buildBulletPoint(
+                        'Authentication providers (for secure login)',
+                      ),
+                      _buildBulletPoint(
+                        'Legal authorities, if required by law',
+                      ),
                       const SizedBox(height: 24),
                       const Text(
                         '5. Data Security',
@@ -234,8 +246,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      _buildBulletPoint('Account data is retained while your account is active'),
-                      _buildBulletPoint('You may request deletion of your account and associated data at any time'),
+                      _buildBulletPoint(
+                        'Account data is retained while your account is active',
+                      ),
+                      _buildBulletPoint(
+                        'You may request deletion of your account and associated data at any time',
+                      ),
                       const SizedBox(height: 24),
                       const Text(
                         '7. Your Rights',
@@ -326,10 +342,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         children: [
           const Text(
             '• ',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF111827),
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFF111827)),
           ),
           Expanded(
             child: Text(

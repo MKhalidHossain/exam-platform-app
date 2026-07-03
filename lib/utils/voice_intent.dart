@@ -3,6 +3,8 @@ enum VoiceIntent {
   optionB,
   optionC,
   optionD,
+  trueAnswer,
+  falseAnswer,
   next,
   back,
   repeat,
@@ -29,4 +31,7 @@ enum VoiceIntent {
   pauseAssistant,
   resumeAssistant,
   unanswered,
+  speakFaster,
+  speakSlower,
+  speakNormal,
 }

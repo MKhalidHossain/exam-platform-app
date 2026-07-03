@@ -12,14 +12,20 @@ import '../../controllers/user_controller.dart';
 import '../../models/plan_tier.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/tts_voice_picker.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
+import '../../voice/core/voice_command_context.dart';
+import '../../voice/core/voice_command_vocabulary.dart';
 import '../../voice/parsing/voice_command_parser.dart' as core_parser;
 import '../../voice/parsing/voice_text_normalizer.dart';
+import '../../voice/recognition/continuous_voice_capture.dart';
+import '../../voice/recognition/speech_recognition_result.dart' as voice_pkg;
 import '../../voice/recognition/voice_audio_recorder.dart';
 import '../widgets/api_disclaimer_section.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
 import '../widgets/quiz_voice_overlay.dart';
+import '../widgets/voice_command_sheet.dart';
 
 class McqScreen extends StatefulWidget {
   final String courseTitle;
@@ -98,6 +104,31 @@ class _McqScreenState extends State<McqScreen>
   Timer? _voiceLoopRecoveryTimer;
   Timer? _listenStartWatchdogTimer;
   Timer? _partialCommandDebounceTimer;
+
+  /// Fires [voicePartialResultEndpointDelay] after the last partial speech
+  /// result. When it elapses we call `_speech.stop()` to force the native
+  /// engine to finalise the utterance early — way faster than waiting for
+  /// the [voicePauseForDuration] safety net. Each new partial result resets
+  /// the timer; a final result cancels it. Together this gives the user
+  /// "snappy when I'm clearly done" + "never cut me off mid-sentence".
+  Timer? _partialResultEndpointTimer;
+
+  /// Continuous audio-recorder-driven VAD capture. When non-null and
+  /// running, this is the *primary* path: audio is always being recorded,
+  /// speech is endpointed by amplitude, sliced utterances are POSTed
+  /// directly to the cloud Whisper, and native STT is left idle. Eliminates
+  /// the dead-window gaps the user experienced ("after TTS finishes, mic
+  /// can't hear me" + "listening pauses every few seconds").
+  ContinuousVoiceCapture? _continuousCapture;
+  // Continuous capture POSTs sliced utterances directly to the cloud Whisper
+  // transcriber. Without that transcriber there is no destination for the
+  // recognized audio and every utterance is silently dropped — the UI gets
+  // stuck on "Listening". Only enable continuous capture when the cloud
+  // transcriber has actually been wired up; otherwise fall back to the native
+  // speech_to_text plugin path which works out of the box.
+  bool get _useContinuousCapture =>
+      _voiceController.cloudSpeechTranscriber != null;
+  bool _continuousCaptureStarting = false;
   String? _speechLocaleId;
   String _heardText = '';
   String _lastProcessedVoiceText = '';
@@ -115,9 +146,11 @@ class _McqScreenState extends State<McqScreen>
   int _ttsSessionId = 0;
   int _listenSessionId = 0;
   int? _activeListenSessionId;
+  int? _lastProcessedListenSessionId;
   int _listeningRestartAttempts = 0;
   int _consecutiveUnknownCommands = 0;
   bool _isTtsAwaitingCompletion = false;
+  Future<void>? _ttsConfigureFuture;
   final String _voiceScreenToken =
       'mcq-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -164,7 +197,7 @@ class _McqScreenState extends State<McqScreen>
     _voiceModeEnabled =
         widget.voicePracticeMode &&
         (widget.voiceModeEnabled || _voiceController.isEnabledValue);
-    _configureTts();
+    _ttsConfigureFuture = _configureTts();
     unawaited(_primeSpeechAvailability(requestPermission: _voiceModeEnabled));
     final UserController userController = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
@@ -180,7 +213,15 @@ class _McqScreenState extends State<McqScreen>
       if (!mounted) return;
       _activateVoiceScreen();
       _bindVoiceSession(requestEntryAction: false);
-      if (_voiceModeEnabled) unawaited(_runInitialQuestionRead());
+      if (_voiceModeEnabled) {
+        // Start the always-on capture immediately so it survives even if
+        // `_runInitialQuestionRead` short-circuits (e.g. when the user
+        // returns from review with the question already read).
+        if (_useContinuousCapture) {
+          unawaited(_ensureContinuousCaptureRunning());
+        }
+        unawaited(_runInitialQuestionRead());
+      }
     });
   }
 
@@ -192,11 +233,17 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     _listenStartWatchdogTimer?.cancel();
     _partialCommandDebounceTimer?.cancel();
+    _partialResultEndpointTimer?.cancel();
     _voiceAutoAdvanceTimer?.cancel();
     _invalidateListenSession('dispose');
     unawaited(_stopTtsPlayback());
     unawaited(_speech.cancel());
     unawaited(_voiceAudioRecorder.dispose());
+    final capture = _continuousCapture;
+    if (capture != null) {
+      unawaited(capture.dispose());
+      _continuousCapture = null;
+    }
     _voiceController.unbindScreen(
       QuizVoiceScreen.mcq,
       screenToken: _voiceScreenToken,
@@ -217,6 +264,8 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     _listenStartWatchdogTimer?.cancel();
     _partialCommandDebounceTimer?.cancel();
+    _partialResultEndpointTimer?.cancel();
+    await _stopContinuousCapture();
     await _stopTtsPlayback();
     _invalidateListenSession('inactive_screen');
     await _speech.cancel();
@@ -232,8 +281,12 @@ class _McqScreenState extends State<McqScreen>
   // ─── TTS configuration ─────────────────────────────────────────────────────
 
   Future<void> _configureTts() async {
-    await _applyVoiceAssistantSettings();
+    // Enforce sequential speak playback BEFORE any other platform call so that
+    // a racing _speakCurrentQuestion() loop doesn't get QUEUE_FLUSHed and drop
+    // every segment except the last one (which manifested as "options read,
+    // question never read").
     await _tts.awaitSpeakCompletion(true);
+    await _applyVoiceAssistantSettings();
     _tts.setCompletionHandler(() {
       if (!mounted || !_isCurrentVoiceScreen) return;
       if (_isTtsAwaitingCompletion) return;
@@ -269,7 +322,13 @@ class _McqScreenState extends State<McqScreen>
 
   Future<void> _applyVoiceAssistantSettings() async {
     final settings = _voiceController.assistantSettings.value;
-    await _tts.setLanguage(settings.languageCode);
+    // Pick the highest-quality installed voice for the locale (network voices
+    // on Android, premium voices on iOS) instead of letting the platform fall
+    // back to a low-quality "compact" voice. Always sets the language too.
+    await TtsVoicePicker.applyBestVoice(
+      _tts,
+      languageCode: settings.languageCode,
+    );
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }
@@ -306,6 +365,7 @@ class _McqScreenState extends State<McqScreen>
     _voiceLoopRecoveryTimer?.cancel();
     _listenStartWatchdogTimer?.cancel();
     _partialCommandDebounceTimer?.cancel();
+    _partialResultEndpointTimer?.cancel();
     await _stopTtsPlayback();
     _invalidateListenSession('force_recovery');
     await _speech.cancel();
@@ -346,10 +406,28 @@ class _McqScreenState extends State<McqScreen>
     if (!mounted) return;
     _activateVoiceScreen();
     _bindVoiceSession(requestEntryAction: _voiceModeEnabled);
+    if (_voiceModeEnabled && _useContinuousCapture) {
+      unawaited(_ensureContinuousCaptureRunning());
+    }
   }
 
   @override
   void onVoiceRouteInactive() {
+    // Stop STT/TTS as soon as the route becomes inactive — well before
+    // dispose() runs. dispose() is synchronous and the previous
+    // `unawaited(_speech.cancel())` there returned before the platform
+    // actually released the mic, occasionally causing the next screen to
+    // open with a double-listen handle.
+    _listeningRestartTimer?.cancel();
+    _voiceLoopRecoveryTimer?.cancel();
+    _listenStartWatchdogTimer?.cancel();
+    _partialCommandDebounceTimer?.cancel();
+    _partialResultEndpointTimer?.cancel();
+    _invalidateListenSession('route_inactive');
+    unawaited(_stopTtsPlayback());
+    unawaited(_speech.cancel());
+    unawaited(_cancelFallbackAudioCapture());
+    unawaited(_stopContinuousCapture());
     if (_voiceModeEnabled) _voiceController.beginNavigation();
     _voiceController.deactivateScreen(_voiceScreenToken);
   }
@@ -383,6 +461,7 @@ class _McqScreenState extends State<McqScreen>
   int _beginListenSession(String reason) {
     final sessionId = ++_listenSessionId;
     _activeListenSessionId = sessionId;
+    _lastProcessedListenSessionId = null;
     debugPrint('[Voice][mcq] listen session=$sessionId start reason=$reason');
     return sessionId;
   }
@@ -498,6 +577,11 @@ class _McqScreenState extends State<McqScreen>
         onError: (error) {
           debugPrint('[Voice][mcq] speech error: $error');
           if (!mounted || !_isCurrentVoiceScreen) return;
+          if (_useContinuousCapture) {
+            // We're not driving native STT — ignore its self-induced
+            // NO_MATCH / SPEECH_TIMEOUT errors entirely.
+            return;
+          }
           if (!_hasActiveListenSession) {
             debugPrint('[Voice][mcq] speech error ignored: no active session');
             return;
@@ -520,6 +604,11 @@ class _McqScreenState extends State<McqScreen>
         onStatus: (status) {
           debugPrint('[Voice][mcq] speech status=$status');
           if (!mounted || !_isCurrentVoiceScreen) return;
+          if (_useContinuousCapture) {
+            // Native STT status is informational only; the continuous
+            // capture is the source of truth for listen state.
+            return;
+          }
           if (!_hasActiveListenSession) {
             debugPrint('[Voice][mcq] speech status ignored: no active session');
             return;
@@ -551,6 +640,7 @@ class _McqScreenState extends State<McqScreen>
               !_isReadingQuestion &&
               !_isTtsSpeaking) {
             _cancelListenStartWatchdog();
+            debugPrint('[Voice][mcq] warming clear reason=status_listening');
             setState(() {
               _isListening = true;
               _isPreparingToListen = false;
@@ -621,15 +711,36 @@ class _McqScreenState extends State<McqScreen>
     if (!mounted) return;
     final message = hasPermission
         ? 'Speech recognition is not available on this device right now.'
-        : 'Microphone permission is required for voice mode. If you denied it before, enable Microphone for this app in Android settings and try again.';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+        : 'Microphone permission is required for voice mode. Tap Retry to try again, or enable Microphone for this app in your device settings.';
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        action: hasPermission
+            ? null
+            : SnackBarAction(
+                label: 'Retry',
+                onPressed: () async {
+                  if (!mounted) return;
+                  final retryReady = await _initSpeech(requestPermission: true);
+                  if (!mounted) return;
+                  if (retryReady) {
+                    setState(() => _speechAvailable = true);
+                    _syncVoiceSessionState();
+                  } else {
+                    unawaited(_showSpeechUnavailableMessage());
+                  }
+                },
+              ),
+      ),
+    );
   }
 
   bool get _cloudFallbackReady {
     final settings = _voiceController.assistantSettings.value;
-    return settings.cloudFallbackEnabled &&
+    return settings.isCloudFallbackActive &&
         _voiceController.cloudSpeechTranscriber != null;
   }
 
@@ -671,9 +782,21 @@ class _McqScreenState extends State<McqScreen>
   }
 
   void _scheduleListeningRestart({
-    Duration delay = const Duration(milliseconds: 700),
+    // Was 700 ms — that was felt as "the mic is warming up". 200 ms is enough
+    // for the native plugin to settle without making the user wait. The
+    // minimum is also enforced in `voice_listen_start.dart` so we won't
+    // accidentally hammer the engine.
+    Duration delay = const Duration(milliseconds: 200),
     bool countAsRetry = false,
   }) {
+    if (_useContinuousCapture) {
+      // The continuous VAD capture handles listening — native STT listen is
+      // off the critical path. Calls here are noise (typically arriving
+      // from speech_to_text's NO_MATCH/SPEECH_TIMEOUT callbacks that fire
+      // even when we never asked it to listen). Ensure capture is alive.
+      unawaited(_ensureContinuousCaptureRunning());
+      return;
+    }
     if (_listeningRestartTimer?.isActive == true) {
       debugPrint('[Voice][mcq] listen restart skipped: already scheduled');
       return;
@@ -1196,6 +1319,12 @@ class _McqScreenState extends State<McqScreen>
       'speak current question',
       screen: QuizVoiceScreen.mcq,
     );
+    // Make sure TTS is fully configured (awaitSpeakCompletion is set) before
+    // entering the per-segment speak loop. Otherwise Android's default
+    // QUEUE_FLUSH behaviour drops earlier segments and only the last one plays.
+    if (_ttsConfigureFuture != null) {
+      await _ttsConfigureFuture;
+    }
     if (_isReadingQuestion || _isTtsSpeaking) return;
     final _Question question = _questions[_currentIndex];
     final segments = _buildQuestionSpeechSegments(question);
@@ -1220,6 +1349,9 @@ class _McqScreenState extends State<McqScreen>
     _invalidateListenSession('question_tts_start');
     await _speech.cancel();
     await _cancelFallbackAudioCapture();
+    // Mute continuous capture so the assistant's own voice through the
+    // speaker is not picked up as user speech.
+    _continuousCapture?.mute();
     await _stopTtsPlayback();
     if (!mounted) return;
     _manualMicInterrupt = false;
@@ -1255,12 +1387,194 @@ class _McqScreenState extends State<McqScreen>
         if (_voiceModeEnabled &&
             _autoListenEnabled &&
             !_voicePracticePaused &&
-            !_isListening &&
             !_manualMicInterrupt) {
-          _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
+          if (_useContinuousCapture) {
+            // Capture has been running the whole time TTS played — we just
+            // need to un-mute it so user speech is accepted again. No
+            // dead-window between TTS-end and listen-start.
+            _continuousCapture?.unmute();
+            unawaited(_ensureContinuousCaptureRunning());
+            if (mounted && !_isListening) {
+              setState(() => _isListening = true);
+              _syncVoiceSessionState();
+            }
+          } else if (!_isListening) {
+            _scheduleListeningRestart(delay: const Duration(milliseconds: 150));
+          }
         }
       }
     }
+  }
+
+  // ─── Continuous capture (primary mic path) ─────────────────────────────────
+
+  /// Starts the always-on VAD-driven audio capture pipeline. Idempotent —
+  /// safe to call repeatedly. Replaces the native STT listen loop while
+  /// voice mode is active.
+  Future<void> _ensureContinuousCaptureRunning() async {
+    if (!_useContinuousCapture) return;
+    if (!_voiceModeEnabled || !mounted) return;
+    if (_voicePracticePaused) return;
+    if (_continuousCapture?.isRunning == true) return;
+    if (_continuousCaptureStarting) return;
+    _continuousCaptureStarting = true;
+    try {
+      // Tear down native STT FIRST so it releases the mic before the
+      // record-package stream grabs it. On Android both backends call into
+      // AudioRecord and they cannot share the input — without this order
+      // the record stream returns silence (no [VAD] logs ever appear).
+      _listeningRestartTimer?.cancel();
+      _listenStartWatchdogTimer?.cancel();
+      _partialResultEndpointTimer?.cancel();
+      _invalidateListenSession('continuous_capture_started');
+      try {
+        await _speech.cancel();
+      } catch (_) {
+        // best-effort — sometimes the plugin throws when nothing is active
+      }
+      // Tiny breathing room for the platform to release the mic handle.
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (!mounted || !_voiceModeEnabled) return;
+
+      _continuousCapture ??= ContinuousVoiceCapture(
+        onUtterance: _onContinuousCaptureUtterance,
+        onSpeechStart: _onContinuousCaptureSpeechStart,
+        onSpeechEnd: _onContinuousCaptureSpeechEnd,
+        onError: (msg) => debugPrint('[VAD][mcq] $msg'),
+      );
+      final started = await _continuousCapture!.start();
+      if (!started) {
+        debugPrint('[VAD][mcq] continuous capture failed to start');
+        return;
+      }
+      debugPrint('[VAD][mcq] continuous capture is now primary mic source');
+      if (mounted) {
+        setState(() {
+          _isListening = true;
+          _isPreparingToListen = false;
+        });
+        _syncVoiceSessionState();
+      }
+    } finally {
+      _continuousCaptureStarting = false;
+    }
+  }
+
+  Future<void> _stopContinuousCapture() async {
+    final capture = _continuousCapture;
+    if (capture == null) return;
+    await capture.stop();
+  }
+
+  void _onContinuousCaptureSpeechStart() {
+    if (!mounted) return;
+    debugPrint('[VAD][mcq] speech started');
+    // Already in "listening" state — just mark heard text reset.
+    setState(() {
+      _heardText = '';
+    });
+    _voiceController.markHeardText('');
+  }
+
+  void _onContinuousCaptureSpeechEnd() {
+    if (!mounted) return;
+    debugPrint('[VAD][mcq] speech ended (waiting for transcript)');
+  }
+
+  /// Called by [ContinuousVoiceCapture] once an utterance has been recorded
+  /// and written as a WAV file. We transcribe via the VPS Whisper directly,
+  /// then route the resulting text through the existing intent dispatcher.
+  Future<void> _onContinuousCaptureUtterance(
+    File audioFile,
+    Duration speechDuration,
+  ) async {
+    if (!mounted || !_isCurrentVoiceScreen) {
+      _safeDeleteFile(audioFile);
+      return;
+    }
+    if (_isReadingQuestion || _isTtsSpeaking || _isSpeaking) {
+      // TTS started while we were emitting — discard, don't act on our own
+      // narration bleed.
+      _safeDeleteFile(audioFile);
+      return;
+    }
+    if (_isProcessingVoiceCommand) {
+      _safeDeleteFile(audioFile);
+      return;
+    }
+    _isProcessingVoiceCommand = true;
+    setState(() {
+      _isListening = false;
+      _isPreparingToListen = false;
+    });
+    _voiceController.setPhase(
+      QuizVoicePhase.processing,
+      screen: QuizVoiceScreen.mcq,
+    );
+    final transcriber = _voiceController.cloudSpeechTranscriber;
+    String transcript = '';
+    try {
+      if (transcriber == null) {
+        debugPrint('[VAD][mcq] no cloud transcriber — utterance dropped');
+        _voiceController.markCommandResult(
+          retry:
+              'Cloud transcription is not configured. Please configure a cloud endpoint in Voice Settings or disable continuous capture.',
+        );
+        return;
+      }
+      final settings = _voiceController.assistantSettings.value;
+      final result = await transcriber.transcribeCommand(
+        audioFile: audioFile,
+        locale: _speechLocaleId ?? settings.speechLocaleCode,
+        screenContext: VoiceScreenContext.quiz,
+        availableCommands: VoiceCommandVocabulary.commandsFor(
+          QuizVoiceScreen.mcq,
+        ),
+      );
+      if (result.status != voice_pkg.SpeechRecognitionStatus.success) {
+        debugPrint(
+          '[VAD][mcq] transcribe failed status=${result.status.name} message=${result.errorMessage}',
+        );
+        return;
+      }
+      transcript = result.transcript.trim();
+      if (transcript.isEmpty) return;
+      setState(() => _heardText = transcript);
+      _voiceController.markHeardText(transcript);
+      _voiceController.logTranscript(
+        transcript,
+        isFinal: true,
+        screen: QuizVoiceScreen.mcq,
+      );
+      await _handleVoiceCommand(transcript);
+    } catch (error, stack) {
+      debugPrint('[VAD][mcq] transcribe error: $error\n$stack');
+    } finally {
+      _safeDeleteFile(audioFile);
+      _isProcessingVoiceCommand = false;
+      if (mounted &&
+          _isCurrentVoiceScreen &&
+          _voiceModeEnabled &&
+          !_voicePracticePaused &&
+          !_isSpeaking &&
+          !_isReadingQuestion) {
+        setState(() {
+          _isListening = true;
+          _isPreparingToListen = false;
+        });
+        _syncVoiceSessionState();
+      }
+    }
+  }
+
+  void _safeDeleteFile(File file) {
+    unawaited(() async {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // best-effort
+      }
+    }());
   }
 
   /// Reads the current question for the first time, blocking all auto-listen
@@ -1279,15 +1593,17 @@ class _McqScreenState extends State<McqScreen>
       if (mounted) {
         _hasInitialQuestionBeenRead = true;
         _isInitialQuestionReading = false;
-        // Fallback: start listening if TTS was skipped for any reason.
         if (_voiceModeEnabled &&
             _autoListenEnabled &&
-            !_isListening &&
             !_isSpeaking &&
             !_isReadingQuestion &&
             !_isTtsSpeaking &&
             !_manualMicInterrupt) {
-          _scheduleListeningRestart(delay: const Duration(milliseconds: 500));
+          if (_useContinuousCapture) {
+            unawaited(_ensureContinuousCaptureRunning());
+          } else if (!_isListening) {
+            _scheduleListeningRestart(delay: const Duration(milliseconds: 150));
+          }
         }
       }
     }
@@ -1312,12 +1628,18 @@ class _McqScreenState extends State<McqScreen>
       'speak feedback requested',
       screen: QuizVoiceScreen.mcq,
     );
+    if (_ttsConfigureFuture != null) {
+      await _ttsConfigureFuture;
+    }
     _listeningRestartTimer?.cancel();
     _voiceLoopRecoveryTimer?.cancel();
     _listenStartWatchdogTimer?.cancel();
     _invalidateListenSession('feedback_tts_start');
     await _speech.cancel();
     await _cancelFallbackAudioCapture();
+    // Mute the continuous capture during feedback narration so the
+    // assistant's own voice does not trip VAD.
+    _continuousCapture?.mute();
     await _stopTtsPlayback();
     await _applyVoiceAssistantSettings();
     if (!mounted) return;
@@ -1342,13 +1664,21 @@ class _McqScreenState extends State<McqScreen>
         _syncVoiceSessionState();
         if (_voiceModeEnabled &&
             _autoListenEnabled &&
-            !_isListening &&
             !_isReadingQuestion &&
             !_manualMicInterrupt) {
-          _scheduleListeningRestart(
-            delay: const Duration(milliseconds: 500),
-            countAsRetry: countRestartAsRetry,
-          );
+          if (_useContinuousCapture) {
+            _continuousCapture?.unmute();
+            unawaited(_ensureContinuousCaptureRunning());
+            if (mounted && !_isListening) {
+              setState(() => _isListening = true);
+              _syncVoiceSessionState();
+            }
+          } else if (!_isListening) {
+            _scheduleListeningRestart(
+              delay: const Duration(milliseconds: 500),
+              countAsRetry: countRestartAsRetry,
+            );
+          }
         }
       }
     }
@@ -1366,6 +1696,7 @@ class _McqScreenState extends State<McqScreen>
       _invalidateListenSession('voice_mode_disabled');
       await _speech.cancel();
       await _cancelFallbackAudioCapture();
+      await _stopContinuousCapture();
       if (!mounted) return;
       setState(() {
         _voiceModeEnabled = false;
@@ -1389,6 +1720,9 @@ class _McqScreenState extends State<McqScreen>
       _heardText = '';
     });
     _bindVoiceSession();
+    if (_useContinuousCapture) {
+      unawaited(_ensureContinuousCaptureRunning());
+    }
     // Auto-read the current question immediately.
     await Future.delayed(const Duration(milliseconds: 200));
     if (mounted && _voiceModeEnabled) {
@@ -1406,6 +1740,13 @@ class _McqScreenState extends State<McqScreen>
   /// Start the mic. TTS must be finished before calling — they never overlap.
   Future<void> _startListening() async {
     if (!_isCurrentVoiceScreen) return;
+    if (_useContinuousCapture) {
+      // Listening is owned by ContinuousVoiceCapture. Just make sure it's
+      // alive — callers (UI taps, recovery flows) reasonably expect the mic
+      // to be armed after this returns.
+      unawaited(_ensureContinuousCaptureRunning());
+      return;
+    }
     _voiceController.logEvent(
       'start listening requested',
       screen: QuizVoiceScreen.mcq,
@@ -1426,6 +1767,9 @@ class _McqScreenState extends State<McqScreen>
       return;
     }
     final listenSessionId = _beginListenSession('start_listening');
+    debugPrint(
+      '[Voice][mcq] warming set reason=start_listening session=$listenSessionId',
+    );
     setState(() {
       _isPreparingToListen = true;
       _heardText = '';
@@ -1651,16 +1995,37 @@ class _McqScreenState extends State<McqScreen>
     if (!mounted || !_isCurrentVoiceScreen) return;
     if (!_isCurrentListenSession(listenSessionId)) {
       debugPrint(
-        '[Voice][mcq] speech result ignored stale session=$listenSessionId active=$_activeListenSessionId current=$_listenSessionId',
+        '[Voice][mcq] speech result ignored reason=stale_session session=$listenSessionId active=$_activeListenSessionId current=$_listenSessionId final=${result.finalResult} text="${result.recognizedWords}"',
       );
       return;
     }
-    if (_isSpeaking || _isReadingQuestion || _isTtsSpeaking) return;
+    if (_isSpeaking || _isReadingQuestion || _isTtsSpeaking) {
+      debugPrint(
+        '[Voice][mcq] speech result ignored reason=tts_active speaking=$_isSpeaking reading=$_isReadingQuestion tts=$_isTtsSpeaking final=${result.finalResult} text="${result.recognizedWords}"',
+      );
+      return;
+    }
     _cancelListenStartWatchdog();
     debugPrint(
       '[Voice][mcq] recognized="${result.recognizedWords}" final=${result.finalResult} confidence=${result.confidence}',
     );
-    setState(() => _heardText = result.recognizedWords);
+    // Any incoming result proves the mic is live — clear warming and
+    // promote to listening so UI stays in sync with the engine state.
+    final bool wasPreparing = _isPreparingToListen;
+    final bool wasNotListening = !_isListening;
+    if (wasPreparing || wasNotListening) {
+      debugPrint(
+        '[Voice][mcq] warming clear reason=onResult final=${result.finalResult} wasPreparing=$wasPreparing wasNotListening=$wasNotListening',
+      );
+      setState(() {
+        _isPreparingToListen = false;
+        _isListening = true;
+        _heardText = result.recognizedWords;
+      });
+      _syncVoiceSessionState();
+    } else {
+      setState(() => _heardText = result.recognizedWords);
+    }
     _voiceController.markHeardText(_heardText);
     _voiceController.logTranscript(
       result.recognizedWords,
@@ -1668,8 +2033,52 @@ class _McqScreenState extends State<McqScreen>
       screen: QuizVoiceScreen.mcq,
     );
     if (result.finalResult) {
+      _partialResultEndpointTimer?.cancel();
+      _partialResultEndpointTimer = null;
+      if (_lastProcessedListenSessionId == listenSessionId) {
+        debugPrint(
+          '[Voice][mcq] final result ignored reason=duplicate_session session=$listenSessionId text="${result.recognizedWords}"',
+        );
+        return;
+      }
+      _lastProcessedListenSessionId = listenSessionId;
+      debugPrint(
+        '[Voice][mcq] final result processed session=$listenSessionId text="${result.recognizedWords}"',
+      );
       unawaited(_processRecognizedVoiceText(result.recognizedWords));
+    } else {
+      // Partial result: speech is happening. Restart the endpoint watchdog —
+      // if no further partials arrive within the endpoint delay we treat
+      // that as end-of-utterance and force-finalise the native session.
+      _scheduleSmartEndpoint(listenSessionId);
     }
+  }
+
+  /// (Re)arms the smart-endpoint timer. Called every time a partial speech
+  /// result arrives with non-empty text. When it fires we call
+  /// `_speech.stop()` which triggers the native plugin to emit a final
+  /// result with whatever it has — meaning the audio recorder ends, the
+  /// file ships to Whisper, and the user gets a response in ~1.2 s after
+  /// they stopped talking instead of waiting the full pauseFor (2.5 s).
+  void _scheduleSmartEndpoint(int listenSessionId) {
+    _partialResultEndpointTimer?.cancel();
+    final settings = _voiceController.assistantSettings.value;
+    final Duration delay = settings.fastSpeakerMode
+        ? fastVoicePartialResultEndpointDelay
+        : voicePartialResultEndpointDelay;
+    _partialResultEndpointTimer = Timer(delay, () async {
+      if (!mounted || !_isCurrentVoiceScreen) return;
+      if (!_isCurrentListenSession(listenSessionId)) return;
+      if (!_isListening || _isSpeaking || _isReadingQuestion) return;
+      debugPrint(
+        '[Voice][mcq] smart endpoint force-finalise session=$listenSessionId',
+      );
+      try {
+        await _speech.stop();
+      } catch (error) {
+        debugPrint('[Voice][mcq] smart endpoint stop failed: $error');
+      }
+    });
   }
 
   Future<void> _processRecognizedVoiceText(String rawText) async {
@@ -1730,24 +2139,14 @@ class _McqScreenState extends State<McqScreen>
       screen: QuizVoiceScreen.mcq,
       heardText: rawText,
       sensitivity: settings.commandSensitivity,
-      cloudFallbackEnabled: settings.cloudFallbackEnabled,
+      cloudFallbackEnabled: settings.isCloudFallbackActive,
       cloudSpeechService: _voiceController.cloudSpeechTranscriber,
       fallbackAudioFile: fallbackAudioFile,
       locale: _speechLocaleId ?? settings.speechLocaleCode,
       accentProfile: settings.accentProfile,
-      availableCommands: const <String>[
-        'a',
-        'b',
-        'c',
-        'd',
-        'next',
-        'back',
-        'repeat question',
-        'explain',
-        'review',
-        'submit',
-        'help',
-      ],
+      availableCommands: VoiceCommandVocabulary.commandsFor(
+        QuizVoiceScreen.mcq,
+      ),
     );
     unawaited(_cancelFallbackAudioCapture());
     _recordVoiceCommandAnalytics(decision.analytics);
@@ -1835,6 +2234,10 @@ class _McqScreenState extends State<McqScreen>
         _voicePracticePaused = true;
         _invalidateListenSession('voice_paused');
         unawaited(_speech.cancel());
+        // Mute the continuous capture so the assistant can announce the
+        // pause without picking it up, and so future amplitude doesn't
+        // accidentally resume the flow. Resume path will unmute below.
+        _continuousCapture?.mute();
         if (!mounted) return;
         setState(() {
           _isSpeaking = false;
@@ -1847,28 +2250,30 @@ class _McqScreenState extends State<McqScreen>
         return;
       case VoiceIntent.resumeAssistant:
         _voicePracticePaused = false;
+        _continuousCapture?.unmute();
+        unawaited(_ensureContinuousCaptureRunning());
         unawaited(_speakFeedback('Voice practice resumed.'));
         Future.delayed(const Duration(milliseconds: 900), () {
           if (mounted && _voiceModeEnabled) unawaited(_startListening());
         });
         return;
       case VoiceIntent.help:
-        unawaited(
-          _speakFeedback(
-            'Available voice commands. '
-            'To answer say first, second, third, or fourth. '
-            'You can also say select A, select B, select C, or select D. '
-            'Say next or skip to move forward. '
-            'Say back to go to the previous question. '
-            'Say question 5 to jump to any question. '
-            'Say flag to bookmark a question. '
-            'Say read to hear the question again. '
-            'Say explain to hear the explanation. '
-            'Say review to open the exam review screen. '
-            'Say submit to open review. '
-            'Say stop voice mode to turn off hands free mode.',
-          ),
-        );
+        _openVoiceCommandSheet();
+        return;
+      case VoiceIntent.trueAnswer:
+        _selectTrueFalseViaVoice(true);
+        return;
+      case VoiceIntent.falseAnswer:
+        _selectTrueFalseViaVoice(false);
+        return;
+      case VoiceIntent.speakFaster:
+        unawaited(_adjustSpeechRate(0.15));
+        return;
+      case VoiceIntent.speakSlower:
+        unawaited(_adjustSpeechRate(-0.15));
+        return;
+      case VoiceIntent.speakNormal:
+        unawaited(_adjustSpeechRate(null));
         return;
       default:
         break;
@@ -1878,13 +2283,91 @@ class _McqScreenState extends State<McqScreen>
     final heard = rawText.trim().isNotEmpty ? 'I heard "$rawText". ' : '';
     unawaited(
       _speakFeedback(
-        '${heard}Not recognised. '
-        'Try one of these commands: first, second, next, review, or help.',
+        '${heard}Sorry, I didn\'t catch that. '
+        'Say help, or tap the Help button to see every command.',
       ),
     );
   }
 
   // ─── Voice actions ─────────────────────────────────────────────────────────
+
+  /// Maps a voiced "true" / "false" onto the underlying option indexes for the
+  /// current question. Only acts on a question whose options are exactly
+  /// {true, false} (case-insensitive); on any other question a friendly
+  /// feedback message asks the user to use A/B/C/D instead.
+  void _selectTrueFalseViaVoice(bool isTrue) {
+    final question = _questions[_currentIndex];
+    if (!question.isTrueFalse) {
+      unawaited(
+        _speakFeedback(
+          'This question is not true or false. Say A, B, C or D instead.',
+        ),
+      );
+      return;
+    }
+    int? trueIndex;
+    int? falseIndex;
+    for (int i = 0; i < question.options.length; i++) {
+      final normalized = question.options[i].trim().toLowerCase();
+      if (normalized == 'true') trueIndex = i;
+      if (normalized == 'false') falseIndex = i;
+    }
+    final targetIndex = isTrue ? trueIndex : falseIndex;
+    if (targetIndex == null) {
+      unawaited(_speakFeedback("Couldn't find that option for this question."));
+      return;
+    }
+    _selectViaVoice(targetIndex);
+  }
+
+  /// Adjusts the TTS speech rate by [delta] (clamped to flutter_tts's valid
+  /// range 0.1..1.0). If [delta] is null, resets to the platform default of
+  /// 0.5. Persists the change so subsequent narrations use the new rate.
+  Future<void> _adjustSpeechRate(double? delta) async {
+    final settings = _voiceController.assistantSettings.value;
+    final currentRate = settings.voiceSpeed;
+    final double nextRate;
+    if (delta == null) {
+      nextRate = 0.5;
+    } else {
+      nextRate = (currentRate + delta).clamp(0.2, 1.0).toDouble();
+    }
+    if ((nextRate - currentRate).abs() < 0.01 && delta != null) {
+      unawaited(
+        _speakFeedback(
+          delta > 0
+              ? "I'm already at top speed."
+              : "I'm already at the slowest speed.",
+        ),
+      );
+      return;
+    }
+    final updated = settings.copyWith(voiceSpeed: nextRate);
+    await _voiceController.updateAssistantSettings(updated);
+    await _applyVoiceAssistantSettings();
+    final label = delta == null
+        ? 'Reading speed reset.'
+        : delta > 0
+        ? 'Reading faster.'
+        : 'Reading slower.';
+    unawaited(_speakFeedback(label));
+  }
+
+  /// Shows the in-app "What can I say?" sheet with the full command catalog
+  /// for this screen. Triggered by the `help` voice intent and the help
+  /// button in the voice overlay.
+  void _openVoiceCommandSheet() {
+    if (!mounted) return;
+    // Pause auto-listening while the sheet is up — TTS could fire on
+    // sheet-dismiss and we'd otherwise restart in the middle of it.
+    unawaited(_stopTtsPlayback());
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const VoiceCommandSheet(screen: QuizVoiceScreen.mcq),
+    );
+  }
 
   void _selectViaVoice(int optionIndex) {
     final question = _questions[_currentIndex];
@@ -2191,6 +2674,7 @@ class _McqScreenState extends State<McqScreen>
     _invalidateListenSession('voice_mode_disabled_with_feedback');
     await _speech.cancel();
     await _cancelFallbackAudioCapture();
+    await _stopContinuousCapture();
     await _stopTtsPlayback();
     if (!mounted) return;
     setState(() {
@@ -2583,7 +3067,6 @@ class _McqScreenState extends State<McqScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const _McqVoiceCommandHints(),
                     QuizVoiceOverlay(
                       isListening: _isListening,
                       isPreparingToListen: _isPreparingToListen,
@@ -2608,6 +3091,7 @@ class _McqScreenState extends State<McqScreen>
                         'submit',
                         'help',
                       ],
+                      onHelpTap: _openVoiceCommandSheet,
                     ),
                   ],
                 ),
@@ -2647,31 +3131,6 @@ class _Question {
 
   bool get isMultiSelect => type == _QuestionType.multiSelect;
   bool get isTrueFalse => type == _QuestionType.trueFalse;
-}
-
-class _McqVoiceCommandHints extends StatelessWidget {
-  const _McqVoiceCommandHints();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: const Color(0xF2F8FAFC),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      child: const Text(
-        'Try saying: Option A • Select A • Choose A • Next question'
-        ' • Read question • Explain • Flag • Submit quiz',
-        style: TextStyle(
-          fontSize: 11.5,
-          color: Color(0xFF64748B),
-          fontWeight: FontWeight.w500,
-        ),
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
