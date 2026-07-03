@@ -50,6 +50,11 @@ class _SharedEbookRedirectScreenState extends State<SharedEbookRedirectScreen> {
     final hasSession = await _storageService.hasValidSessionArtifacts();
     if (!mounted) return;
 
+    if (!AppConstants.resourcesEnabled) {
+      context.go('/home?tab=resources');
+      return;
+    }
+
     final nextRoute = hasSession
         ? Uri(
             path: '/ebook-detail',

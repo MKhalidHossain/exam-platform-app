@@ -1,0 +1,8 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+faster-whisper==1.1.0
+python-multipart==0.0.20
+# faster-whisper 1.1.0 imports `requests` for model downloads but does not
+# declare it as a dependency, so the container crashes on startup without
+# this explicit pin.
+requests==2.32.3
