@@ -13,11 +13,15 @@ import '../widgets/custom_text_field.dart';
 class VerifyOtpScreen extends StatefulWidget {
   final String? email;
   final bool isForPasswordReset;
+  final bool isForDeviceReset;
+  final String? deviceResetPassword;
 
   const VerifyOtpScreen({
     super.key,
     this.email,
     this.isForPasswordReset = false,
+    this.isForDeviceReset = false,
+    this.deviceResetPassword,
   });
 
   @override
@@ -43,29 +47,48 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   Future<void> _handleVerifyOtp() async {
     if (widget.email == null || widget.email!.isEmpty) {
-      ErrorHandler.showSnackBar('Email is required', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Email is required',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
     if (_otp.isEmpty || _otp.length != 6) {
-      ErrorHandler.showSnackBar('Please enter a valid 6-digit OTP', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'Please enter a valid 6-digit OTP',
+        isError: true,
+        context: context,
+      );
       return;
     }
 
-    // If password reset, validate password fields
     if (widget.isForPasswordReset) {
       if (_passwordController.text.isEmpty) {
-        ErrorHandler.showSnackBar('Please enter your new password', isError: true, context: context);
+        ErrorHandler.showSnackBar(
+          'Please enter your new password',
+          isError: true,
+          context: context,
+        );
         return;
       }
 
       if (_passwordController.text.length < 8) {
-        ErrorHandler.showSnackBar('Password must be at least 8 characters', isError: true, context: context);
+        ErrorHandler.showSnackBar(
+          'Password must be at least 8 characters',
+          isError: true,
+          context: context,
+        );
         return;
       }
 
       if (_passwordController.text != _confirmPasswordController.text) {
-        ErrorHandler.showSnackBar('Passwords do not match', isError: true, context: context);
+        ErrorHandler.showSnackBar(
+          'Passwords do not match',
+          isError: true,
+          context: context,
+        );
         return;
       }
     }
@@ -77,15 +100,35 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
         otp: _otp,
         password: _passwordController.text,
       );
+    } else if (widget.isForDeviceReset) {
+      final password = widget.deviceResetPassword;
+      if (password == null || password.isEmpty) {
+        ErrorHandler.showSnackBar(
+          'Please log in again to restart device verification',
+          isError: true,
+          context: context,
+        );
+        context.go('/login');
+        return;
+      }
+      await _authController.verifyDeviceResetWithOtp(
+        context,
+        email: widget.email!,
+        otp: _otp,
+        password: password,
+      );
     } else {
       // keep UI only; other OTP flows can be added later
-      ErrorHandler.showSnackBar('OTP verification flow is not implemented yet', isError: true, context: context);
+      ErrorHandler.showSnackBar(
+        'OTP verification flow is not implemented yet',
+        isError: true,
+        context: context,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: GradientBackground(
         child: SafeArea(
@@ -95,7 +138,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-                
+
                 // Back Button
                 Align(
                   alignment: Alignment.centerLeft,
@@ -111,6 +154,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                         // If coming from password reset flow, go to forget password
                         if (widget.isForPasswordReset) {
                           context.go('/forget-password');
+                        } else if (widget.isForDeviceReset) {
+                          context.go('/login');
                         } else {
                           context.go('/login');
                         }
@@ -120,7 +165,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                     constraints: const BoxConstraints(),
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
 
                 // Logo and App Name
@@ -129,8 +174,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 const SizedBox(height: 60),
 
                 // Title
-                const Text(
-                  'Enter OTP',
+                Text(
+                  widget.isForDeviceReset ? 'Verify Device' : 'Enter OTP',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 28,
@@ -154,7 +199,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                       _otp = value;
                     });
                     // Auto-submit if password reset and password is entered
-                    if (widget.isForPasswordReset && 
+                    if (widget.isForPasswordReset &&
                         _passwordController.text.isNotEmpty &&
                         _confirmPasswordController.text.isNotEmpty) {
                       _handleVerifyOtp();
@@ -165,7 +210,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 // Password fields (only for password reset)
                 if (widget.isForPasswordReset) ...[
                   const SizedBox(height: 24),
-                  
+
                   // New Password Field
                   CustomTextField(
                     label: 'New Password',
@@ -245,7 +290,21 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                       ),
                     ),
                     GestureDetector(
-                      onTap:() async {
+                      onTap: () async {
+                        if (widget.isForPasswordReset && widget.email != null) {
+                          await _authController.forgotPassword(
+                            context,
+                            email: widget.email!,
+                          );
+                        } else if (widget.isForDeviceReset &&
+                            widget.email != null &&
+                            widget.deviceResetPassword != null) {
+                          await _authController.requestDeviceReset(
+                            context,
+                            email: widget.email!,
+                            password: widget.deviceResetPassword!,
+                          );
+                        }
                       },
                       child: const Text(
                         'RESEND OTP',
@@ -264,7 +323,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 // Verify Now Button
                 Obx(
                   () => PrimaryButton(
-                    text: widget.isForPasswordReset ? 'Reset Password' : 'Verify Now',
+                    text: widget.isForPasswordReset
+                        ? 'Reset Password'
+                        : widget.isForDeviceReset
+                        ? 'Verify & Relink'
+                        : 'Verify Now',
                     onPressed: _authController.isLoading.value
                         ? null
                         : _handleVerifyOtp,

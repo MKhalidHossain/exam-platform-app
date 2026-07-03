@@ -15,10 +15,12 @@ import '../../models/plan_tier.dart';
 import '../../services/exam_service.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/tts_voice_picker.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/quiz_voice_debug_panel.dart';
 import '../widgets/quiz_voice_overlay.dart';
+import '../widgets/voice_command_sheet.dart';
 
 class ExamLoadingScreen extends StatefulWidget {
   final String courseTitle;
@@ -203,7 +205,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-        _scheduleListeningRestart(const Duration(milliseconds: 450));
+        _scheduleListeningRestart(const Duration(milliseconds: 150));
       }
     });
     _tts.setCancelHandler(() {
@@ -220,7 +222,7 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
 
   Future<void> _applyVoiceAssistantSettings() async {
     final settings = _voiceController.assistantSettings.value;
-    await _tts.setLanguage(settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(_tts, languageCode: settings.languageCode);
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }
@@ -445,41 +447,58 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
     if (!mounted) return;
     final message = hasPermission
         ? 'Speech recognition is not available on this device right now.'
-        : 'Microphone permission is required for voice mode. Enable it in Android settings and try again.';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+        : 'Microphone permission is required for voice mode. Tap Retry to try again, or enable Microphone for this app in your device settings.';
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        action: hasPermission
+            ? null
+            : SnackBarAction(
+                label: 'Retry',
+                onPressed: () async {
+                  if (!mounted) return;
+                  final retryReady = await _initSpeech(requestPermission: true);
+                  if (!mounted) return;
+                  if (retryReady) {
+                    setState(() => _speechAvailable = true);
+                    _syncVoiceSessionState();
+                  } else {
+                    unawaited(_showSpeechUnavailableMessage());
+                  }
+                },
+              ),
+      ),
+    );
   }
 
   Future<void> _speakFeedback(String text) async {
+    // The loading screen never speaks (user request: assistant must be silent
+    // on this screen). Mic + voice commands stay active; we just suppress TTS
+    // so the user is not interrupted while questions are being generated.
     _voiceController.logEvent(
-      'speak feedback requested',
+      'speak feedback suppressed on loading screen',
       screen: QuizVoiceScreen.examLoading,
     );
-    await _speech.cancel();
-    await _tts.stop();
-    await _applyVoiceAssistantSettings();
     if (!mounted) return;
-    setState(() {
-      _isSpeaking = true;
-      _isListening = false;
-    });
-    _syncVoiceSessionState();
-    await _tts.speak(text);
+    if (_isSpeaking) {
+      setState(() => _isSpeaking = false);
+      _syncVoiceSessionState();
+    }
+    // Preserve the auto-listen cycle: in the original flow, listening
+    // restarted from the TTS completion handler. With speech suppressed that
+    // handler never fires, so kick off the restart here instead.
+    if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
+      _scheduleListeningRestart(const Duration(milliseconds: 200));
+    }
+    return;
   }
 
   Future<void> _speakCurrentStatus() async {
-    if (_isLoading) {
-      await _speakFeedback(
-        'Generating ${widget.questionCount ?? 1} questions for ${widget.courseTitle}. '
-        'Please wait. Say status, cancel, retry, or stop voice mode.',
-      );
-      return;
-    }
-    await _speakFeedback(
-      '${_errorMessage ?? 'Generation stopped.'} '
-      'Say retry to try again, back to return, or stop voice mode.',
-    );
+    // Silent on the loading screen — see _speakFeedback above.
+    return;
   }
 
   void _scheduleListeningRestart([
@@ -987,6 +1006,17 @@ class _ExamLoadingScreenState extends State<ExamLoadingScreen>
                 'back',
                 'stop voice mode',
               ],
+              onHelpTap: () {
+                if (!mounted) return;
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const VoiceCommandSheet(
+                    screen: QuizVoiceScreen.examLoading,
+                  ),
+                );
+              },
             )
           : null,
     );

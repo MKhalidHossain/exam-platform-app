@@ -11,6 +11,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import '../../controllers/quiz_voice_controller.dart';
 import '../../utils/voice_command_processor.dart';
 import '../../utils/quiz_voice_intent_parser.dart';
+import '../../utils/tts_voice_picker.dart';
 import '../../utils/voice_listen_start.dart';
 import '../../utils/quiz_voice_route_aware.dart';
 import '../widgets/api_disclaimer_section.dart';
@@ -129,7 +130,7 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
       setState(() => _isSpeaking = false);
       _syncVoiceSessionState();
       if (_voiceModeEnabled && _autoListenEnabled && !_isListening) {
-        _scheduleListeningRestart(const Duration(milliseconds: 450));
+        _scheduleListeningRestart(const Duration(milliseconds: 150));
       }
     });
     _tts.setCancelHandler(() {
@@ -146,7 +147,7 @@ class _ExamSessionScreenState extends State<ExamSessionScreen>
 
   Future<void> _applyVoiceAssistantSettings() async {
     final settings = _voiceController.assistantSettings.value;
-    await _tts.setLanguage(settings.languageCode);
+    await TtsVoicePicker.applyBestVoice(_tts, languageCode: settings.languageCode);
     await _tts.setSpeechRate(settings.voiceSpeed);
     await _tts.setPitch(settings.voicePitch);
   }

@@ -65,13 +65,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   Future<void> applyProfile(UserModel next) async {
     user.value = next;
     final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-    // Users with individually purchased exam unlocks keep professional access
-    // even when their subscription tier is downgraded.
-    final nextPlan =
-        (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty)
-        ? PlanTier.professional
-        : fromProfile;
-    planTier.value = nextPlan;
+    planTier.value = fromProfile;
     final userJson = jsonEncode(next.toJson());
     await _storageService.saveString(AppConstants.userDataKey, userJson);
   }
@@ -112,10 +106,6 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   void _syncPlanTier() {
     final fromProfile = planTierFromSubscription(user.value?.subscriptionTier);
-    if (fromProfile == PlanTier.starter && unlockedExamIds.value.isNotEmpty) {
-      planTier.value = PlanTier.professional;
-      return;
-    }
     planTier.value = fromProfile;
   }
 

@@ -138,3 +138,7 @@ Theme and styling live in:
 - The screenshot assets in this README currently live under `docs/screenshorts/`.
 - The project uses `GetX`, not Riverpod.
 - The Stripe publishable key is currently defined in source; for production, it should move to a safer environment-based configuration.
+
+## Compliance Docs
+
+- Account deletion web page template: `docs/account-deletion.html`

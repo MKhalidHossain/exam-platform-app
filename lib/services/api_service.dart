@@ -468,13 +468,17 @@ class ApiService {
         return ApiResponse<T>(
           success: true,
           message: message,
+          code: jsonData['code']?.toString(),
           data: parsedData,
+          rawData: responseData,
           statusCode: response.statusCode,
         );
       } else {
         return ApiResponse<T>(
           success: false,
           message: message,
+          code: jsonData['code']?.toString(),
+          rawData: responseData,
           error: jsonData['error'],
           statusCode: response.statusCode,
         );
@@ -498,22 +502,23 @@ class ApiService {
 
   // User Registration
   Future<ApiResponse<AuthResponse>> register({
-    required String phone,
+    String? phone,
     required String name,
     required String email,
     required String password,
     required String confirmPassword,
     String? referralCode,
   }) async {
+    final trimmedPhone = phone?.trim() ?? '';
     final trimmedReferralCode = referralCode?.trim() ?? '';
     final installationId = await _storageService.getOrCreateInstallationId();
     final body = {
-      'phone': phone,
       'name': name,
       'email': email,
       'password': password,
       'confirmPassword': confirmPassword,
       'installationId': installationId,
+      if (trimmedPhone.isNotEmpty) 'phone': trimmedPhone,
       if (trimmedReferralCode.isNotEmpty) 'referralCode': trimmedReferralCode,
     };
 
@@ -627,6 +632,44 @@ class ApiService {
     debugPrint('   Has Data: ${response.data != null}');
 
     return response;
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> requestDeviceReset({
+    required String email,
+    required String password,
+  }) async {
+    final installationId = await _storageService.getOrCreateInstallationId();
+    final body = {
+      'email': email,
+      'password': password,
+      'installationId': installationId,
+    };
+
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.requestDeviceReset,
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+      allowRefresh: false,
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> verifyDeviceReset({
+    required String email,
+    required String otp,
+  }) async {
+    final installationId = await _storageService.getOrCreateInstallationId();
+    final body = {'email': email, 'otp': otp, 'installationId': installationId};
+
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.verifyDeviceReset,
+      body: body,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+      allowRefresh: false,
+    );
   }
 
   // User Login
@@ -839,6 +882,31 @@ class ApiService {
     return post<Map<String, dynamic>>(
       ApiEndpoints.examStripeConfirm(examId),
       body: {'paymentIntentId': paymentIntentId},
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> verifyAppleExamPurchase({
+    required String examId,
+    required Map<String, dynamic> purchasePayload,
+  }) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.examAppleVerify(examId),
+      body: purchasePayload,
+      fromJson: (json) => json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json as Map),
+    );
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> verifyAppleProfessionalPurchase({
+    required Map<String, dynamic> purchasePayload,
+  }) async {
+    return post<Map<String, dynamic>>(
+      ApiEndpoints.professionalPlanAppleVerify(),
+      body: purchasePayload,
       fromJson: (json) => json is Map<String, dynamic>
           ? json
           : Map<String, dynamic>.from(json as Map),
